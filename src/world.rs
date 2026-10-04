@@ -184,6 +184,32 @@ pub struct Entity {
 }
 
 impl Entity {
+    /// An entity that is only drawn (film playback): no orders, no home.
+    pub fn shown(kind: &str, class: Class, team: Team, max_hp: f32) -> Entity {
+        Entity {
+            kind: kind.to_string(),
+            class,
+            team,
+            x: 0.0,
+            y: 0.0,
+            heading: 0.0,
+            turret: 0.0,
+            hp: max_hp,
+            max_hp,
+            alive: true,
+            cooldown: 0.0,
+            target: None,
+            next_node: None,
+            odometer: 0.0,
+            flash: 0.0,
+            crates: 0,
+            bank: None,
+            held: false,
+            order: Order::Route,
+            home: (0.0, 0.0),
+        }
+    }
+
     pub fn radius(&self) -> f32 {
         match self.class {
             Class::Hq => 1.6,
@@ -225,6 +251,13 @@ pub struct PathNode {
 impl PathNode {
     pub fn links(&self, team: Team) -> &[usize] {
         if team == Team::Enemy { &self.links_e } else { &self.links_a }
+    }
+}
+
+impl Bolt {
+    /// A bolt that is only drawn (film playback).
+    pub fn shown(x: f32, y: f32) -> Bolt {
+        Bolt { weapon: "", team: Team::Neutral, x, y, from: (x, y), to: (x, y), target: None, speed: 0.0, beam: 0.0 }
     }
 }
 

@@ -400,6 +400,13 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     let hp_color = if hp > 0.5 { GREEN } else if hp > 0.25 { AMBER } else { Color::Rgb(235, 70, 55) };
     let line1 = Line::from(vec![
         Span::styled(" CALVARY ", Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD)),
+        // a recording film blinks its dot, like a camera
+        if g.recording {
+            let dot = if (g.time * 2.0) as i32 % 2 == 0 { "●" } else { " " };
+            Span::styled(format!(" {dot} REC "), Style::default().fg(Color::Rgb(235, 70, 55)).add_modifier(Modifier::BOLD))
+        } else {
+            Span::raw("")
+        },
         label("  $"),
         Span::styled(format!("{}", w.money[0]), Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
         label("  armor "),
@@ -648,6 +655,7 @@ const HELP: &[(&str, &str)] = &[
     ("[ ]", "previous / next level"),
     ("F1 / H / ?", "this help (the game pauses)"),
     ("F9 / F8", "next music track / sound on or off (start with --mute)"),
+    ("F12", "record a film of the battle (again to stop; saved in films/)"),
     ("Esc", "close help, or quit"),
     ("", ""),
     ("", "Rock edges, deep water and steep slopes stop the tank."),

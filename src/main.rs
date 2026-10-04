@@ -3,6 +3,7 @@ mod balance;
 mod chase;
 mod cmap;
 mod editor;
+mod film;
 mod game;
 mod input;
 mod level;
@@ -72,6 +73,15 @@ fn main() -> io::Result<()> {
         execute!(io::stdout(), EnableMouseCapture)?;
         let result = editor::run(&mut terminal, ed);
         let _ = execute!(io::stdout(), DisableMouseCapture);
+        ratatui::restore();
+        return result;
+    }
+    // `--film FILE`: watch a recorded film
+    if let Some(i) = args.iter().position(|a| a == "--film") {
+        let path = args.get(i + 1).ok_or_else(|| io::Error::other("usage: calvary --film FILE.cfilm"))?;
+        let film = film::Film::parse(&std::fs::read(path)?).map_err(|e| io::Error::other(format!("{path}: {e}")))?;
+        let mut terminal = ratatui::init();
+        let result = watch_film(&mut terminal, &film);
         ratatui::restore();
         return result;
     }
@@ -161,6 +171,26 @@ fn run(
         game.tank.x = x;
         game.tank.y = y;
     }
+    // F12 records a film of the battle (see `film.rs`)
+    let mut recorder: Option<film::Recorder> = None;
+    let save_film = |rec: film::Recorder, game: &mut Game| {
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let name = match &map {
+            Some((_, name, _)) => name.clone(),
+            None => LEVELS[game.level_index].name.to_string(),
+        };
+        let path = std::path::PathBuf::from(format!("films/{name}-{secs}.cfilm"));
+        match rec.save(&path) {
+            Ok(()) => {
+                log::info!("film saved {} ({} ticks)", path.display(), rec.ticks);
+                game.world.say(format!("Film saved: {} ({:.0} s)", path.display(), rec.ticks as f32 * DT));
+            }
+            Err(e) => {
+                log::warn!("film not saved: {e}");
+                game.world.say(format!("Film not saved: {e}"));
+            }
+        }
+    };
     let tick = Duration::from_secs_f32(DT);
     let mut next = Instant::now() + tick;
     let mut next_snapshot = Instant::now();
@@ -258,6 +288,9 @@ fn run(
         if input.level_step != 0 {
             let n = LEVELS.len() as i32;
             let i = (game.level_index as i32 + std::mem::take(&mut input.level_step)).rem_euclid(n) as usize;
+            if let Some(rec) = recorder.take() {
+                save_film(rec, &mut game);
+            }
             let (view, help, zoom) = (game.view, game.help, game.zoom);
             game = Game::new(i).map_err(io::Error::other)?;
             audio.play_music(audio::track_for_level(LEVELS[i].name));
@@ -271,6 +304,9 @@ fn run(
             let controls = input.controls(now);
             if !game.help {
                 game.update(&controls);
+                if let Some(rec) = recorder.as_mut() {
+                    rec.capture(&game);
+                }
             }
             next += tick;
             steps += 1;
@@ -281,6 +317,18 @@ fn run(
         if std::mem::take(&mut input.next_track) {
             audio.next_track();
             game.world.say(format!("Music: {}", audio.track_name().replace('_', " ")));
+        }
+        if std::mem::take(&mut input.toggle_film) {
+            match recorder.take() {
+                Some(rec) => save_film(rec, &mut game),
+                None => {
+                    let cmap = map.as_ref().and_then(|(level, name, music)| cmap::export(level, name, music.as_deref(), terrain::tile_name_for).ok());
+                    recorder = Some(film::Recorder::new(&game, cmap.as_deref()));
+                    game.world.say("Recording a film (F12 stops)");
+                    log::info!("film recording started");
+                }
+            }
+            game.recording = recorder.is_some();
         }
         if std::mem::take(&mut input.toggle_sound) {
             audio.toggle_mute();
@@ -302,7 +350,42 @@ fn run(
             next_snapshot = now + SNAPSHOT_EVERY;
         }
     }
+    // leaving the battle ends a recording too
+    if let Some(rec) = recorder.take() {
+        save_film(rec, &mut game);
+    }
     Ok(())
+}
+
+/// Play a film full screen in the follow view, looping; any key ends it.
+fn watch_film(terminal: &mut DefaultTerminal, film: &film::Film) -> io::Result<()> {
+    let mut game = film.stage().map_err(io::Error::other)?;
+    let tick = Duration::from_secs_f32(DT);
+    let mut next = Instant::now();
+    let mut i = 0;
+    loop {
+        let now = Instant::now();
+        while now >= next {
+            if i == film.len() {
+                game = film.stage().map_err(io::Error::other)?;
+                i = 0;
+            }
+            film.apply(i, &mut game);
+            i += 1;
+            next += tick;
+        }
+        terminal.draw(|f| {
+            let area = f.area();
+            chase::draw(f.buffer_mut(), area, &game);
+        })?;
+        if event::poll(next.saturating_duration_since(Instant::now()))? {
+            if let Event::Key(k) = event::read()? {
+                if k.kind == event::KeyEventKind::Press {
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
 
 /// Mouse, after the original's action mode (manual 3.3): the turret follows

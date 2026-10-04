@@ -58,6 +58,13 @@ pub struct Shot {
     pub flown: f32,
 }
 
+impl Shot {
+    /// A shot that is only drawn (film playback).
+    pub fn shown(x: f32, y: f32, z: f32) -> Shot {
+        Shot { kind: ShotKind::Shell, weapon: "", x, y, z, vx: 0.0, vy: 0.0, range: 0.0, z0: z, climb: 0.0, span: 1.0, apex: 0.0, flown: 0.0 }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Particle {
     pub x: f32,
@@ -96,6 +103,10 @@ pub struct Game {
     pub crosshair: Option<(u16, u16)>,
     /// Follow mode marks where the turret points (off for the credits' battle).
     pub show_aim: bool,
+    /// The explosions of the last tick (for films).
+    pub last_blasts: Vec<crate::world::Blast>,
+    /// A film is being recorded (F12): the HUD says so.
+    pub recording: bool,
     /// Distance to the mouse aim point: shells land there.
     aim_range: Option<f32>,
     pub shots: Vec<Shot>,
@@ -149,6 +160,8 @@ impl Game {
             prev_view: View::Tactical,
             crosshair: None,
             show_aim: true,
+            last_blasts: Vec::new(),
+            recording: false,
             aim_range: None,
             shots: Vec::new(),
             particles: Vec::new(),
@@ -394,10 +407,16 @@ impl Game {
             self.respawn();
         }
         self.refill_at_base();
-        for b in std::mem::take(&mut self.world.blasts) {
-            self.explode(b.x, b.y, (14.0 * b.power) as usize + 4, b.power);
+        self.last_blasts = std::mem::take(&mut self.world.blasts);
+        for b in self.last_blasts.clone() {
+            self.blast(b.x, b.y, b.power);
         }
         self.step_particles();
+    }
+
+    /// An explosion's particles, sized by its power.
+    pub fn blast(&mut self, x: f32, y: f32, power: f32) {
+        self.explode(x, y, (14.0 * power) as usize + 4, power);
     }
 
     /// A new supertank rolls out next to the HQ.
@@ -525,7 +544,7 @@ impl Game {
         }
     }
 
-    fn step_particles(&mut self) {
+    pub fn step_particles(&mut self) {
         self.particles.retain_mut(|p| {
             p.x += p.vx * DT;
             p.y += p.vy * DT;

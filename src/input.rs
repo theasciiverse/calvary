@@ -110,6 +110,8 @@ pub struct Input {
     pub switch_route: bool,
     pub toggle_lock: bool,
     pub next_track: bool,
+    /// F12: start or stop recording a film.
+    pub toggle_film: bool,
     pub toggle_sound: bool,
     /// Unit command keys: U nearby, , . cycle, G rally, X hold, R resume, Z clear.
     pub unit_key: Option<char>,
@@ -153,6 +155,7 @@ impl Input {
             toggle_lock: false,
             next_track: false,
             toggle_sound: false,
+            toggle_film: false,
             unit_key: None,
         }
     }
@@ -207,6 +210,7 @@ impl Input {
             KeyCode::Char('t') | KeyCode::Char('T') => self.toggle_lock = true,
             KeyCode::F(9) => self.next_track = true,
             KeyCode::F(8) => self.toggle_sound = true,
+            KeyCode::F(12) => self.toggle_film = true,
             KeyCode::Char('c') | KeyCode::Char('C') if !k.modifiers.contains(KeyModifiers::CONTROL) => self.center_edge = true,
             KeyCode::Char(c @ ('u' | 'U' | ',' | '.' | 'g' | 'G' | 'x' | 'X' | 'r' | 'R' | 'z' | 'Z')) => self.unit_key = Some(c.to_ascii_lowercase()),
             KeyCode::Char(c @ '1'..='9') => self.build = Some(c as usize - '1' as usize),

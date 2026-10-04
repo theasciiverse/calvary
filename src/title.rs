@@ -791,6 +791,23 @@ struct Finale {
     mark: (f32, f32, f32),
     /// Backing out of a dead end until this time.
     reverse_until: f32,
+    /// Playing film number `.0`, next tick `.1` (None: the autopilot battle).
+    film: Option<(usize, usize)>,
+}
+
+/// Films for the finale, recorded with F12 in a battle and picked from
+/// `films/` into `data/films/`. With none bundled, the finale falls back to
+/// the autopilot battle.
+const FILMS: &[&[u8]] = &[];
+
+fn films() -> &'static [crate::film::Film] {
+    static PARSED: std::sync::OnceLock<Vec<crate::film::Film>> = std::sync::OnceLock::new();
+    PARSED.get_or_init(|| {
+        FILMS
+            .iter()
+            .filter_map(|bytes| crate::film::Film::parse(bytes).map_err(|e| log::warn!("bundled film: {e}")).ok())
+            .collect()
+    })
 }
 
 thread_local! {
@@ -799,13 +816,54 @@ thread_local! {
 
 impl Finale {
     fn new() -> Option<Finale> {
+        if let Some(first) = films().first() {
+            let game = first.stage().ok()?;
+            return Some(Finale { game, sim: 0.0, mark: (0.0, 0.0, 0.0), reverse_until: 0.0, film: Some((0, 0)) });
+        }
         // Switzerland, one of the two levels Crack dot Com showed playable;
         // both sides build there (Cairo has no garage of ours)
         let level = LEVELS.iter().position(|l| l.name == "snow").unwrap_or(0);
         let mut game = crate::game::Game::new(level).ok()?;
         game.show_aim = false;
         let (x, y) = (game.tank.x, game.tank.y);
-        Some(Finale { game, sim: 0.0, mark: (x, y, 0.0), reverse_until: 0.0 })
+        Some(Finale { game, sim: 0.0, mark: (x, y, 0.0), reverse_until: 0.0, film: None })
+    }
+
+    /// Brightness of the picture: films fade in and out at their cuts.
+    fn fade(&self) -> f32 {
+        match self.film {
+            Some((n, tick)) => {
+                let len = films()[n].len() as f32;
+                let s = |ticks: f32| (ticks * crate::game::DT / 0.8).clamp(0.0, 1.0);
+                s(tick as f32).min(s(len - tick as f32))
+            }
+            None => 1.0,
+        }
+    }
+
+    /// Play films up to `te` seconds, one after another, looping. Every
+    /// tick is applied (a film stores only what changed), so a stalled
+    /// frame catches up rather than skipping.
+    fn advance_film(&mut self, te: f32) {
+        let dt = crate::game::DT;
+        while self.sim + dt <= te {
+            self.sim += dt;
+            let Some((mut n, mut tick)) = self.film else { return };
+            let list = films();
+            if tick >= list[n].len() {
+                n = (n + 1) % list.len();
+                tick = 0;
+                match list[n].stage() {
+                    Ok(g) => self.game = g,
+                    Err(e) => {
+                        log::warn!("film {n}: {e}");
+                        return;
+                    }
+                }
+            }
+            list[n].apply(tick, &mut self.game);
+            self.film = Some((n, tick + 1));
+        }
     }
 
     /// Run the battle up to `te` seconds: our garage builds, the supertank
@@ -813,6 +871,9 @@ impl Finale {
     /// backs out when stuck.
     fn advance(&mut self, te: f32) {
         use crate::world::{Class, Team};
+        if self.film.is_some() {
+            return self.advance_film(te);
+        }
         let dt = crate::game::DT;
         // a stalled frame skips ahead rather than racing to catch up
         self.sim = self.sim.max(te - 1.0);
@@ -905,6 +966,7 @@ fn draw_finale(f: &mut Frame, area: Rect, te: f32) {
             }
         }
     }
+    let mut fade = 1.0;
     FINALE.with(|cell| {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
@@ -913,10 +975,11 @@ fn draw_finale(f: &mut Frame, area: Rect, te: f32) {
         if let Some(fin) = slot.as_mut() {
             fin.advance(te);
             crate::chase::draw(buf, pic, &fin.game);
+            fade = fin.fade();
         }
     });
     // muted: mostly grey, darkened, fading up from black
-    let k = (te / 2.5).min(1.0);
+    let k = (te / 2.5).min(1.0) * fade;
     let mute = |c: Color| match c {
         Color::Rgb(r, g, b) => {
             let l = 0.3 * r as f32 + 0.59 * g as f32 + 0.11 * b as f32;

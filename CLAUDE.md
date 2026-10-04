@@ -482,12 +482,34 @@ view, framed like a picture (a thin gilt frame, about 2:1, black around;
 full screen only when the terminal is too small), muted to near grey, our garage building and the supertank riding
 behind the lead of the convoy (firing at what comes near, backing out
 when stuck), with "Thank you / for playing." under it in large
-half-block letters from the same font. The roll lists the Golgotha team exactly as crack.com's credits
+half-block letters from the same font. The autopilot is only the
+fallback: the finale plays films of David's own driving when any are
+bundled (see Films below). The roll lists the Golgotha team exactly as crack.com's credits
 page did (copy and URL in
 `references/Golgotha/crack-com-story/`), including Carly Taylor as the
 creator of the name and the plot. Esc in a battle returns to the title
 (opening skipped); Ctrl+C quits outright; `--no-intro` starts at the
 title; a level, map or `--at` argument skips the title entirely.
+
+## Films (`src/film.rs`)
+
+F12 in a battle starts and stops recording a film (a blinking REC in the
+HUD); leaving the battle or changing level also stops and saves it, to
+`films/LEVEL-UNIXTIME.cfilm` (ignored by git). `calvary --film FILE`
+plays one full screen in the follow view, looping, so recordings can be
+reviewed. The good ones go to `data/films/` and into the `FILMS` list in
+`src/title.rs`, and the credits finale plays them in turn inside the
+frame, fading at each cut.
+
+A film records what is shown, not the inputs: the supertank, every
+entity (all of them on the first tick, then only what changed), shots,
+bolts and explosions, rounded to 0.01, gzipped text (about 120 KB a
+minute). Explosion particles are regenerated on playback. Input replay
+(a Doom-style demo) would be smaller but would desync with every later
+change to balance, AI or physics; a film keeps playing whatever happens to
+the rules. The camera comes from the recorded follow heading, so a film
+can be recorded in any view. A test plays a recorded battle back and
+checks every tick against the original.
 
 ## A sequel idea: Hellas Planitia (David, 2026-10-04)
 
