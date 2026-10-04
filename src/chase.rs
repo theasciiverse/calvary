@@ -228,11 +228,43 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
     let hull = if g.world.player_tank.is_some_and(|i| g.world.entities[i].flash > 0.0) { (255, 220, 160) } else { (176, 138, 58) };
     boxed(&mut f, t.x, t.y, 0.0, 0.75, 0.45, hull, (236, 196, 108));
     boxed(&mut f, t.x, t.y, 0.45, 0.32, 0.3, (226, 190, 104), (245, 225, 170));
+    // the barrel: a solid tube from the turret to the muzzle, sampled densely
+    // and rounded (not truncated), as thick as a 0.08-cell tube at its
+    // distance, so it tapers into the scene instead of stepping
     let aim = t.aim();
-    for k in 0..24 {
-        let d = 0.3 + k as f32 * 0.06;
-        if let Some((sx, sy, z)) = project(t.x + aim.cos() * d, t.y + aim.sin() * d, base + 0.62) {
-            f.set(sx as usize, sy as usize, if t.flash > 0.0 && k > 18 { (255, 250, 225) } else { (245, 225, 170) }, z - 0.3);
+    let (from, to) = (0.05f32, 1.55f32);
+    let steps = 64;
+    for k in 0..=steps {
+        let kk = k as f32 / steps as f32;
+        let d = from + (to - from) * kk;
+        let Some((sx, sy, z)) = project(t.x + aim.cos() * d, t.y + aim.sin() * d, base + 0.62) else { continue };
+        let r = (0.08 * focal / z).clamp(0.5, 3.0);
+        let tip = kk > 0.88;
+        let c = if tip && t.flash > 0.0 { (255, 250, 225) } else if tip { (255, 238, 196) } else { (232, 206, 140) };
+        let (x0, x1) = ((sx - r).round() as i32, (sx + r).round() as i32 - 1);
+        let (y0, y1) = ((sy - r * 0.6).round() as i32, (sy + r * 0.6).round() as i32 - 1);
+        for py in y0..=y1.max(y0) {
+            for px in x0..=x1.max(x0) {
+                if px >= 0 && py >= 0 {
+                    f.set(px as usize, py as usize, c, z - 0.3);
+                }
+            }
+        }
+    }
+    // muzzle flash
+    if t.flash > 0.0 {
+        if let Some((sx, sy, z)) = project(t.x + aim.cos() * (to + 0.3), t.y + aim.sin() * (to + 0.3), base + 0.62) {
+            let r = ((0.3 + t.flash * 2.0) * focal / z).clamp(1.0, 6.0) as i32;
+            for dy in -r..=r {
+                for dx in -r..=r {
+                    if dx * dx + dy * dy <= r * r {
+                        let (x, y) = (sx.round() as i32 + dx, sy.round() as i32 + dy);
+                        if x >= 0 && y >= 0 {
+                            f.set(x as usize, y as usize, (255, 245, 200), z - 0.4);
+                        }
+                    }
+                }
+            }
         }
     }
 
