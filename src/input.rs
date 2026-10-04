@@ -86,6 +86,15 @@ pub struct Input {
     /// D-pad up/down presses for menus (+1 = up); the game ignores them.
     pub menu_moves: i32,
     center_edge: bool,
+    /// Mouse: pointer cell, whether it is aiming the turret (any movement in
+    /// the tactical view; Q/E or the pad's right stick take over again), the
+    /// aim it gives (map angle and distance, set by the main loop), and the
+    /// buttons held for firing.
+    pub mouse_at: Option<(u16, u16)>,
+    pub mouse_aiming: bool,
+    pub mouse_aim: Option<(f32, f32)>,
+    pub mouse_main: bool,
+    pub mouse_chain: bool,
     /// Ctrl+C: leave the program, not just the battle.
     pub exit_app: bool,
     /// Esc: closes the help window if it is open, otherwise quits.
@@ -126,6 +135,11 @@ impl Input {
             menu_moves: 0,
             exit_app: false,
             center_edge: false,
+            mouse_at: None,
+            mouse_aiming: false,
+            mouse_aim: None,
+            mouse_main: false,
+            mouse_chain: false,
             escape: false,
             toggle_help: false,
             toggle_view: false,
@@ -294,21 +308,28 @@ impl Input {
         let held = |k: Key| self.holds[k as usize].held(self.exact, now);
         let axis = |neg: Key, pos: Key| held(pos) as i8 as f32 - held(neg) as i8 as f32;
         let (keys_turn, turret) = (axis(Key::Left, Key::Right), axis(Key::TurretLeft, Key::TurretRight));
+        if turret != 0.0 || self.pad_aim.0.hypot(self.pad_aim.1) >= AIM_THRESHOLD {
+            self.mouse_aiming = false;
+            self.mouse_aim = None;
+        }
         let (main, chain) = (held(Key::Main), held(Key::Chain));
         // keys win when pressed; otherwise the stick steers
         let turn = if keys_turn != 0.0 { keys_turn } else { self.pad_drive.0 };
         let throttle = self.drive_by_pad.then_some(self.pad_drive.1);
         // stick up is positive, map up is negative y
         let (ax, ay) = self.pad_aim;
-        let aim = (ax.hypot(ay) >= AIM_THRESHOLD && turret == 0.0).then(|| (-ay).atan2(ax));
+        let pad_aim = (ax.hypot(ay) >= AIM_THRESHOLD && turret == 0.0).then(|| (-ay).atan2(ax));
+        let aim = pad_aim.or(self.mouse_aim.map(|m| m.0));
+        let aim_range = if pad_aim.is_none() { self.mouse_aim.map(|m| m.1) } else { None };
         Controls {
             turn,
             turret,
             gear_step: std::mem::take(&mut self.gear_step),
             throttle,
             aim,
-            fire_main: main || self.pad_main || std::mem::take(&mut self.main_edge),
-            fire_chain: chain || self.pad_chain,
+            fire_main: main || self.pad_main || self.mouse_main || std::mem::take(&mut self.main_edge),
+            fire_chain: chain || self.pad_chain || self.mouse_chain,
+            aim_range,
             fire_missile: std::mem::take(&mut self.missile_edge) || std::mem::take(&mut self.pad_rocket),
             center: std::mem::take(&mut self.center_edge),
         }

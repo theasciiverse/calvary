@@ -83,6 +83,10 @@ pub struct Game {
     pub drag: Option<((u16, u16), (u16, u16))>,
     /// The map editor uses the game's view without a supertank on it.
     pub hide_tank: bool,
+    /// Mouse aim point on screen, for the crosshair.
+    pub crosshair: Option<(u16, u16)>,
+    /// Distance to the mouse aim point: shells land there.
+    aim_range: Option<f32>,
     pub shots: Vec<Shot>,
     pub particles: Vec<Particle>,
     pub view: View,
@@ -129,6 +133,8 @@ impl Game {
             selected: Vec::new(),
             drag: None,
             hide_tank: false,
+            crosshair: None,
+            aim_range: None,
             shots: Vec::new(),
             particles: Vec::new(),
             view: View::Tactical,
@@ -297,6 +303,7 @@ impl Game {
             self.step_particles();
             return;
         }
+        self.aim_range = c.aim_range;
         let gear = self.tank.gear;
         let (px, py) = (self.tank.x, self.tank.y);
         let was_inside = self.world.blocks(px, py, 0.6);
@@ -413,8 +420,10 @@ impl Game {
                 ((e.x - x).hypot(e.y - y).clamp(1.0, range), self.terrain.height(e.x, e.y) + 0.4)
             })
             .unwrap_or_else(|| {
-                let (ex, ey) = (x + a.cos() * range, y + a.sin() * range);
-                (range, self.terrain.height(ex, ey).max(z - 1.0))
+                // to the mouse pointer when it aims, else full range
+                let reach = if kind == ShotKind::Bullet { range } else { self.aim_range.map_or(range, |r| r.clamp(1.0, range)) };
+                let (ex, ey) = (x + a.cos() * reach, y + a.sin() * reach);
+                (reach, self.terrain.height(ex, ey).max(z - 1.0))
             });
         let climb = (land - z) / span;
         let apex = if kind == ShotKind::Bullet { 0.0 } else { span * 0.18 };

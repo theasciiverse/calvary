@@ -167,6 +167,7 @@ fn run(
         render::follow_camera(&mut game, terminal.size()?.into());
         input.poll_pad();
         input.menu_moves = 0;
+        mouse_aim(&mut game, input, terminal.size()?.into());
         game.pad = input.pad_name.clone().map(|n| (n, input.build_cursor));
         terminal.draw(|f| render::draw(f, &game))?;
         if event::poll(next.saturating_duration_since(Instant::now()))? {
@@ -178,7 +179,7 @@ fn run(
                     }
                     Event::Mouse(m) if !game.help => {
                         let size: ratatui::layout::Rect = terminal.size()?.into();
-                        on_mouse(&mut game, size, m);
+                        on_mouse(&mut game, input, size, m);
                     }
                     _ => {}
                 }
@@ -300,19 +301,46 @@ fn run(
     Ok(())
 }
 
-/// Mouse: left click selects a unit (or switches a junction, or clears the
-/// selection), left drag box-selects, right click sends the selection to a
-/// spot or at an enemy.
-fn on_mouse(game: &mut Game, size: ratatui::layout::Rect, m: event::MouseEvent) {
+/// Mouse, after the original's action mode (manual 3.3): the turret follows
+/// the pointer in the tactical view; left button fires the main gun, unless
+/// it is on one of your units (select) or a junction (switch); left drag
+/// box-selects; right button commands the selection (go there, or attack
+/// what is under it), or fires the machine gun when nothing is selected.
+/// On the strategy map the mouse only selects and commands.
+fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: event::MouseEvent) {
     let here = (m.column, m.row);
+    let tactical = game.view == game::View::Tactical;
+    input.mouse_at = Some(here);
     match m.kind {
-        MouseEventKind::Down(MouseButton::Left) => game.drag = Some((here, here)),
+        MouseEventKind::Moved => {
+            if tactical {
+                input.mouse_aiming = true;
+            }
+        }
+        MouseEventKind::Down(MouseButton::Left) => {
+            game.drag = Some((here, here));
+            if !tactical {
+                return;
+            }
+            input.mouse_aiming = true;
+            let Some((x, y, _)) = render::screen_to_map(game, size, here.0, here.1) else { return };
+            if let Some(u) = game.world.player_unit_at(x, y, 0.8) {
+                game.select(vec![u]);
+            } else if game.world.switch_junction(x, y, 0.8).is_none() {
+                input.mouse_main = true;
+            }
+        }
         MouseEventKind::Drag(MouseButton::Left) => {
             if let Some((start, _)) = game.drag {
                 game.drag = Some((start, here));
+                // a drag is a box selection, not a burst of fire
+                if start.0.abs_diff(here.0) >= 2 || start.1.abs_diff(here.1) >= 1 {
+                    input.mouse_main = false;
+                }
             }
         }
         MouseEventKind::Up(MouseButton::Left) => {
+            input.mouse_main = false;
             let Some((start, _)) = game.drag.take() else { return };
             let moved = start.0.abs_diff(here.0) >= 2 || start.1.abs_diff(here.1) >= 1;
             if moved {
@@ -327,8 +355,11 @@ fn on_mouse(game: &mut Game, size: ratatui::layout::Rect, m: event::MouseEvent) 
                 }
                 return;
             }
+            if tactical {
+                return;
+            }
+            // strategy map: a click selects, switches a junction or clears
             let Some((x, y, reach)) = render::screen_to_map(game, size, here.0, here.1) else { return };
-            log::debug!("click at ({x:.1},{y:.1})");
             if let Some(u) = game.world.player_unit_at(x, y, reach.max(0.8)) {
                 game.select(vec![u]);
             } else if game.world.switch_junction(x, y, reach).is_none() && !game.selected.is_empty() {
@@ -338,13 +369,38 @@ fn on_mouse(game: &mut Game, size: ratatui::layout::Rect, m: event::MouseEvent) 
         }
         MouseEventKind::Down(MouseButton::Right) => {
             let Some((x, y, reach)) = render::screen_to_map(game, size, here.0, here.1) else { return };
+            if game.selected.is_empty() {
+                if tactical {
+                    input.mouse_chain = true;
+                }
+                return;
+            }
             match game.world.enemy_at(x, y, reach.max(0.6)) {
                 Some(t) => game.command(world::Command::Attack(t)),
                 None => game.command(world::Command::Move(x, y)),
             }
         }
+        MouseEventKind::Up(MouseButton::Right) => input.mouse_chain = false,
         _ => {}
     }
+}
+
+/// Turn the pointer into a turret aim (angle and distance from the tank) and
+/// a crosshair, while the mouse is aiming in the tactical view.
+fn mouse_aim(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect) {
+    game.crosshair = None;
+    input.mouse_aim = None;
+    if !input.mouse_aiming || game.view != game::View::Tactical || game.help {
+        return;
+    }
+    let Some(pos) = input.mouse_at else { return };
+    let Some((x, y, _)) = render::screen_to_map(game, size, pos.0, pos.1) else { return };
+    let (dx, dy) = (x - game.tank.x, y - game.tank.y);
+    if dx.hypot(dy) < 0.6 {
+        return;
+    }
+    input.mouse_aim = Some((dy.atan2(dx), dx.hypot(dy)));
+    game.crosshair = Some(pos);
 }
 
 /// `calvary --info`: what the level reader sees in each bundled level.
@@ -370,5 +426,56 @@ fn print_info() {
             }
             Err(e) => println!("{}: {e}", src.name),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::crossterm::event::{KeyModifiers, MouseEvent};
+    use ratatui::layout::Rect;
+
+    fn mouse(kind: MouseEventKind, at: (u16, u16)) -> MouseEvent {
+        MouseEvent { kind, column: at.0, row: at.1, modifiers: KeyModifiers::NONE }
+    }
+
+    #[test]
+    fn mouse_aims_fires_and_selects() {
+        let size = Rect::new(0, 0, 160, 45);
+        let mut game = Game::new(0).unwrap();
+        game.help = false;
+        let mut input = Input::new(false);
+        render::follow_camera(&mut game, size);
+        let (map, _) = render::split(size);
+        // a point 6 cells east of the tank
+        let (tx, ty) = (game.tank.x, game.tank.y);
+        let east = render::map_to_screen(&game, map, tx + 6.0, ty).unwrap();
+
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Moved, east));
+        mouse_aim(&mut game, &mut input, size);
+        let (angle, range) = input.mouse_aim.expect("aiming");
+        assert!(angle.abs() < 0.2, "aim east, got {angle}");
+        assert!((range - 6.0).abs() < 1.0, "range {range}");
+        let c = input.controls(std::time::Instant::now());
+        assert!(c.aim.is_some() && c.aim_range.is_some());
+
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Left), east));
+        assert!(input.controls(std::time::Instant::now()).fire_main, "left button fires on open ground");
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Up(MouseButton::Left), east));
+        assert!(!input.controls(std::time::Instant::now()).fire_main);
+
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Right), east));
+        assert!(input.controls(std::time::Instant::now()).fire_chain, "right button: machine gun with nothing selected");
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Up(MouseButton::Right), east));
+
+        // a unit of ours under the pointer is selected, not shot
+        game.world.order(world::Team::Player, "peon_tank");
+        game.world.step(1.0 / 30.0);
+        let u = game.world.entities.iter().rposition(|e| e.kind == "peon_tank").unwrap();
+        game.world.entities[u].x = tx + 6.0;
+        game.world.entities[u].y = ty;
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Left), east));
+        assert!(!input.controls(std::time::Instant::now()).fire_main);
+        assert_eq!(game.selected, vec![u]);
     }
 }

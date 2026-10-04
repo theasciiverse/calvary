@@ -228,6 +228,11 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
         sprites::paint_vehicle(&mut layer, sprites::SUPERTANK, sprites::PLAYER, pose);
     }
     layer.flush(f.buffer_mut(), &g.terrain);
+    if let Some(pos) = g.crosshair {
+        if let Some(cell) = f.buffer_mut().cell_mut(pos) {
+            cell.set_char('╋').set_fg(AMBER);
+        }
+    }
     draw_messages(f, area, g);
 }
 
@@ -451,7 +456,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
             Span::styled(format!(" {name} "), Style::default().fg(Color::Black).bg(GREEN)),
             label("  L stick drive (click centre)  R stick aim (click lock)  RT gun  LT mg  X rocket  LB/RB zoom  D-pad+A build  B route  Y map"),
         ]),
-        None => Line::from(label(" W/S gear  A/D turn  Q/E turret  C centre  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  T lock  F1/H help  ESC quit")),
+        None => Line::from(label(" W/S gear  A/D turn  Q/E turret  C centre  mouse aim  LMB gun  RMB mg  SPACE gun  F mg  ENTER rocket  TAB map  +/- zoom  F1 help")),
     };
     f.render_widget(Paragraph::new(vec![line1, Line::from(build), line3]).style(Style::default().bg(Color::Black)), area);
 
@@ -581,8 +586,10 @@ const HELP: &[(&str, &str)] = &[
     ("+ / -", "zoom the tactical view in / out"),
     ("", ""),
     ("", "UNITS"),
-    ("Click / drag", "select a unit / box-select units"),
-    ("Right click", "send the selection there, or at an enemy"),
+    ("Mouse", "point to aim the turret; shells land where you point"),
+    ("Left click", "fire; on your unit selects it, on a junction switches it"),
+    ("Drag", "box-select units"),
+    ("Right click", "selection: go there or attack; none: machine gun"),
     ("U , .", "select units near the supertank / cycle one by one"),
     ("G X R Z", "rally on me, hold, back to route, clear selection"),
     ("", ""),

@@ -358,6 +358,15 @@ at start, pauses the game), ESC closes help or quits. With the kitty
 keyboard protocol keys are exact; otherwise a key counts as held while OS
 repeats keep arriving.
 
+Mouse, after the original's action mode (its manual, section 3.3): in the
+tactical view the turret follows the pointer (a `╋` crosshair marks it)
+and shells arc to land where you point; left button fires the main gun,
+unless it is on one of your units (selects it) or on a junction (switches
+it); left drag box-selects; right button commands the selection (go
+there, or attack what is under it) or, with nothing selected, fires the
+machine gun. Q/E or the pad's right stick take the turret back from the
+mouse. On the strategy map the mouse only selects and commands.
+
 Gamepad (gilrs, feature `gamepad`, on by default; the same approach as
 `games/marble-recovery`): left stick drives with analog throttle and
 steering (a W/S press hands driving back to the gears), right stick points

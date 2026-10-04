@@ -54,6 +54,8 @@ pub struct Controls {
     pub aim: Option<f32>,
     /// Swing the turret back to straight ahead (C, or the left stick click).
     pub center: bool,
+    /// Distance to the mouse pointer when the mouse aims: shells land there.
+    pub aim_range: Option<f32>,
     pub fire_main: bool,
     pub fire_chain: bool,
     pub fire_missile: bool,
