@@ -255,10 +255,37 @@ fn draw_messages(f: &mut Frame, area: Rect, g: &Game) {
     }
 }
 
+/// Strategy view scale (map cells per half-block pixel) and the map offset
+/// that centres the map in `area`.
+fn strategy_fit(area: Rect, t: &Terrain) -> (f32, f32, f32) {
+    let s = (t.w as f32 / area.width as f32).max(t.h as f32 / (area.height as f32 * 2.0));
+    (s, (area.width as f32 * s - t.w as f32) / 2.0, (area.height as f32 * 2.0 * s - t.h as f32) / 2.0)
+}
+
+/// Map position under screen cell (col, row) for a screen of `size`, in
+/// whichever view is showing, and how far a click there may reach (map cells).
+pub fn screen_to_map(g: &Game, size: Rect, col: u16, row: u16) -> Option<(f32, f32, f32)> {
+    let (map, _) = split(size);
+    if row >= map.y + map.height || col >= map.x + map.width {
+        return None;
+    }
+    let (c, r) = ((col - map.x) as f32 + 0.5, (row - map.y) as f32 + 0.5);
+    match g.view {
+        View::Tactical => {
+            let cols = ZOOMS[g.zoom];
+            let origin = g.camera?;
+            Some((origin.0 + c / cols, origin.1 + r * 2.0 / cols, (2.0 / cols).max(1.5)))
+        }
+        View::Strategy => {
+            let (s, ox, oy) = strategy_fit(map, &g.terrain);
+            Some((c * s - ox, r * 2.0 * s - oy, (s * 3.0).max(1.5)))
+        }
+    }
+}
+
 fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
     let t = &g.terrain;
-    let s = (t.w as f32 / area.width as f32).max(t.h as f32 / (area.height as f32 * 2.0));
-    let (ox, oy) = ((area.width as f32 * s - t.w as f32) / 2.0, (area.height as f32 * 2.0 * s - t.h as f32) / 2.0);
+    let (s, ox, oy) = strategy_fit(area, t);
     let px = |col: u16, sub: u16| ((col as f32 + 0.5) * s - ox, ((sub as f32) + 0.5) * s - oy);
     let buf = f.buffer_mut();
     for row in 0..area.height {
@@ -292,6 +319,13 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
                         cell.set_char('·').set_fg(if chosen { Color::Rgb(235, 235, 225) } else { Color::Rgb(120, 120, 115) });
                     }
                 }
+            }
+        }
+    }
+    for n in w.nodes.iter().filter(|n| n.links_a.len() > 1) {
+        if let Some(pos) = to_cell(n.x, n.y) {
+            if let Some(cell) = buf.cell_mut(pos) {
+                cell.set_char('◇').set_fg(Color::Rgb(250, 250, 240));
             }
         }
     }
@@ -484,6 +518,7 @@ const HELP: &[(&str, &str)] = &[
     ("1 - 8", "build a unit at your garage (costs money)"),
     ("9 0 B", "build a helicopter, jet or bomber at your airbase"),
     ("J", "switch the route at the junction nearest your supertank"),
+    ("Mouse click", "switch the route at a junction (◇ on the map)"),
     ("T", "turret lock: track the nearest enemy in gun range"),
     ("", "Units drive the paths to the enemy base; money planes fly bank crates home."),
     ("", "Engineers capture banks and towers. Park at your HQ to rearm."),
@@ -523,4 +558,25 @@ fn draw_help(f: &mut Frame, full: Rect) {
         .style(Style::default().bg(Color::Black));
     f.render_widget(Clear, area);
     f.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Clicking the screen cell a junction is drawn in switches that junction.
+    #[test]
+    fn strategy_click_hits_the_drawn_junction() {
+        let mut g = Game::new(0).unwrap();
+        g.view = View::Strategy;
+        let size = Rect::new(0, 0, 160, 45);
+        let (map, _) = split(size);
+        let (s, ox, oy) = strategy_fit(map, &g.terrain);
+        let (j, n) = g.world.nodes.iter().enumerate().find(|(_, n)| n.links_a.len() > 1).map(|(i, n)| (i, n.clone())).unwrap();
+        // the same cell draw_strategy puts the ◇ in
+        let (col, row) = (((n.x + ox) / s) as u16, ((n.y + oy) / s / 2.0) as u16);
+        let (x, y, reach) = screen_to_map(&g, size, map.x + col, map.y + row).unwrap();
+        assert!(g.world.switch_junction(x, y, reach).is_some());
+        assert_eq!(g.world.route_choice.get(&j).copied(), Some(1), "junction {j} at ({:.1},{:.1})", n.x, n.y);
+    }
 }

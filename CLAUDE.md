@@ -208,7 +208,9 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
 4. **Strategy layer (started).** Build bar in the HUD, J switches the
    route at the junction nearest the supertank, the strategy map draws the
    path network (chosen branches bright) and icons for every structure and
-   unit. Still open: mouse clicks on path nodes, unit select/unlink/stop.
+   unit. A mouse click on a junction (◇ on the strategy map, or the spot
+   in the tactical view) switches it, as clicking path nodes did in the
+   original. Still open: unit select/unlink/stop.
 5. **AI (ported, 2026-10-04).** The computer follows the original
    `ai_joe`: it picks one of the 13 `formation_joe` layouts at random
    ("stock", "hole puncher", "heli hell", "rockets R us", ...), builds its
@@ -262,7 +264,7 @@ Controls: W/S throttle gear (sticky: R, N, 1, 2, 3, so driving works on
 terminals that never report key release), A/D turn, Q/E turret, SPACE main
 gun, F machine gun, ENTER rocket (two), 1-8 build at the garage, 9/0/B
 helicopter/jet/bomber at the airbase,
-J switch route at the nearest junction, T turret lock (tracks the nearest
+J switch route at the nearest junction (or click a junction), T turret lock (tracks the nearest
 enemy within 14 cells and aims shells at its height), TAB
 or M strategy view, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6
 columns per map cell; contour spacing scales with it), `[` `]` previous/next level, F1/H/? help window (opens

@@ -10,7 +10,10 @@ mod world;
 
 use game::{Game, DT, LEVELS};
 use input::Input;
-use ratatui::crossterm::event::{self, Event, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyboardEnhancementFlags, MouseButton, MouseEventKind, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
+};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use ratatui::DefaultTerminal;
@@ -43,7 +46,10 @@ fn main() -> io::Result<()> {
         execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
     }
     log::info!("start kitty_keyboard={kitty}");
+    // clicks switch routes at junctions, like the original's strategy mode
+    execute!(io::stdout(), EnableMouseCapture)?;
     let result = run(&mut terminal, start, at, kitty);
+    let _ = execute!(io::stdout(), DisableMouseCapture);
     if kitty {
         let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
     }
@@ -66,9 +72,21 @@ fn run(terminal: &mut DefaultTerminal, start: usize, at: Option<(f32, f32)>, kit
         terminal.draw(|f| render::draw(f, &game))?;
         if event::poll(next.saturating_duration_since(Instant::now()))? {
             loop {
-                if let Event::Key(k) = event::read()? {
-                    log::debug!("key {:?}", k);
-                    input.on_key(k, Instant::now());
+                match event::read()? {
+                    Event::Key(k) => {
+                        log::debug!("key {:?}", k);
+                        input.on_key(k, Instant::now());
+                    }
+                    Event::Mouse(m) if m.kind == MouseEventKind::Down(MouseButton::Left) && !game.help => {
+                        log::debug!("click at {},{}", m.column, m.row);
+                        let size: ratatui::layout::Rect = terminal.size()?.into();
+                        if let Some((x, y, reach)) = render::screen_to_map(&game, size, m.column, m.row) {
+                            if game.world.switch_junction(x, y, reach).is_none() {
+                                log::debug!("no junction near ({x:.1},{y:.1})");
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 if !event::poll(Duration::ZERO)? {
                     break;
