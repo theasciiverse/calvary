@@ -51,6 +51,53 @@ const CREDITS: &[(&str, &str)] = &[
     ("The name, the plot, the voices", "Carly Taylor"),
 ];
 
+/// Where things are, for the globe: the bundled levels' scenery and the
+/// campaign's cities (CAMPAIGN.md), by the names maps are likely to carry.
+const PLACES: &[(&str, &str, f32, f32)] = &[
+    ("test", "Piraeus, Greece", 37.94, 23.65),
+    ("piraeus", "Piraeus, Greece", 37.94, 23.65),
+    ("snow", "Zurich, Switzerland", 47.37, 8.54),
+    ("zurich", "Zurich, Switzerland", 47.37, 8.54),
+    ("egypt2", "Cairo, Egypt", 30.04, 31.24),
+    ("cairo", "Cairo, Egypt", 30.04, 31.24),
+    ("basrah", "Al Basrah, Iraq", 30.51, 47.81),
+    ("ur", "Ur, Iraq", 30.96, 46.10),
+    ("nakhayb", "Nakhayb, Iraq", 32.04, 42.27),
+    ("babylon", "Babylon, Iraq", 32.54, 44.42),
+    ("nineveh", "Nineveh, Iraq", 36.36, 43.15),
+    ("palmyra", "Palmyra, Syria", 34.55, 38.27),
+    ("sinai", "Sinai", 29.50, 33.80),
+    ("suez", "The Suez Canal", 30.58, 32.27),
+    ("giza", "Giza, Egypt", 29.98, 31.13),
+    ("alexandria", "Alexandria, Egypt", 31.20, 29.92),
+    ("delphi", "Delphi, Greece", 38.48, 22.50),
+    ("naples", "Naples, Italy", 40.85, 14.27),
+    ("pompeii", "Pompeii, Italy", 40.75, 14.49),
+    ("rome", "Rome, Italy", 41.90, 12.50),
+    ("turin", "Turin, Italy", 45.07, 7.69),
+    ("gotthard", "The Gotthard Pass", 46.56, 8.57),
+    ("chartres", "Chartres, France", 48.45, 1.49),
+    ("loire", "The Loire, France", 47.40, 1.00),
+    ("munich", "Munich, Germany", 48.14, 11.58),
+    ("vienna", "Vienna, Austria", 48.21, 16.37),
+    ("berlin", "Berlin, Germany", 52.52, 13.40),
+    ("helsinki", "Helsinki, Finland", 60.17, 24.94),
+    ("lapland", "Lapland, Finland", 67.90, 26.00),
+    ("svalbard", "Svalbard, Norway", 78.22, 15.65),
+    ("norway", "Norway", 62.00, 7.00),
+    ("cyprus", "Cyprus", 35.13, 33.43),
+    ("jaffa", "Jaffa", 32.05, 34.75),
+    ("jerusalem", "Jerusalem", 31.78, 35.23),
+];
+
+/// Golgotha itself, where the menu turns when nothing else is picked.
+const GOLGOTHA: (&str, f32, f32) = ("Golgotha, Jerusalem", 31.78, 35.23);
+
+fn place_of(name: &str) -> Option<(&'static str, f32, f32)> {
+    let n = name.to_lowercase();
+    PLACES.iter().find(|p| n == p.0 || n.contains(p.0) && p.0.len() > 3).map(|p| (p.1, p.2, p.3))
+}
+
 pub enum Choice {
     Level(usize),
     Map(String),
@@ -66,6 +113,16 @@ enum Item {
 }
 
 impl Item {
+    /// The place on the globe this entry stands for.
+    fn place(&self) -> (&'static str, f32, f32) {
+        let found = match self {
+            Item::Level(i, _) => place_of(LEVELS[*i].name),
+            Item::Map(p) => place_of(p.trim_start_matches("maps/").trim_end_matches(".cmap")),
+            _ => None,
+        };
+        found.unwrap_or(GOLGOTHA)
+    }
+
     fn label(&self) -> String {
         match self {
             Item::Level(_, l) => l.to_string(),
@@ -109,11 +166,27 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
     let items = menu();
     let mut pick = 0usize;
     let mut page = Page::Main;
+    // globe orientation (spin = longitude facing us, tilt = latitude), eased
+    // toward the selected entry's place once the title is up
+    let mut view = (0.0f32, 0.0f32);
+    let mut last = Instant::now();
     loop {
         let t = start.elapsed().as_secs_f32();
+        let dt = last.elapsed().as_secs_f32().min(0.1);
+        last = Instant::now();
+        if t < GLOBE_END {
+            view = (((t - EPIGRAPH_END).max(0.0) * 0.3 - 1.2), 0.25);
+        } else {
+            let (_, lat, lon) = items[pick].place();
+            let (want_spin, want_tilt) = (lon.to_radians(), (lat * 0.8).to_radians());
+            let d = (want_spin - view.0 + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+            let k = (dt * 2.5).min(1.0);
+            view.0 += d * k;
+            view.1 += (want_tilt - view.1) * k;
+        }
         let mut rows: Vec<Rect> = Vec::new();
         terminal.draw(|f| {
-            rows = draw(f, t, &items, pick, &page);
+            rows = draw(f, t, &items, pick, &page, view);
         })?;
         input.poll_pad();
         // the pad: d-pad up/down move, A or Start picks, B backs out
@@ -185,7 +258,7 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
     }
 }
 
-fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page) -> Vec<Rect> {
+fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (f32, f32)) -> Vec<Rect> {
     let area = f.area();
     f.render_widget(Block::default().style(Style::default().bg(Color::Black)), area);
     if t < EPIGRAPH_END {
@@ -193,7 +266,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page) -> Vec<
         return Vec::new();
     }
     if t < GLOBE_END {
-        draw_globe(f.buffer_mut(), area, t - EPIGRAPH_END, 1.0);
+        draw_globe(f.buffer_mut(), area, t - EPIGRAPH_END, 1.0, view, None);
         let k = t - EPIGRAPH_END;
         let caption = if k < 3.0 { "2048" } else { "The Golgotha Transmission" };
         let fade = ((k % 3.0) / 0.8).min(1.0);
@@ -203,7 +276,8 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page) -> Vec<
         return Vec::new();
     }
     // the title: the globe keeps turning behind it, dimmed
-    draw_globe(f.buffer_mut(), area, t - EPIGRAPH_END, 0.35);
+    let place = (*page == Page::Main).then(|| items[pick].place());
+    draw_globe(f.buffer_mut(), area, t - EPIGRAPH_END, 0.45, view, place.map(|p| (p.1, p.2)));
     let top = area.y + 1;
     let title_h = draw_big_title(f.buffer_mut(), area, top, t - GLOBE_END);
     let mut y = top + title_h + 1;
@@ -213,10 +287,19 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page) -> Vec<
         }
     };
     line(f, y, Line::from(Span::styled("T H E   G O L G O T H A   T R A N S M I S S I O N", Style::default().fg(BONE))));
-    y += 2;
     let mut rows = Vec::new();
     match page {
         Page::Main => {
+            // the menu sits low, just above the dedication, leaving the
+            // middle of the screen to the Earth
+            let foot = area.y + area.height.saturating_sub(5);
+            y = foot.saturating_sub(items.len() as u16 + 2).max(y + 2);
+            if let Some((name, lat, lon)) = place {
+                let ns = if lat >= 0.0 { 'N' } else { 'S' };
+                let ew = if lon >= 0.0 { 'E' } else { 'W' };
+                let caption = format!("{name}   {:.1}°{ns} {:.1}°{ew}", lat.abs(), lon.abs());
+                line(f, y.saturating_sub(2), Line::from(Span::styled(caption, Style::default().fg(AMBER))));
+            }
             for (i, item) in items.iter().enumerate() {
                 let label = item.label();
                 let selected = i == pick;
@@ -232,7 +315,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page) -> Vec<
         Page::Credits => draw_credits(f, area),
     }
     // the dedication, on every title page
-    let foot = area.y + area.height.saturating_sub(3);
+    let foot = area.y + area.height.saturating_sub(5);
     line(f, foot, Line::from(Span::styled("Built on GOLGOTHA (1998) by Crack dot Com, given to the world in the public domain.", Style::default().fg(DIM))));
     line(
         f,
@@ -315,7 +398,7 @@ fn hash(x: u32, y: u32) -> u32 {
 /// colour), lit from the upper left, with a thin atmosphere rim; Golgotha
 /// (Jerusalem, 31.8 N 35.2 E) pulses red on the near side. Kept round for
 /// the terminal's real cell shape.
-fn draw_globe(buf: &mut Buffer, area: Rect, t: f32, bright: f32) {
+fn draw_globe(buf: &mut Buffer, area: Rect, t: f32, bright: f32, view: (f32, f32), marker: Option<(f32, f32)>) {
     let (w, h) = (area.width as usize, area.height as usize);
     let (pw, ph) = (w, h * 2);
     // a half-block pixel is one column wide and half a cell tall
@@ -323,7 +406,9 @@ fn draw_globe(buf: &mut Buffer, area: Rect, t: f32, bright: f32) {
     let r = (ph as f32 * 0.42 * px_aspect).min(pw as f32 * 0.45);
     let (rx, ry) = (r, r / px_aspect);
     let (cx, cy) = (pw as f32 / 2.0, ph as f32 / 2.0 - ph as f32 * 0.03);
-    let spin = t * 0.3 - 1.2;
+    let (spin, tilt) = view;
+    let (ct, st) = (tilt.cos(), tilt.sin());
+    let mark = marker.map(|(la, lo)| (la.to_radians(), lo.to_radians()));
     let pulse = ((t * 4.0).sin() * 0.5 + 0.5) * 0.7 + 0.3;
     let (glat, glon) = (31.8f32.to_radians(), 35.2f32.to_radians());
     let pixel = |x: usize, y: usize| -> Option<Color> {
@@ -339,8 +424,18 @@ fn draw_globe(buf: &mut Buffer, area: Rect, t: f32, bright: f32) {
             });
         }
         let z = (1.0 - d2).sqrt();
-        let lat = (-ny).asin();
-        let lon = nx.atan2(z) + spin;
+        // tilt the globe about the screen's x axis so `tilt` latitude faces us
+        let (vy, vz) = (-ny, z);
+        let (wy, wz) = (vy * ct + vz * st, -vy * st + vz * ct);
+        let lat = wy.clamp(-1.0, 1.0).asin();
+        let lon = nx.atan2(wz) + spin;
+        if let Some((ml, mn)) = mark {
+            let d = (lat.sin() * ml.sin() + lat.cos() * ml.cos() * (lon - mn).cos()).clamp(-1.0, 1.0).acos();
+            // a pulsing amber ring around the selected place
+            if (d - (0.06 + 0.02 * pulse)).abs() < 0.012 {
+                return Some(Color::Rgb(255, (180.0 * pulse.max(0.6)) as u8, 40));
+            }
+        }
         let dist = (lat.sin() * glat.sin() + lat.cos() * glat.cos() * (lon - glon).cos()).clamp(-1.0, 1.0).acos();
         if dist < 0.03 + 0.015 * pulse {
             return Some(Color::Rgb((255.0 * pulse.max(bright)) as u8, (50.0 * bright) as u8, (40.0 * bright) as u8));

@@ -411,8 +411,12 @@ splash theme: the Shakespeare epigraph from crack.com's own Golgotha pages
 the original Act 1 Scene 1's spinning globe against the stars, in Braille,
 with the Golgotha site (Jerusalem, 31.8 N 35.2 E) pulsing red, captioned
 "2048" and "The Golgotha Transmission". Any key, click or pad button
-skips it. The title: CALVARY in block letters over the dimmed globe, a
-menu (the three bundled levels, every `maps/*.cmap`, Controls, Credits,
+skips it. The globe is NASA's Blue Marble (public domain, `data/EARTH.txt`)
+on a sphere in half-block pixels. The title: CALVARY in block letters
+over the dimmed globe, which turns and tilts to the selected entry's place
+(an amber ring and a caption with its coordinates; Golgotha for Controls,
+Credits and Quit; campaign city names in `.cmap` file names are
+recognised), a menu low on the screen (the three bundled levels, every `maps/*.cmap`, Controls, Credits,
 Quit; keys, mouse or pad), and a dedication to Dave Taylor, Jonathan
 Clark, Carly Taylor and the team. Credits list the Golgotha team exactly
 as crack.com's credits page did (copy and URL in
