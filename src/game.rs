@@ -217,7 +217,17 @@ impl Game {
             return;
         }
         let gear = self.tank.gear;
+        let (px, py) = (self.tank.x, self.tank.y);
+        let was_inside = self.world.blocks(px, py, 0.6);
         self.tank.update(c, &self.terrain, DT);
+        // buildings stop the supertank like rock does (a tank already inside
+        // one, e.g. spawned there, may drive out)
+        if !was_inside && self.world.blocks(self.tank.x, self.tank.y, 0.6) {
+            self.tank.x = px;
+            self.tank.y = py;
+            self.tank.speed = 0.0;
+            self.tank.blocked = true;
+        }
         if self.tank.gear != gear {
             log::info!("gear {} -> {}", gear, self.tank.gear);
         }

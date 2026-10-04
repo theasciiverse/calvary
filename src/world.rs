@@ -636,6 +636,11 @@ impl World {
             }
             let kind = self.queues[t].pop_front().unwrap();
             let Some(g) = self.find(factory_for(kind), team) else {
+                // the factory was destroyed after the order: give the money back
+                self.money[t] += balance::unit(kind).map_or(0, |s| s.cost);
+                if team == Team::Player {
+                    self.say(format!("Order refunded: {} (factory lost)", kind.replace('_', " ")));
+                }
                 continue;
             };
             let (gx, gy) = (self.entities[g].x, self.entities[g].y);
@@ -1031,6 +1036,13 @@ impl World {
         }
     }
 
+    /// A standing structure overlapping a vehicle of radius `r` at (x, y).
+    pub fn blocks(&self, x: f32, y: f32, r: f32) -> bool {
+        self.entities.iter().any(|e| {
+            e.alive && matches!(e.class, Class::Hq | Class::Garage | Class::Airbase | Class::Bank | Class::Tower) && (e.x - x).hypot(e.y - y) < e.radius() + r
+        })
+    }
+
     /// The player's supertank shot something: first hostile or neutral-free
     /// target within reach of (x, y), if any.
     pub fn hit_test(&self, x: f32, y: f32, team: Team) -> Option<usize> {
@@ -1091,6 +1103,21 @@ mod rules {
         // the supertank's cost (10000) is above the first threshold (1000)
         assert_eq!(w.points, 10000);
         assert_eq!(w.upgrade_level(), 1);
+    }
+
+    #[test]
+    fn orders_for_a_lost_factory_are_refunded() {
+        let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
+        w.ai_timer = f32::MAX;
+        assert!(w.order(Team::Player, "peon_tank"));
+        assert!(w.order(Team::Player, "peon_tank"));
+        w.step(1.0 / 30.0); // first one deploys
+        let g = w.find(Class::Garage, Team::Player).unwrap();
+        w.entities[g].alive = false;
+        for _ in 0..30 * 2 {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!(w.money[0], START_MONEY - 300);
     }
 
     #[test]
