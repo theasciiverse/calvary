@@ -180,6 +180,13 @@ pub struct World {
     pub outcome: Outcome,
     /// Junction choices: path node -> which of its links new units take.
     pub route_choice: HashMap<usize, usize>,
+    /// The player's supertank kills, scored at the victim's cost as the
+    /// original's `add_points` does.
+    pub points: i32,
+    /// Damage over time: (victim, damage per original tick, ticks left,
+    /// dealt by the player's supertank).
+    burns: Vec<(usize, f32, u32, bool)>,
+    burn_clock: f32,
     queues: [VecDeque<&'static str>; 2],
     deploy_timer: [f32; 2],
     bank_timer: f32,
@@ -258,6 +265,9 @@ impl World {
             messages: VecDeque::new(),
             outcome: Outcome::Playing,
             route_choice: HashMap::new(),
+            points: 0,
+            burns: Vec::new(),
+            burn_clock: 0.0,
             queues: [VecDeque::new(), VecDeque::new()],
             deploy_timer: [0.0; 2],
             bank_timer: BANK_INTERVAL,
@@ -388,6 +398,7 @@ impl World {
             }
         }
         self.step_bolts(dt);
+        self.step_burns(dt);
         for e in &mut self.entities {
             e.flash = (e.flash - dt).max(0.0);
         }
@@ -685,9 +696,49 @@ impl World {
         }
     }
 
+    /// Supertanks lost so far.
+    pub fn deaths(&self) -> u32 {
+        START_LIVES - self.lives
+    }
+
+    /// The original's kill ratio: points per supertank lost (at least one).
+    pub fn kill_ratio(&self) -> f32 {
+        self.points as f32 / self.deaths().max(1) as f32
+    }
+
+    /// Upgrade level the next supertank is built at.
+    pub fn upgrade_level(&self) -> usize {
+        let ratio = self.kill_ratio();
+        balance::balance().upgrade_kill_ratio.iter().filter(|&&need| ratio >= need).count()
+    }
+
+    fn step_burns(&mut self, dt: f32) {
+        self.burn_clock += dt;
+        while self.burn_clock >= 1.0 / ORIGINAL_HZ {
+            self.burn_clock -= 1.0 / ORIGINAL_HZ;
+            let burns = std::mem::take(&mut self.burns);
+            for (j, amount, ticks, by_stank) in burns {
+                if !self.entities[j].alive {
+                    continue;
+                }
+                self.hurt_by(j, amount, by_stank);
+                if ticks > 1 {
+                    self.burns.push((j, amount, ticks - 1, by_stank));
+                }
+            }
+        }
+    }
+
     /// Apply `weapon`'s damage at (x, y) from `team`. Area weapons hurt every
     /// hostile within their radius; single-target weapons only `direct`.
     pub fn damage(&mut self, weapon: &str, x: f32, y: f32, direct: Option<usize>, team: Team) {
+        self.damage_by(weapon, x, y, direct, team, false);
+    }
+
+    /// As `damage`, noting whether the player's supertank dealt it (for points).
+    /// A single-target weapon with a tick count (acid, napalm, electric beams)
+    /// does its damage once per original tick for that many ticks.
+    pub fn damage_by(&mut self, weapon: &str, x: f32, y: f32, direct: Option<usize>, team: Team, by_stank: bool) {
         let Some(w) = balance::weapon(weapon) else { return };
         let victims: Vec<usize> = if w.area {
             (0..self.entities.len())
@@ -701,11 +752,35 @@ impl World {
         };
         for j in victims {
             let amount = w.damage_to(&self.entities[j].kind);
-            self.hurt(j, amount);
+            if !w.area && w.radius >= 1.0 {
+                self.burns.push((j, amount, w.radius as u32, by_stank));
+                self.entities[j].flash = 0.15;
+            } else {
+                self.hurt_by(j, amount, by_stank);
+            }
         }
     }
 
-    pub fn hurt(&mut self, j: usize, amount: f32) {
+    fn hurt_by(&mut self, j: usize, amount: f32, by_stank: bool) {
+        let was_alive = self.entities[j].alive && self.entities[j].hp > 0.0;
+        self.hurt_inner(j, amount);
+        let e = &self.entities[j];
+        if by_stank && was_alive && !e.alive && e.team == Team::Enemy {
+            let before = self.upgrade_level();
+            let score = match e.class {
+                Class::EnemyTank => balance::unit("stank").map_or(0, |s| s.cost),
+                _ => e.stats().map_or(0, |s| s.cost),
+            };
+            self.points += score;
+            let after = self.upgrade_level();
+            if after > before {
+                let (main, rocket, _, armor) = crate::tank::UPGRADE_LEVELS[after.min(2)];
+                self.say(format!("Upgrade earned! Next supertank: {main}, {}, {armor} armor", rocket.replace('_', " ")));
+            }
+        }
+    }
+
+    fn hurt_inner(&mut self, j: usize, amount: f32) {
         let e = &mut self.entities[j];
         if !e.alive {
             return;
@@ -789,6 +864,41 @@ mod tests {
         let u = &w.entities[start.0];
         // peon tanks drive 0.08 cells per original tick; most of 20 s should be driving
         assert!(!u.alive || u.odometer > 10.0, "unit should drive its route: odometer {} at ({:.1},{:.1}) next {:?}", u.odometer, u.x, u.y, u.next_node);
+    }
+}
+
+#[cfg(test)]
+mod rules {
+    use super::*;
+    use crate::game::LEVELS;
+
+    #[test]
+    fn supertank_kills_earn_points_and_upgrades() {
+        let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
+        let foe = w.find(Class::EnemyTank, Team::Enemy).unwrap();
+        let (x, y) = (w.entities[foe].x, w.entities[foe].y);
+        assert_eq!(w.upgrade_level(), 0);
+        while w.entities[foe].alive {
+            w.damage_by("b120mm", x, y, Some(foe), Team::Player, true);
+        }
+        // the supertank's cost (10000) is above the first threshold (1000)
+        assert_eq!(w.points, 10000);
+        assert_eq!(w.upgrade_level(), 1);
+    }
+
+    #[test]
+    fn acid_burns_over_forty_ticks() {
+        let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
+        w.ai_timer = f32::MAX;
+        let tower = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
+        let (x, y, hp) = (w.entities[tower].x, w.entities[tower].y, w.entities[tower].hp);
+        w.damage_by("acid", x, y, Some(tower), Team::Player, true);
+        assert_eq!(w.entities[tower].hp, hp, "acid does nothing up front");
+        for _ in 0..30 * 5 {
+            w.step(1.0 / 30.0);
+        }
+        // 2 per tick for 40 ticks; other units may chip in, so at least 80
+        assert!(hp - w.entities[tower].hp >= 80.0 - 1e-3, "burned {}", hp - w.entities[tower].hp);
     }
 }
 

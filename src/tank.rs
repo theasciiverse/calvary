@@ -6,7 +6,7 @@
 
 use crate::terrain::Terrain;
 
-const ORIGINAL_HZ: f32 = 10.0;
+use crate::balance::ORIGINAL_HZ;
 pub const TOP_SPEED: f32 = 0.3 * ORIGINAL_HZ; // cells per second
 const TURN_SPEED: f32 = 0.2 * ORIGINAL_HZ; // radians per second
 const ACCEL: f32 = 0.1 * ORIGINAL_HZ * ORIGINAL_HZ; // cells per second squared
@@ -18,8 +18,28 @@ pub const GEARS: [f32; 5] = [-0.4, 0.0, 0.35, 0.7, 1.0];
 const MAX_GRADE: f32 = 1.6;
 const RADIUS: f32 = 0.6;
 
-pub const MAIN_RELOAD: f32 = 0.9;
+/// The 120mm's reload in `def_stank_weapons` is 5 ticks; also used for the
+/// computer's supertank.
+pub const MAIN_RELOAD: f32 = 0.5;
 pub const CHAIN_RELOAD: f32 = 0.08;
+
+/// `upgrade_levels` from the original `scheme/start.scm`: main gun, rocket,
+/// machine gun, armour per supertank upgrade level.
+pub const UPGRADE_LEVELS: [(&str, &str, &str, &str); 3] = [
+    ("b120mm", "heavy_rocket", "chain_gun", "kevlar"),
+    ("acid", "vortex_missile", "chain_gun", "reactive"),
+    ("napalm", "nuke_missile", "chain_gun", "titanium"),
+];
+
+/// Ammunition (or armour hit points) for a supertank weapon, from the table.
+pub fn ammo_max(weapon: &str) -> u32 {
+    crate::balance::stank_weapon(weapon).map_or(0, |w| w.max.max(0) as u32)
+}
+
+/// Seconds between shots of a supertank weapon (at least one tick).
+pub fn reload(weapon: &str) -> f32 {
+    crate::balance::stank_weapon(weapon).map_or(1.0, |w| w.fire_delay.max(1.0) / ORIGINAL_HZ)
+}
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Controls {
@@ -42,11 +62,17 @@ pub struct Tank {
     pub turret: f32,
     pub speed: f32,
     pub gear: usize,
+    /// Upgrade level this supertank was built at, and its weapons.
+    pub level: usize,
+    pub main_weapon: &'static str,
+    pub rocket_weapon: &'static str,
+    pub armor: &'static str,
     pub main_ammo: u32,
     pub chain_ammo: u32,
     pub missiles: u32,
     pub main_cooldown: f32,
     pub chain_cooldown: f32,
+    pub rocket_cooldown: f32,
     /// Set when the tank stopped against a wall, slope or the map edge this tick.
     pub blocked: bool,
     /// Distance rolled, signed; drives the tread animation.
@@ -56,19 +82,26 @@ pub struct Tank {
 }
 
 impl Tank {
-    pub fn new(x: f32, y: f32) -> Tank {
+    pub fn new(x: f32, y: f32, level: usize) -> Tank {
+        let level = level.min(UPGRADE_LEVELS.len() - 1);
+        let (main_weapon, rocket_weapon, chain, armor) = UPGRADE_LEVELS[level];
         Tank {
+            level,
+            main_weapon,
+            rocket_weapon,
+            armor,
             x,
             y,
             heading: 0.0,
             turret: 0.0,
             speed: 0.0,
             gear: 1,
-            main_ammo: 40,
-            chain_ammo: 600,
-            missiles: 2,
+            main_ammo: ammo_max(main_weapon),
+            chain_ammo: ammo_max(chain),
+            missiles: ammo_max(rocket_weapon),
             main_cooldown: 0.0,
             chain_cooldown: 0.0,
+            rocket_cooldown: 0.0,
             blocked: false,
             odometer: 0.0,
             flash: 0.0,
@@ -120,5 +153,6 @@ impl Tank {
         self.main_cooldown = (self.main_cooldown - dt).max(0.0);
         self.flash = (self.flash - dt).max(0.0);
         self.chain_cooldown = (self.chain_cooldown - dt).max(0.0);
+        self.rocket_cooldown = (self.rocket_cooldown - dt).max(0.0);
     }
 }

@@ -2,7 +2,7 @@
 //! explosion particles. Units, bases and paths join later (see CLAUDE.md plan).
 
 use crate::level::Level;
-use crate::tank::{Controls, Tank, CHAIN_RELOAD, MAIN_RELOAD};
+use crate::tank::{self, Controls, Tank, CHAIN_RELOAD};
 use crate::terrain::Terrain;
 use crate::world::{Class, Outcome, Team, World, BUILDABLE};
 
@@ -38,6 +38,8 @@ pub enum ShotKind {
 #[derive(Clone, Debug)]
 pub struct Shot {
     pub kind: ShotKind,
+    /// Weapon name in the balance table.
+    pub weapon: &'static str,
     pub x: f32,
     pub y: f32,
     /// Flight height in map cells; terrain above it stops the shot.
@@ -98,9 +100,9 @@ impl Game {
         let (cx, cy) = start.map_or((terrain.w as f32 / 2.0, terrain.h as f32 / 2.0), |s| (s.0, s.1));
         let (x, y) = spawn_point(&terrain, cx, cy);
         log::info!("level {} {}x{} spawn ({x:.1},{y:.1})", src.name, terrain.w, terrain.h);
-        let mut tank = Tank::new(x, y);
+        let mut tank = Tank::new(x, y, 0);
         tank.heading = start.map_or(0.0, |s| s.2);
-        Ok(Game {
+        let mut game = Game {
             level_index,
             terrain,
             tank,
@@ -115,7 +117,19 @@ impl Game {
             camera: None,
             time: 0.0,
             rng: 0x9E37_79B9_7F4A_7C15,
-        })
+        };
+        game.arm_player_entity();
+        Ok(game)
+    }
+
+    /// The supertank's world entity takes its hit points from the armour.
+    fn arm_player_entity(&mut self) {
+        let armor = tank::ammo_max(self.tank.armor) as f32;
+        if let Some(i) = self.world.player_tank {
+            let e = &mut self.world.entities[i];
+            e.max_hp = armor;
+            e.hp = armor;
+        }
     }
 
     fn rand(&mut self) -> f32 {
@@ -208,19 +222,20 @@ impl Game {
         }
         if c.fire_main && self.tank.main_cooldown == 0.0 && self.tank.main_ammo > 0 {
             self.tank.main_ammo -= 1;
-            self.tank.main_cooldown = MAIN_RELOAD;
+            self.tank.main_cooldown = tank::reload(self.tank.main_weapon);
             self.tank.flash = 0.12;
-            self.fire(ShotKind::Shell, 16.0, 14.0, 0.0);
+            self.fire(ShotKind::Shell, self.tank.main_weapon, 16.0, 14.0, 0.0);
         }
         if c.fire_chain && self.tank.chain_cooldown == 0.0 && self.tank.chain_ammo > 0 {
             self.tank.chain_ammo -= 1;
             self.tank.chain_cooldown = CHAIN_RELOAD;
             let spread = (self.rand() - 0.5) * 0.08;
-            self.fire(ShotKind::Bullet, 24.0, 8.0, spread);
+            self.fire(ShotKind::Bullet, "chain_gun", 24.0, 8.0, spread);
         }
-        if c.fire_missile && self.tank.missiles > 0 {
+        if c.fire_missile && self.tank.missiles > 0 && self.tank.rocket_cooldown == 0.0 {
             self.tank.missiles -= 1;
-            self.fire(ShotKind::Missile, 9.0, 30.0, 0.0);
+            self.tank.rocket_cooldown = tank::reload(self.tank.rocket_weapon);
+            self.fire(ShotKind::Missile, self.tank.rocket_weapon, 9.0, 30.0, 0.0);
         }
         if c.turret == 0 {
             self.track_target();
@@ -244,8 +259,13 @@ impl Game {
         let (hx, hy) = self.world.find(Class::Hq, Team::Player).map_or((self.tank.x, self.tank.y), |i| (self.world.entities[i].x, self.world.entities[i].y));
         let (x, y) = spawn_point(&self.terrain, hx + 2.5, hy);
         let heading = self.tank.heading;
-        self.tank = Tank::new(x, y);
+        let level = self.world.upgrade_level();
+        self.tank = Tank::new(x, y, level);
         self.tank.heading = heading;
+        self.arm_player_entity();
+        if level > 0 {
+            self.world.say(format!("Level {level} supertank rolls out: {}, {}", self.tank.main_weapon, self.tank.rocket_weapon.replace('_', " ")));
+        }
         self.world.place_player_tank(x, y, heading);
         log::info!("supertank respawn at ({x:.1},{y:.1}), lives {}", self.world.lives);
     }
@@ -261,9 +281,9 @@ impl Game {
         let t = &mut self.tank;
         let tick = ((self.time * 4.0) as i32) != (((self.time - DT) * 4.0) as i32);
         if tick {
-            t.main_ammo = (t.main_ammo + 1).min(40);
-            t.chain_ammo = (t.chain_ammo + 25).min(600);
-            if t.missiles < 2 && (self.time as i32) % 5 == 0 {
+            t.main_ammo = (t.main_ammo + 1).min(tank::ammo_max(t.main_weapon));
+            t.chain_ammo = (t.chain_ammo + 5).min(tank::ammo_max("chain_gun"));
+            if t.missiles < tank::ammo_max(t.rocket_weapon) && (self.time as i32) % 5 == 0 {
                 t.missiles += 1;
             }
             if let Some(i) = self.world.player_tank {
@@ -273,7 +293,7 @@ impl Game {
         }
     }
 
-    fn fire(&mut self, kind: ShotKind, speed: f32, range: f32, spread: f32) {
+    fn fire(&mut self, kind: ShotKind, weapon: &'static str, speed: f32, range: f32, spread: f32) {
         let t = &self.tank;
         let a = t.aim() + spread;
         let (x, y) = (t.x + a.cos() * 1.1, t.y + a.sin() * 1.1);
@@ -295,7 +315,7 @@ impl Game {
         let climb = (land - z) / span;
         let apex = if kind == ShotKind::Bullet { 0.0 } else { span * 0.18 };
         let range = if kind == ShotKind::Bullet { range } else { span + 0.5 };
-        self.shots.push(Shot { kind, x, y, z, vx: a.cos() * speed, vy: a.sin() * speed, range, z0: z, climb, span, apex, flown: 0.0 });
+        self.shots.push(Shot { kind, weapon, x, y, z, vx: a.cos() * speed, vy: a.sin() * speed, range, z0: z, climb, span, apex, flown: 0.0 });
     }
 
     fn step_shots(&mut self) {
@@ -314,25 +334,20 @@ impl Game {
             let struck = world.hit_test(s.x, s.y, Team::Player);
             if struck.is_some() || off_map || ground > s.z || s.range <= 0.0 {
                 if !off_map {
-                    hits.push((s.kind, s.x, s.y, struck));
+                    hits.push((s.kind, s.weapon, s.x, s.y, struck));
                 }
                 return false;
             }
             true
         });
-        for (kind, x, y, struck) in hits {
-            let weapon = match kind {
-                ShotKind::Shell => "b120mm",
-                ShotKind::Bullet => "chain_gun",
-                ShotKind::Missile => "heavy_rocket",
-            };
+        for (kind, weapon, x, y, struck) in hits {
             log::debug!(
                 "impact {kind:?} at ({x:.1},{y:.1}) struck {:?} ground {:.2}",
                 struck.map(|i| &self.world.entities[i].kind),
                 self.terrain.height(x, y)
             );
             if self.world.outcome == Outcome::Playing {
-                self.world.damage(weapon, x, y, struck, Team::Player);
+                self.world.damage_by(weapon, x, y, struck, Team::Player, true);
             }
             let (n, power) = match kind {
                 ShotKind::Shell => (26, 1.0),

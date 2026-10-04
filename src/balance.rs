@@ -35,9 +35,20 @@ pub struct WeaponStats {
     pub special: Vec<(String, f32)>,
 }
 
+/// A row of `def_stank_weapons`: the supertank's ammunition for one weapon
+/// (or armour: kevlar, reactive, titanium, where `max` is the hit points).
+#[derive(Clone, Debug)]
+pub struct StankWeapon {
+    pub max: i32,
+    pub fire_delay: f32,
+}
+
 pub struct Balance {
     pub units: HashMap<String, UnitStats>,
     pub weapons: HashMap<String, WeaponStats>,
+    pub stank: HashMap<String, StankWeapon>,
+    /// Kill ratio (points per supertank lost) needed for upgrade levels 1 and 2.
+    pub upgrade_kill_ratio: Vec<f32>,
 }
 
 #[derive(Clone, Debug)]
@@ -93,10 +104,16 @@ fn parse(src: &str) -> Vec<Sexp> {
 pub fn balance() -> &'static Balance {
     static B: OnceLock<Balance> = OnceLock::new();
     B.get_or_init(|| {
-        let mut b = Balance { units: HashMap::new(), weapons: HashMap::new() };
+        let mut b = Balance { units: HashMap::new(), weapons: HashMap::new(), stank: HashMap::new(), upgrade_kill_ratio: Vec::new() };
         for form in parse(include_str!("../data/balance.scm")) {
             let Sexp::List(items) = form else { continue };
             let Some(head) = items.first().and_then(Sexp::atom) else { continue };
+            if head == "setf" && items.get(1).and_then(Sexp::atom) == Some("upgrade_kill_ratio") {
+                if let Some(Sexp::List(v)) = items.get(2) {
+                    b.upgrade_kill_ratio = v.iter().filter_map(Sexp::num).collect();
+                }
+                continue;
+            }
             for row in &items[1..] {
                 let Sexp::List(f) = row else { continue };
                 let Some(name) = f.first().and_then(Sexp::atom) else { continue };
@@ -132,6 +149,10 @@ pub fn balance() -> &'static Balance {
                             WeaponStats { area: f[1].atom() == Some("mult"), damage: n(2), radius: n(3), speed: n(4), range: n(5), special },
                         );
                     }
+                    "def_stank_weapons" if f.len() >= 4 => {
+                        let n = |i: usize| f[i].num().unwrap_or(0.0);
+                        b.stank.insert(name.to_string(), StankWeapon { max: n(1) as i32, fire_delay: n(3) });
+                    }
                     _ => {}
                 }
             }
@@ -146,6 +167,10 @@ pub fn unit(name: &str) -> Option<&'static UnitStats> {
 
 pub fn weapon(name: &str) -> Option<&'static WeaponStats> {
     balance().weapons.get(name)
+}
+
+pub fn stank_weapon(name: &str) -> Option<&'static StankWeapon> {
+    balance().stank.get(name)
 }
 
 impl WeaponStats {
@@ -169,5 +194,8 @@ mod tests {
         assert_eq!((b120.area, b120.damage, b120.damage_to("peon_tank")), (false, 40.0, 1000.0));
         assert!(weapon("super_mortar").unwrap().area);
         assert_eq!(weapon("guided_missile").unwrap().radius, 1.5);
+        assert_eq!(stank_weapon("b120mm").map(|w| (w.max, w.fire_delay)), Some((40, 5.0)));
+        assert_eq!(stank_weapon("titanium").map(|w| w.max), Some(1000));
+        assert_eq!(balance().upgrade_kill_ratio, vec![1000.0, 20000.0]);
     }
 }

@@ -191,8 +191,16 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
    1-8), units drive the team's path links, fight, die; towers, the enemy
    supertank, banks and money, engineers capture, trikes and bomb trucks
    ram, `balance.scm` embedded verbatim and parsed at startup, HQ rearm,
-   supertank lives and respawn, win/lose on HQ destruction. Still open:
-   bridger, the supertank upgrade levels, money planes flying the crates
+   supertank lives and respawn, win/lose on HQ destruction. Supertank
+   upgrades as in the original: kills score the victim's cost
+   (`add_points`), the kill ratio is points per supertank lost, 1000 and
+   20000 unlock levels 1 and 2 (`upgrade_kill_ratio`), and each new
+   supertank is built at the earned level (`upgrade_levels` in
+   `scheme/start.scm`: b120mm/heavy rocket/kevlar, acid/vortex/reactive,
+   napalm/nuke/titanium; ammo, reloads and armour hit points from
+   `def_stank_weapons`). Single-target weapons with a tick count (acid,
+   napalm, electric beams) burn once per original tick. Still open:
+   bridger, money planes flying the crates
    (income is paid directly for now), units placed in `snow` that have no
    garage to come from.
 4. **Strategy layer (started).** Build bar in the HUD, J switches the
@@ -239,7 +247,7 @@ python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)
 
 Controls: W/S throttle gear (sticky: R, N, 1, 2, 3, so driving works on
 terminals that never report key release), A/D turn, Q/E turret, SPACE main
-gun, F machine gun, ENTER heavy rocket (two), 1-8 build at the garage,
+gun, F machine gun, ENTER rocket (two), 1-8 build at the garage,
 J switch route at the nearest junction, T turret lock (tracks the nearest
 enemy within 14 cells and aims shells at its height), TAB
 or M strategy view, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6

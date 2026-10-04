@@ -171,12 +171,12 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     }
     for s in &g.shots {
         match s.kind {
-            ShotKind::Shell => c.plot(s.x, s.y, (255, 255, 255), 7),
+            ShotKind::Shell => c.plot(s.x, s.y, bolt_color(s.weapon), 7),
             ShotKind::Bullet => c.plot(s.x, s.y, (255, 230, 120), 7),
             ShotKind::Missile => {
                 let len = (s.vx * s.vx + s.vy * s.vy).sqrt();
                 let tail = (s.x - s.vx / len * 0.8, s.y - s.vy / len * 0.8);
-                c.line(tail, (s.x, s.y), (255, 120, 40), 7);
+                c.line(tail, (s.x, s.y), bolt_color(s.weapon), 7);
             }
         }
     }
@@ -223,9 +223,12 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
 fn bolt_color(weapon: &str) -> Rgb {
     match weapon {
         "bolt" | "electric_beam" | "beam" | "plasma" => (130, 220, 255),
-        w if w.contains("missile") || w.contains("rocket") => (255, 130, 50),
-        "chain_gun" => (255, 230, 120),
+        "acid" => (150, 255, 90),
+        "vortex_missile" => (200, 120, 255),
+        "nuke_missile" => (255, 255, 200),
         "super_mortar" | "napalm" => (255, 90, 40),
+        "chain_gun" => (255, 230, 120),
+        w if w.contains("missile") || w.contains("rocket") => (255, 130, 50),
         _ => (255, 250, 230),
     }
 }
@@ -333,6 +336,13 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
         Span::styled(format!("{:3.0}%", hp * 100.0), Style::default().fg(hp_color)),
         label("  tanks "),
         value(format!("{}", w.lives)),
+        label("  lvl "),
+        value(format!("{}", t.level)),
+        label(" pts "),
+        value(match crate::balance::balance().upgrade_kill_ratio.get(w.upgrade_level()) {
+            Some(need) => format!("{:.0}/{need:.0}", w.kill_ratio()),
+            None => format!("{:.0}", w.kill_ratio()),
+        }),
         label("  gear "),
         Span::styled(t.gear_label(), Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
         label("  spd "),
@@ -448,9 +458,9 @@ const HELP: &[(&str, &str)] = &[
     ("S / Down", "shift down a gear; below N is reverse"),
     ("A D / Left Right", "turn the hull (hold)"),
     ("Q E", "turn the turret (hold)"),
-    ("Space", "main gun (120mm shell, hills stop it)"),
+    ("Space", "main gun (120mm, later acid, then napalm)"),
     ("F", "machine gun (hold)"),
-    ("Enter", "guided missile; you carry two"),
+    ("Enter", "heavy rocket (later vortex, then nuke); you carry two"),
     ("", ""),
     ("", "VIEW"),
     ("Tab / M", "tactical view / whole map"),
@@ -462,6 +472,7 @@ const HELP: &[(&str, &str)] = &[
     ("T", "turret lock: track the nearest enemy in gun range"),
     ("", "Units drive the paths to the enemy base; banks pay every 50 s."),
     ("", "Engineers capture banks and towers. Park at your HQ to rearm."),
+    ("", "Supertank kills score points; earn upgrades for your next tank."),
     ("", "Destroy the enemy HQ to win."),
     ("[ ]", "previous / next level"),
     ("F1 / H / ?", "this help (the game pauses)"),
