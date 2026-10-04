@@ -488,3 +488,31 @@ pub fn paint_health(layer: &mut PixelLayer, e: &Entity) {
         Some((if x >= x0 && x <= x1 { color } else { (40, 40, 38) }, true))
     });
 }
+
+/// Four white corner arcs around a selected unit.
+pub fn paint_selection(layer: &mut PixelLayer, e: &Entity) {
+    let (cx, cy) = (e.x, e.y);
+    if layer.pixel_size() > 0.3 {
+        // too coarse for arcs: a single white pip above the unit
+        let (px, py, h) = (cx, cy - e.radius() - layer.pixel_size(), layer.pixel_size() * 0.5);
+        layer.paint(px, py, h * 2.0, |x, y| ((x - px).abs() <= h && (y - py).abs() <= h).then_some(((240, 240, 230), true)));
+        return;
+    }
+    let r = e.radius() + 0.25;
+    let thick = (layer.pixel_size() * 0.35).max(0.04);
+    layer.paint(cx, cy, r + thick, |x, y| {
+        let d = (x - cx).hypot(y - cy);
+        // four short arcs on the diagonals, so units in a group stay readable
+        let a = (y - cy).atan2(x - cx);
+        ((d - r).abs() <= thick && (a * 2.0).sin().abs() > 0.8).then_some(((240, 240, 230), true))
+    });
+}
+
+/// A small cross where a selected unit was sent.
+pub fn paint_waypoint(layer: &mut PixelLayer, x: f32, y: f32) {
+    let t = (layer.pixel_size() * 0.5).max(0.05);
+    layer.paint(x, y, 0.4, |px, py| {
+        let (dx, dy) = ((px - x).abs(), (py - y).abs());
+        ((dx <= t && dy <= 0.35) || (dy <= t && dx <= 0.35)).then_some(((240, 240, 230), true))
+    });
+}

@@ -94,6 +94,8 @@ pub struct Input {
     pub toggle_lock: bool,
     pub next_track: bool,
     pub toggle_sound: bool,
+    /// Unit command keys: U nearby, , . cycle, G rally, X hold, R resume, Z clear.
+    pub unit_key: Option<char>,
 }
 
 impl Input {
@@ -125,6 +127,7 @@ impl Input {
             toggle_lock: false,
             next_track: false,
             toggle_sound: false,
+            unit_key: None,
         }
     }
 
@@ -177,6 +180,7 @@ impl Input {
             KeyCode::Char('t') | KeyCode::Char('T') => self.toggle_lock = true,
             KeyCode::F(9) => self.next_track = true,
             KeyCode::F(8) => self.toggle_sound = true,
+            KeyCode::Char(c @ ('u' | 'U' | ',' | '.' | 'g' | 'G' | 'x' | 'X' | 'r' | 'R' | 'z' | 'Z')) => self.unit_key = Some(c.to_ascii_lowercase()),
             KeyCode::Char(c @ '1'..='9') => self.build = Some(c as usize - '1' as usize),
             KeyCode::Char('0') => self.build = Some(9),
             KeyCode::Char('b') | KeyCode::Char('B') => self.build = Some(10),
@@ -244,6 +248,8 @@ impl Input {
                             Button::DPadDown => self.zoom_step -= 1,
                             Button::Start => self.toggle_help = true,
                             Button::Select => self.next_track = true,
+                            // select the units around the supertank and call them in
+                            Button::West => self.unit_key = Some('p'),
                             _ => {}
                         }
                     }

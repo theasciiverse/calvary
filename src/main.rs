@@ -85,14 +85,9 @@ fn run(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, start: usize, a
                         log::debug!("key {:?}", k);
                         input.on_key(k, Instant::now());
                     }
-                    Event::Mouse(m) if m.kind == MouseEventKind::Down(MouseButton::Left) && !game.help => {
-                        log::debug!("click at {},{}", m.column, m.row);
+                    Event::Mouse(m) if !game.help => {
                         let size: ratatui::layout::Rect = terminal.size()?.into();
-                        if let Some((x, y, reach)) = render::screen_to_map(&game, size, m.column, m.row) {
-                            if game.world.switch_junction(x, y, reach).is_none() {
-                                log::debug!("no junction near ({x:.1},{y:.1})");
-                            }
-                        }
+                        on_mouse(&mut game, size, m);
                     }
                     _ => {}
                 }
@@ -122,6 +117,30 @@ fn run(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, start: usize, a
                 game.world.say("No junction within 12 cells of the supertank");
             }
         }
+        if let Some(k) = input.unit_key.take() {
+            if !game.help {
+                match k {
+                    'u' => game.select_near_tank(12.0),
+                    ',' => game.cycle_selection(-1),
+                    '.' => game.cycle_selection(1),
+                    'g' => game.rally(),
+                    'x' => game.command(world::Command::Hold),
+                    'r' => game.command(world::Command::Resume),
+                    'z' => {
+                        game.selected.clear();
+                        game.world.say("Selection cleared");
+                    }
+                    'p' => {
+                        game.select_near_tank(12.0);
+                        if !game.selected.is_empty() {
+                            game.rally();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        game.prune_selection();
         if let Some(slot) = input.build.take() {
             if !game.help {
                 game.order(slot);
@@ -181,6 +200,53 @@ fn run(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, start: usize, a
         }
     }
     Ok(())
+}
+
+/// Mouse: left click selects a unit (or switches a junction, or clears the
+/// selection), left drag box-selects, right click sends the selection to a
+/// spot or at an enemy.
+fn on_mouse(game: &mut Game, size: ratatui::layout::Rect, m: event::MouseEvent) {
+    let here = (m.column, m.row);
+    match m.kind {
+        MouseEventKind::Down(MouseButton::Left) => game.drag = Some((here, here)),
+        MouseEventKind::Drag(MouseButton::Left) => {
+            if let Some((start, _)) = game.drag {
+                game.drag = Some((start, here));
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            let Some((start, _)) = game.drag.take() else { return };
+            let moved = start.0.abs_diff(here.0) >= 2 || start.1.abs_diff(here.1) >= 1;
+            if moved {
+                let a = render::screen_to_map(game, size, start.0, start.1);
+                let b = render::screen_to_map(game, size, here.0, here.1);
+                if let (Some(a), Some(b)) = (a, b) {
+                    let units = game.world.player_units_in((a.0, a.1), (b.0, b.1));
+                    if units.is_empty() {
+                        game.selected.clear();
+                    }
+                    game.select(units);
+                }
+                return;
+            }
+            let Some((x, y, reach)) = render::screen_to_map(game, size, here.0, here.1) else { return };
+            log::debug!("click at ({x:.1},{y:.1})");
+            if let Some(u) = game.world.player_unit_at(x, y, reach.max(0.8)) {
+                game.select(vec![u]);
+            } else if game.world.switch_junction(x, y, reach).is_none() && !game.selected.is_empty() {
+                game.selected.clear();
+                game.world.say("Selection cleared");
+            }
+        }
+        MouseEventKind::Down(MouseButton::Right) => {
+            let Some((x, y, reach)) = render::screen_to_map(game, size, here.0, here.1) else { return };
+            match game.world.enemy_at(x, y, reach.max(0.6)) {
+                Some(t) => game.command(world::Command::Attack(t)),
+                None => game.command(world::Command::Move(x, y)),
+            }
+        }
+        _ => {}
+    }
 }
 
 /// `calvary --info`: what the level reader sees in each bundled level.

@@ -4,7 +4,7 @@
 use crate::level::Level;
 use crate::tank::{self, Controls, Tank, CHAIN_RELOAD};
 use crate::terrain::Terrain;
-use crate::world::{Class, Outcome, Team, World, BUILDABLE};
+use crate::world::{Class, Command, Outcome, Team, World, BUILDABLE};
 
 pub const DT: f32 = 1.0 / 30.0;
 
@@ -77,6 +77,10 @@ pub struct Game {
     lock_on: Option<usize>,
     /// Connected gamepad's name and its build cursor, for the HUD.
     pub pad: Option<(String, usize)>,
+    /// The player's selected units (world entity indexes).
+    pub selected: Vec<usize>,
+    /// Box selection being dragged: screen cells where it started and is now.
+    pub drag: Option<((u16, u16), (u16, u16))>,
     pub shots: Vec<Shot>,
     pub particles: Vec<Particle>,
     pub view: View,
@@ -112,6 +116,8 @@ impl Game {
             lock: false,
             lock_on: None,
             pad: None,
+            selected: Vec::new(),
+            drag: None,
             shots: Vec::new(),
             particles: Vec::new(),
             view: View::Tactical,
@@ -202,6 +208,67 @@ impl Game {
             let step = 3.0 * DT;
             self.tank.turret = (self.tank.turret + diff.clamp(-step, step)).rem_euclid(std::f32::consts::TAU);
         }
+    }
+
+    /// Drop destroyed units from the selection.
+    pub fn prune_selection(&mut self) {
+        let w = &self.world;
+        self.selected.retain(|&i| w.entities[i].alive);
+    }
+
+    pub fn select(&mut self, units: Vec<usize>) {
+        self.selected = units;
+        if !self.selected.is_empty() {
+            let n = self.selected.len();
+            let first = self.world.entities[self.selected[0]].kind.replace('_', " ");
+            self.world.say(if n == 1 { format!("Selected: {first}") } else { format!("Selected {n} units") });
+        }
+    }
+
+    /// Select the player's units within `r` cells of the supertank.
+    pub fn select_near_tank(&mut self, r: f32) {
+        let (x, y) = (self.tank.x, self.tank.y);
+        let near = self.world.player_units_in((x - r, y - r), (x + r, y + r));
+        if near.is_empty() {
+            self.world.say(format!("No units within {r:.0} cells"));
+        }
+        self.select(near);
+    }
+
+    /// Select the next (or previous) of the player's units, one at a time.
+    pub fn cycle_selection(&mut self, step: i32) {
+        let units = self.world.player_units_in((f32::MIN, f32::MIN), (f32::MAX, f32::MAX));
+        if units.is_empty() {
+            self.world.say("No units on the field");
+            return;
+        }
+        let at = self.selected.first().and_then(|s| units.iter().position(|u| u == s));
+        let next = match at {
+            Some(k) => (k as i32 + step).rem_euclid(units.len() as i32) as usize,
+            None => 0,
+        };
+        self.select(vec![units[next]]);
+    }
+
+    pub fn command(&mut self, cmd: Command) {
+        if self.selected.is_empty() {
+            self.world.say("No units selected (U selects units near the supertank)");
+            return;
+        }
+        let sel = self.selected.clone();
+        self.world.command(&sel, cmd);
+        let what = match cmd {
+            Command::Hold => "hold position".to_string(),
+            Command::Move(..) => "on the move".to_string(),
+            Command::Attack(t) => format!("attacking {}", self.world.entities[t].kind.replace('_', " ")),
+            Command::Resume => "back on the route".to_string(),
+        };
+        self.world.say(format!("{} unit{}: {what}", sel.len(), if sel.len() == 1 { "" } else { "s" }));
+    }
+
+    /// "Rally on me": selected units drive to the supertank.
+    pub fn rally(&mut self) {
+        self.command(Command::Move(self.tank.x, self.tank.y));
     }
 
     /// Supertank health as a fraction, from its world entity.

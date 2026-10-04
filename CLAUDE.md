@@ -238,7 +238,15 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
    path network (chosen branches bright) and icons for every structure and
    unit. A mouse click on a junction (◇ on the strategy map, or the spot
    in the tactical view) switches it, as clicking path nodes did in the
-   original. Still open: unit select/unlink/stop.
+   original. Unit commands (done): click a unit or drag a box to select,
+   right-click ground to send the selection there (a group spreads into a
+   grid) or an enemy to attack it; keys U (units within 12 cells of the
+   supertank), `,` `.` (cycle one by one), G (rally on the supertank), X
+   (hold), R (back onto the route), Z (clear); pad X selects nearby units
+   and rallies them. Orders: Route, Hold, Move, Attack; under orders units
+   still fire at anything in weapon range, as in the original, but do not
+   leave their order to chase. Selected units show corner arcs (a pip when
+   zoomed out) and their move destination; inverted icons on the map.
 5. **AI (ported, 2026-10-04).** The computer follows the original
    `ai_joe`: it picks one of the 13 `formation_joe` layouts at random
    ("stock", "hole puncher", "heli hell", "rockets R us", ...), builds its
@@ -305,7 +313,8 @@ Controls: W/S throttle gear (sticky: R, N, 1, 2, 3, so driving works on
 terminals that never report key release), A/D turn, Q/E turret, SPACE main
 gun, F machine gun, ENTER rocket (two), 1-8 build at the garage, 9/0/B
 helicopter/jet/bomber at the airbase,
-J switch route at the nearest junction (or click a junction), T turret lock (tracks the nearest
+J switch route at the nearest junction (or click a junction), unit
+commands (click/drag select, right-click to move or attack; U , . G X R Z), T turret lock (tracks the nearest
 enemy within 14 cells and aims shells at its height), TAB
 or M strategy view, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6
 columns per map cell; contour spacing scales with it), `[` `]` previous/next level, F1/H/? help window (opens

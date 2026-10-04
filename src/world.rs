@@ -130,6 +130,30 @@ pub enum Class {
     Prop,
 }
 
+/// What a unit is doing besides fighting what it meets. As in the original,
+/// units always fire at enemies in weapon range on their own.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Order {
+    /// Follow the path network (the default for everything built).
+    Route,
+    /// Stand still.
+    Hold,
+    /// Drive (or fly) to a map position, then hold.
+    Move(f32, f32),
+    /// Go after one enemy until it is destroyed, then hold.
+    Attack(usize),
+}
+
+/// A command from the player to the selected units.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Command {
+    Hold,
+    Move(f32, f32),
+    Attack(usize),
+    /// Back onto the nearest route node.
+    Resume,
+}
+
 #[derive(Clone, Debug)]
 pub struct Entity {
     pub kind: String,
@@ -155,6 +179,7 @@ pub struct Entity {
     pub bank: Option<usize>,
     /// Computer units waiting at the garage for the rest of their convoy.
     pub held: bool,
+    pub order: Order,
     home: (f32, f32),
 }
 
@@ -336,6 +361,7 @@ impl World {
                 crates: 0,
                 bank: None,
                 held: false,
+                order: Order::Route,
                 home: (o.x, o.y),
             });
         }
@@ -687,6 +713,7 @@ impl World {
                 crates: 0,
                 bank: None,
                 held: false,
+                order: Order::Route,
                 home: (gx, gy),
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
@@ -737,9 +764,22 @@ impl World {
         let weapon = self.entities[i].weapon();
         let wrange = weapon.and_then(balance::weapon).map_or(1.0, |w| w.range.max(1.5)).min(detect.max(1.5));
 
-        // keep or pick a target
-        let keep = self.entities[i].target.filter(|&t| self.entities[t].is_target() && self.dist(i, t) - self.entities[t].radius() <= detect);
-        let target = keep.or_else(|| self.nearest_hostile(i, detect));
+        // an attack order overrides target choice until that enemy is gone
+        let mut order = self.entities[i].order;
+        if let Order::Attack(t) = order {
+            if !(self.entities[t].is_target() && team.hostile(self.entities[t].team)) {
+                order = Order::Hold;
+                self.entities[i].order = order;
+            }
+        }
+        // keep or pick a target; units under orders only take on what is
+        // already within weapon range instead of what they can see
+        let reach = if matches!(order, Order::Route) { detect } else { wrange };
+        let keep = self.entities[i].target.filter(|&t| self.entities[t].is_target() && self.dist(i, t) - self.entities[t].radius() <= reach);
+        let target = match order {
+            Order::Attack(t) => Some(t),
+            _ => keep.or_else(|| self.nearest_hostile(i, reach)),
+        };
         self.entities[i].target = target;
 
         let kind = self.entities[i].kind.clone();
@@ -777,14 +817,23 @@ impl World {
                     return;
                 }
             }
-            if class == Class::EnemyTank {
+            if class == Class::EnemyTank || matches!(order, Order::Attack(_)) {
                 self.drive_towards(i, tx, ty, dt);
                 return;
             }
         }
         match class {
             Class::Vehicle if self.entities[i].held => {}
-            Class::Vehicle => self.follow_path(i, dt),
+            Class::Vehicle => match order {
+                Order::Route => self.follow_path(i, dt),
+                Order::Hold => {}
+                Order::Move(x, y) => {
+                    if self.drive_towards(i, x, y, dt) {
+                        self.entities[i].order = Order::Hold;
+                    }
+                }
+                Order::Attack(_) => self.entities[i].order = Order::Hold,
+            },
             Class::EnemyTank => {
                 let (hx, hy) = self.entities[i].home;
                 if (self.entities[i].x - hx).hypot(self.entities[i].y - hy) > 1.0 {
@@ -1082,6 +1131,69 @@ impl World {
         }
     }
 
+    /// The player's unit nearest (x, y) within `reach`, for selection.
+    pub fn player_unit_at(&self, x: f32, y: f32, reach: f32) -> Option<usize> {
+        self.entities
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.alive && e.class == Class::Vehicle && e.team == Team::Player)
+            .map(|(i, e)| (i, (e.x - x).hypot(e.y - y)))
+            .filter(|&(_, d)| d <= reach)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i)
+    }
+
+    /// The player's units inside a map rectangle (corners in any order).
+    pub fn player_units_in(&self, a: (f32, f32), b: (f32, f32)) -> Vec<usize> {
+        let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
+        let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
+        (0..self.entities.len())
+            .filter(|&i| {
+                let e = &self.entities[i];
+                e.alive && e.class == Class::Vehicle && e.team == Team::Player && (x0..=x1).contains(&e.x) && (y0..=y1).contains(&e.y)
+            })
+            .collect()
+    }
+
+    /// The enemy nearest (x, y) within `reach`: a right-click attack target.
+    pub fn enemy_at(&self, x: f32, y: f32, reach: f32) -> Option<usize> {
+        self.entities
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.is_target() && e.team == Team::Enemy)
+            .map(|(i, e)| (i, (e.x - x).hypot(e.y - y) - e.radius()))
+            .filter(|&(_, d)| d <= reach)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i)
+    }
+
+    /// Give the selected player units a command. Several units sent to one
+    /// spot spread into a small grid around it.
+    pub fn command(&mut self, selected: &[usize], cmd: Command) {
+        let units: Vec<usize> = selected.iter().copied().filter(|&i| self.entities[i].alive && self.entities[i].team == Team::Player).collect();
+        let side = (units.len() as f32).sqrt().ceil().max(1.0) as usize;
+        for (k, &i) in units.iter().enumerate() {
+            let order = match cmd {
+                Command::Hold => Order::Hold,
+                Command::Attack(t) => Order::Attack(t),
+                Command::Move(x, y) => {
+                    let (gx, gy) = ((k % side) as f32 - (side as f32 - 1.0) / 2.0, (k / side) as f32 - (side as f32 - 1.0) / 2.0);
+                    Order::Move(x + gx * 1.2, y + gy * 1.2)
+                }
+                Command::Resume => {
+                    let (x, y, team) = (self.entities[i].x, self.entities[i].y, self.entities[i].team);
+                    self.entities[i].next_node = self.nearest_node(x, y, team, true);
+                    Order::Route
+                }
+            };
+            self.entities[i].order = order;
+            self.entities[i].target = None;
+        }
+        if !units.is_empty() {
+            log::info!("command {cmd:?} to {} units", units.len());
+        }
+    }
+
     /// A standing structure overlapping a vehicle of radius `r` at (x, y).
     pub fn blocks(&self, x: f32, y: f32, r: f32) -> bool {
         self.entities.iter().any(|e| {
@@ -1149,6 +1261,50 @@ mod rules {
         // the supertank's cost (10000) is above the first threshold (1000)
         assert_eq!(w.points, 10000);
         assert_eq!(w.upgrade_level(), 1);
+    }
+
+    #[test]
+    fn move_then_hold_and_resume() {
+        let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
+        w.ai_timer = f32::MAX;
+        w.order(Team::Player, "peon_tank");
+        w.step(1.0 / 30.0);
+        let u = w.entities.iter().rposition(|e| e.kind == "peon_tank" && e.team == Team::Player).unwrap();
+        let (x, y) = (w.entities[u].x - 3.0, w.entities[u].y);
+        w.command(&[u], Command::Move(x, y));
+        for _ in 0..30 * 10 {
+            w.step(1.0 / 30.0);
+        }
+        let e = &w.entities[u];
+        assert_eq!(e.order, Order::Hold, "arrived and holding");
+        assert!((e.x - x).hypot(e.y - y) < 0.6, "at ({:.1},{:.1})", e.x, e.y);
+        let parked = (e.x, e.y);
+        for _ in 0..30 * 3 {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!((w.entities[u].x, w.entities[u].y), parked, "holding means not moving");
+        w.command(&[u], Command::Resume);
+        assert_eq!(w.entities[u].order, Order::Route);
+        assert!(w.entities[u].next_node.is_some());
+    }
+
+    #[test]
+    fn attack_order_chases_and_hits_its_target() {
+        let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
+        w.ai_timer = f32::MAX;
+        let foe = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
+        // a peon tank placed 8 cells from the tower, out of its 3-cell gun range
+        w.order(Team::Player, "peon_tank");
+        w.step(1.0 / 30.0);
+        let u = w.entities.iter().rposition(|e| e.kind == "peon_tank" && e.team == Team::Player).unwrap();
+        w.entities[u].x = w.entities[foe].x - 8.0;
+        w.entities[u].y = w.entities[foe].y;
+        let hp = w.entities[foe].hp;
+        w.command(&[u], Command::Attack(foe));
+        for _ in 0..30 * 20 {
+            w.step(1.0 / 30.0);
+        }
+        assert!(!w.entities[u].alive || w.entities[foe].hp < hp, "the tower should have taken fire");
     }
 
     #[test]

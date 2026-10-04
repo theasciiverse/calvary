@@ -214,6 +214,13 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
             sprites::paint_health(&mut layer, e);
         }
     }
+    for &i in &g.selected {
+        let e = &w.entities[i];
+        sprites::paint_selection(&mut layer, e);
+        if let crate::world::Order::Move(x, y) = e.order {
+            sprites::paint_waypoint(&mut layer, x, y);
+        }
+    }
     let t = &g.tank;
     let hit = w.player_tank.map_or(0.0, |i| w.entities[i].flash);
     let pose = Pose { x: t.x, y: t.y, heading: t.heading, aim: t.aim(), odometer: t.odometer, muzzle: t.flash, hit };
@@ -347,6 +354,14 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
+    for &i in &g.selected {
+        let e = &w.entities[i];
+        if let Some(pos) = to_cell(e.x, e.y) {
+            if let Some(cell) = buf.cell_mut(pos) {
+                cell.set_fg(Color::Black).set_bg(Color::Rgb(240, 240, 230));
+            }
+        }
+    }
     if let Some(pos) = to_cell(g.tank.x, g.tank.y) {
         if let Some(cell) = buf.cell_mut(pos) {
             cell.set_char('◆').set_fg(AMBER).set_bg(Color::Black);
@@ -393,6 +408,11 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
         value(format!("{}", t.missiles)),
         label("  map "),
         value(format!("{} ({view})", g.terrain.name)),
+        if g.selected.is_empty() {
+            Span::raw("")
+        } else {
+            Span::styled(format!("  SEL {}", g.selected.len()), Style::default().fg(Color::Black).bg(Color::Rgb(240, 240, 230)))
+        },
         if t.blocked { Span::styled("  BLOCKED", Style::default().fg(AMBER)) } else { Span::raw("") },
         match g.lock_target() {
             Some(name) => Span::styled(format!("  LOCK {}", name.replace('_', " ")), Style::default().fg(Color::Rgb(235, 70, 55)).add_modifier(Modifier::BOLD)),
@@ -496,6 +516,16 @@ pub fn follow_camera(g: &mut Game, size: Rect) {
     g.camera = Some(snapped);
 }
 
+fn draw_drag(f: &mut Frame, g: &Game) {
+    let Some((a, b)) = g.drag else { return };
+    if a.0.abs_diff(b.0) < 2 && a.1.abs_diff(b.1) < 1 {
+        return;
+    }
+    let (x0, x1, y0, y1) = (a.0.min(b.0), a.0.max(b.0), a.1.min(b.1), a.1.max(b.1));
+    let r = Rect { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 }.intersection(f.area());
+    f.render_widget(Block::bordered().border_style(Style::default().fg(Color::Rgb(240, 240, 230))), r);
+}
+
 pub fn draw(f: &mut Frame, g: &Game) {
     let (map, hud) = split(f.area());
     match g.view {
@@ -503,6 +533,7 @@ pub fn draw(f: &mut Frame, g: &Game) {
         View::Strategy => draw_strategy(f, map, g),
     }
     draw_hud(f, hud, g);
+    draw_drag(f, g);
     if g.help {
         draw_help(f, f.area());
     }
@@ -522,11 +553,17 @@ const HELP: &[(&str, &str)] = &[
     ("Tab / M", "tactical view / whole map"),
     ("+ / -", "zoom the tactical view in / out"),
     ("", ""),
+    ("", "UNITS"),
+    ("Click / drag", "select a unit / box-select units"),
+    ("Right click", "send the selection there, or at an enemy"),
+    ("U , .", "select units near the supertank / cycle one by one"),
+    ("G X R Z", "rally on me, hold, back to route, clear selection"),
+    ("", ""),
     ("", "GAMEPAD"),
     ("Sticks", "left drives (analog), right points the turret"),
     ("RT LT RB LB", "main gun, machine gun, rocket, turret lock"),
     ("D-pad", "left/right pick a unit, A builds; up/down zoom"),
-    ("B Y", "switch nearest junction, map view"),
+    ("B Y X", "switch nearest junction, map view, rally nearby units"),
     ("Start Back", "help, next music track"),
     ("", ""),
     ("", "COMMAND"),
