@@ -1,5 +1,6 @@
 mod audio;
 mod balance;
+mod chase;
 mod cmap;
 mod editor;
 mod game;
@@ -247,6 +248,9 @@ fn run(
         }
         if input.zoom_step != 0 {
             game.zoom_by(std::mem::take(&mut input.zoom_step));
+        }
+        if std::mem::take(&mut input.cycle_view) {
+            game.cycle_view();
         }
         if std::mem::take(&mut input.toggle_view) {
             game.toggle_view();

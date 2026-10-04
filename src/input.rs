@@ -101,6 +101,8 @@ pub struct Input {
     pub escape: bool,
     pub toggle_help: bool,
     pub toggle_view: bool,
+    /// M: top-down and follow mode.
+    pub cycle_view: bool,
     pub level_step: i32,
     pub zoom_step: i32,
     /// Garage build slot (keys 1-8).
@@ -143,6 +145,7 @@ impl Input {
             escape: false,
             toggle_help: false,
             toggle_view: false,
+            cycle_view: false,
             level_step: 0,
             zoom_step: 0,
             build: None,
@@ -197,7 +200,8 @@ impl Input {
                 self.drive_by_pad = false;
             }
             KeyCode::Enter => self.missile_edge = true,
-            KeyCode::Tab | KeyCode::Char('m') | KeyCode::Char('M') => self.toggle_view = true,
+            KeyCode::Tab => self.toggle_view = true,
+            KeyCode::Char('m') | KeyCode::Char('M') => self.cycle_view = true,
             KeyCode::Char(']') => self.level_step += 1,
             KeyCode::Char('j') | KeyCode::Char('J') => self.switch_route = true,
             KeyCode::Char('t') | KeyCode::Char('T') => self.toggle_lock = true,
@@ -283,7 +287,7 @@ impl Input {
                                 self.unit_key = Some('x');
                             }
                             Button::Start => self.toggle_help = true,
-                            Button::Select => self.next_track = true,
+                            Button::Select => self.cycle_view = true,
                             _ => {}
                         }
                     }

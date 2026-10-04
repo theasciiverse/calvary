@@ -236,7 +236,24 @@ object rotation, a tile-transition helper for coastlines.
 - **Strategy view (built):** the whole map in half-block pixels, the
   original's TAB view. Next: paths, bases and unit icons on it, like the
   original radar.
-- **First person / chase view (v2):** the original's main driving view. The
+- **Follow mode (built, 2026-10-04):** the original's third-person view
+  (its manual, 3.3), on M (pad: Back). `src/chase.rs` renders the
+  heightmap Comanche-style: one ray per screen column marched front to back
+  over the terrain, each slice drawn only above what is already there, in
+  half-block pixels with the tile colours, hill shading, water glints and
+  distance fog into a sky gradient; heights stretched 1.25x to read at
+  terminal resolution. Structures, units, scenery (palms as trunk and
+  crown), planes, the supertank (hull, turret, barrel along the aim),
+  shots, bolts and blasts are depth-tested billboards, so hills hide them;
+  health bars over the damaged; a crosshair where the turret points. The
+  camera sits behind the tank on a heading that eases after the hull,
+  anchored to the tank's ground so the tank stays three quarters down the
+  screen (raised only to clear the terrain under the camera), so a hill
+  ahead blocks the view as it would. Tab still opens the map and returns
+  to the view you came from. The mouse does not aim in this view yet.
+- **First person (next):** the same renderer with the camera at the
+  turret looking along the aim, as the third entry in M's cycle.
+- **Earlier note, first person / chase view (v2):** the original's main driving view. The
   terrain is a plain heightmap, which suits a voxel-space style renderer
   (column ray marching, as in Comanche, 1992) in half-blocks or Braille.
   That is a judgement from the data format, not tested yet.
@@ -315,7 +332,7 @@ object rotation, a tile-transition helper for coastlines.
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md`. Three missions reuse the existing
    maps; the rest need a terrain format and map editor of our own.
-9. **v2: first-person driving** (see Rendering).
+9. **Follow mode (done) and first person (next)** (see Rendering).
 
 Open questions:
 - Map orientation: whether Golgotha's +y is south (as drawn here) or north.
@@ -364,7 +381,7 @@ helicopter/jet/bomber at the airbase,
 J switch route at the nearest junction (or click a junction), unit
 commands (click/drag select, right-click to move or attack; U , . G X R Z), T turret lock (tracks the nearest
 enemy within 14 cells and aims shells at its height), TAB
-or M strategy view, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6
+strategy view, M follow mode, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6
 columns per map cell; contour spacing scales with it), `[` `]` previous/next level, F1/H/? help window (opens
 at start, pauses the game), ESC closes help or quits. With the kitty
 keyboard protocol keys are exact; otherwise a key counts as held while OS

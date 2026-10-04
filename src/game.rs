@@ -26,6 +26,8 @@ pub enum View {
     Tactical,
     /// Whole map, the original's TAB view.
     Strategy,
+    /// Third person from behind the supertank, the original's follow mode.
+    Chase,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -86,6 +88,10 @@ pub struct Game {
     /// Camera look-ahead in map cells: eased toward a point ahead of the
     /// supertank, further the faster it drives (see `render::follow_camera`).
     pub look: (f32, f32),
+    /// The follow camera's heading, easing after the tank's.
+    pub chase_heading: f32,
+    /// The view to return to when the strategy map closes.
+    prev_view: View,
     /// Mouse aim point on screen, for the crosshair.
     pub crosshair: Option<(u16, u16)>,
     /// Distance to the mouse aim point: shells land there.
@@ -137,6 +143,8 @@ impl Game {
             drag: None,
             hide_tank: false,
             look: (0.0, 0.0),
+            chase_heading: 0.0,
+            prev_view: View::Tactical,
             crosshair: None,
             aim_range: None,
             shots: Vec::new(),
@@ -179,11 +187,28 @@ impl Game {
         }
     }
 
+    /// Tab: the strategy map, and back to whichever view was before it.
     pub fn toggle_view(&mut self) {
         self.view = match self.view {
-            View::Tactical => View::Strategy,
-            View::Strategy => View::Tactical,
+            View::Strategy => self.prev_view,
+            v => {
+                self.prev_view = v;
+                View::Strategy
+            }
         };
+        log::info!("view {:?}", self.view);
+    }
+
+    /// M: top-down and follow mode, in turn.
+    pub fn cycle_view(&mut self) {
+        self.view = match self.view {
+            View::Tactical => {
+                self.chase_heading = self.tank.heading;
+                View::Chase
+            }
+            _ => View::Tactical,
+        };
+        self.camera = None;
         log::info!("view {:?}", self.view);
     }
 
@@ -308,6 +333,9 @@ impl Game {
             return;
         }
         self.aim_range = c.aim_range;
+        // the follow camera swings round after the hull, not with it
+        let d = (self.tank.heading - self.chase_heading + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+        self.chase_heading += d * 0.08;
         let gear = self.tank.gear;
         let (px, py) = (self.tank.x, self.tank.y);
         let was_inside = self.world.blocks(px, py, 0.6);

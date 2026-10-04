@@ -292,6 +292,8 @@ pub fn screen_to_map(g: &Game, size: Rect, col: u16, row: u16) -> Option<(f32, f
     }
     let (c, r) = ((col - map.x) as f32 + 0.5, (row - map.y) as f32 + 0.5);
     match g.view {
+        // the follow view is a perspective; clicks do not map onto the ground
+        View::Chase => None,
         View::Tactical => {
             let cols = ZOOMS[g.zoom];
             let origin = g.camera?;
@@ -390,6 +392,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     let view = match g.view {
         View::Tactical => ["far", "normal", "close", "closest"][g.zoom],
         View::Strategy => "map",
+        View::Chase => "follow",
     };
     let label = |s: &str| Span::styled(s.to_string(), Style::default().fg(DIM));
     let value = |s: String| Span::styled(s, Style::default().fg(GREEN));
@@ -463,7 +466,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
             Span::styled(format!(" {name} "), Style::default().fg(Color::Black).bg(GREEN)),
             label("  L stick drive (click centre)  R stick aim (click lock)  RT gun  LT mg  X rocket  LB/RB zoom  D-pad+A build  B route  Y map"),
         ]),
-        None => Line::from(label(" W/S gear  A/D turn  Q/E turret  C centre  mouse aim  LMB gun  RMB mg  SPACE gun  F mg  ENTER rocket  TAB map  +/- zoom  F1 help")),
+        None => Line::from(label(" W/S gear  A/D turn  Q/E turret  C centre  mouse aim  LMB gun  RMB mg  SPACE gun  F mg  ENTER rocket  M follow  TAB map  F1 help")),
     };
     f.render_widget(Paragraph::new(vec![line1, Line::from(build), line3]).style(Style::default().bg(Color::Black)), area);
 
@@ -491,12 +494,17 @@ pub fn draw_view(f: &mut Frame, area: Rect, g: &Game) {
     match g.view {
         View::Tactical => draw_tactical(f, area, g),
         View::Strategy => draw_strategy(f, area, g),
+        View::Chase => {
+            crate::chase::draw(f.buffer_mut(), area, g);
+            draw_messages(f, area, g);
+        }
     }
 }
 
 /// Screen cell showing map position (x, y) in a map `area`, if visible.
 pub fn map_to_screen(g: &Game, area: Rect, x: f32, y: f32) -> Option<(u16, u16)> {
     let (c, r) = match g.view {
+        View::Chase => return None,
         View::Tactical => {
             let cols = ZOOMS[g.zoom];
             let o = g.camera?;
@@ -578,6 +586,10 @@ pub fn draw(f: &mut Frame, g: &Game) {
     match g.view {
         View::Tactical => draw_tactical(f, map, g),
         View::Strategy => draw_strategy(f, map, g),
+        View::Chase => {
+            crate::chase::draw(f.buffer_mut(), map, g);
+            draw_messages(f, map, g);
+        }
     }
     draw_hud(f, hud, g);
     draw_drag(f, g);
@@ -598,7 +610,8 @@ const HELP: &[(&str, &str)] = &[
     ("Enter", "heavy rocket (later vortex, then nuke); you carry two"),
     ("", ""),
     ("", "VIEW"),
-    ("Tab / M", "tactical view / whole map"),
+    ("M", "top-down view / follow mode (behind the tank)"),
+    ("Tab", "whole map, and back"),
     ("+ / - / wheel", "zoom the tactical view in / out"),
     ("", ""),
     ("", "UNITS"),
@@ -615,7 +628,7 @@ const HELP: &[(&str, &str)] = &[
     ("LB RB", "zoom out / in"),
     ("D-pad", "left/right pick a unit, A builds; up rally, down hold"),
     ("B Y", "switch nearest junction, map view"),
-    ("Start Back", "help, next music track"),
+    ("Start Back", "help, top-down / follow mode"),
     ("", ""),
     ("", "COMMAND"),
     ("1 - 8", "build a unit at your garage (costs money)"),
@@ -676,7 +689,7 @@ mod tests {
         let mut g = Game::new(0).unwrap();
         for (w, h) in [(1, 1), (2, 3), (10, 3), (10, 4), (30, 8), (79, 24), (300, 100)] {
             let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
-            for view in [View::Tactical, View::Strategy] {
+            for view in [View::Tactical, View::Strategy, View::Chase] {
                 for help in [false, true] {
                     for zoom in 0..ZOOMS.len() {
                         g.view = view;
