@@ -269,7 +269,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
         return Vec::new();
     }
     if t < GLOBE_END {
-        draw_globe(f.buffer_mut(), area, t - EPIGRAPH_END, 1.0, view, None);
+        draw_globe(f.buffer_mut(), area, area.height, t - EPIGRAPH_END, 1.0, view, None);
         let k = t - EPIGRAPH_END;
         let caption = if k < 3.0 { "2048" } else { "The Golgotha Transmission" };
         let fade = ((k % 3.0) / 0.8).min(1.0);
@@ -280,14 +280,26 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
     }
     // the title: the globe keeps turning behind it, dimmed
     let place = (*page == Page::Main).then(|| items[pick].place());
-    draw_globe(f.buffer_mut(), area, t - EPIGRAPH_END, 0.45, view, place.map(|p| (p.1, p.2)));
+    // the globe ends just above the dedication
+    let band = area.height.saturating_sub(3 + (area.height / 12).clamp(2, 6) + 1);
+    draw_globe(f.buffer_mut(), area, band, t - EPIGRAPH_END, 0.45, view, place.map(|p| (p.1, p.2)));
     // breathing room above the title, more on taller windows
     let top = area.y + (area.height / 14).clamp(1, 5);
     let title_h = draw_big_title(f.buffer_mut(), area, top, t - GLOBE_END);
     let mut y = top + title_h + 1;
+    // text over the globe gets a black backing on its own cells only, so it
+    // stays readable without cutting a band across the Earth
     let line = |f: &mut Frame, y: u16, text: Line| {
         if y < area.y + area.height {
-            f.render_widget(Paragraph::new(text).centered(), Rect { y, height: 1, ..area });
+            let spans: Vec<Span> = text
+                .spans
+                .into_iter()
+                .map(|sp| {
+                    let style = sp.style;
+                    if style.bg.is_none() { sp.style(style.bg(Color::Black)) } else { sp }
+                })
+                .collect();
+            f.render_widget(Paragraph::new(Line::from(spans)).centered(), Rect { y, height: 1, ..area });
         }
     };
     line(f, y, Line::from(Span::styled("T H E   G O L G O T H A   T R A N S M I S S I O N", Style::default().fg(BONE))));
@@ -296,7 +308,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
         Page::Main => {
             // the menu sits low, just above the dedication, leaving the
             // middle of the screen to the Earth
-            let foot = area.y + area.height.saturating_sub(5);
+            let foot = area.y + area.height.saturating_sub(3 + (area.height / 12).clamp(2, 6));
             y = foot.saturating_sub(items.len() as u16 + 2).max(y + 2);
             if let Some((name, lat, lon)) = place {
                 let ns = if lat >= 0.0 { 'N' } else { 'S' };
@@ -319,7 +331,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
         Page::Credits => draw_credits(f, area),
     }
     // the dedication, on every title page
-    let foot = area.y + area.height.saturating_sub(5);
+    let foot = area.y + area.height.saturating_sub(3 + (area.height / 12).clamp(2, 6));
     line(f, foot, Line::from(Span::styled("Built on GOLGOTHA (1998) by Crack dot Com, given to the world in the public domain.", Style::default().fg(DIM))));
     line(
         f,
@@ -402,14 +414,18 @@ fn hash(x: u32, y: u32) -> u32 {
 /// colour), lit from the upper left, with a thin atmosphere rim; Golgotha
 /// (Jerusalem, 31.8 N 35.2 E) pulses red on the near side. Kept round for
 /// the terminal's real cell shape.
-fn draw_globe(buf: &mut Buffer, area: Rect, t: f32, bright: f32, view: (f32, f32), marker: Option<(f32, f32)>) {
+/// `band` is how many rows from the top the globe may use (the stars fill
+/// the whole area): the title keeps the globe above the dedication.
+fn draw_globe(buf: &mut Buffer, area: Rect, band: u16, t: f32, bright: f32, view: (f32, f32), marker: Option<(f32, f32)>) {
     let (w, h) = (area.width as usize, area.height as usize);
+    let bh = band.min(area.height) as f32 * 2.0;
     let (pw, ph) = (w, h * 2);
     // a half-block pixel is one column wide and half a cell tall
     let px_aspect = cell_aspect() / 2.0;
-    let r = (ph as f32 * 0.42 * px_aspect).min(pw as f32 * 0.45);
+    let r = (bh * 0.46 * px_aspect).min(pw as f32 * 0.45);
     let (rx, ry) = (r, r / px_aspect);
-    let (cx, cy) = (pw as f32 / 2.0, ph as f32 / 2.0 - ph as f32 * 0.03);
+    let (cx, cy) = (pw as f32 / 2.0, bh / 2.0);
+    let _ = ph;
     let (spin, tilt) = view;
     let (ct, st) = (tilt.cos(), tilt.sin());
     let mark = marker.map(|(la, lo)| (la.to_radians(), lo.to_radians()));
