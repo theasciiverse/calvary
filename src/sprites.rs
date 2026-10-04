@@ -218,6 +218,7 @@ pub fn paint_vehicle(layer: &mut PixelLayer, look: Look, pal: Palette, pose: Pos
 pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
     let pal = palette(e.team);
     match e.class {
+        Class::Vehicle if crate::world::flies(&e.kind) => paint_aircraft(layer, e, pal, time),
         Class::Vehicle | Class::EnemyTank => {
             let pose = Pose { x: e.x, y: e.y, heading: e.heading, aim: e.heading + e.turret, odometer: e.odometer, muzzle: 0.0, hit: e.flash };
             paint_vehicle(layer, look(&e.kind), pal, pose);
@@ -349,6 +350,59 @@ fn paint_plane(layer: &mut PixelLayer, e: &Entity, pal: Palette) {
             return None;
         }
         let c = if l > 0.4 { pal.front } else if w.abs() > 0.1 { pal.turret } else { pal.body };
+        Some((if hit { mix(c, (255, 255, 255), 0.6) } else { c }, false))
+    });
+}
+
+/// Helicopter (body, tail boom, spinning rotor), jet (delta) or bomber (long
+/// straight wings), each with a shadow on the ground below.
+fn paint_aircraft(layer: &mut PixelLayer, e: &Entity, pal: Palette, time: f32) {
+    let (cx, cy) = (e.x, e.y);
+    let (hx, hy) = (e.heading.cos(), e.heading.sin());
+    let kind = e.kind.clone();
+    let rotor = time * 14.0;
+    let shape = move |l: f32, w: f32| -> Option<u8> {
+        match kind.as_str() {
+            "helicopter" => {
+                let r = l.hypot(w);
+                if r <= 0.62 && ((l * rotor.cos() + w * rotor.sin()).abs() < 0.05 || (-l * rotor.sin() + w * rotor.cos()).abs() < 0.05) {
+                    return Some(3);
+                }
+                if (l - 0.05).hypot(w * 1.3) <= 0.22 {
+                    return Some(1);
+                }
+                ((-0.6..=0.0).contains(&l) && w.abs() <= 0.05).then_some(0)
+            }
+            "jet" => {
+                let delta = (-0.45..=0.55).contains(&l) && w.abs() <= (0.55 - l) * 0.45;
+                delta.then_some(if l > 0.35 { 2 } else { 0 })
+            }
+            _ => {
+                let body = l.abs() <= 0.5 && w.abs() <= 0.09;
+                let wing = (-0.1..=0.12).contains(&l) && w.abs() <= 0.7;
+                let tail = (-0.5..=-0.36).contains(&l) && w.abs() <= 0.25;
+                (body || wing || tail).then_some(if l > 0.38 { 2 } else { 0 })
+            }
+        }
+    };
+    let local = move |x: f32, y: f32, ox: f32, oy: f32| {
+        let (dx, dy) = (x - ox, y - oy);
+        (dx * hx + dy * hy, -dx * hy + dy * hx)
+    };
+    let shadow = (cx + 0.6, cy + 0.7);
+    layer.paint(shadow.0, shadow.1, 0.75, |x, y| {
+        let (l, w) = local(x, y, shadow.0, shadow.1);
+        shape(l, w).filter(|&p| p != 3).map(|_| ((40, 44, 40), false))
+    });
+    let hit = e.flash > 0.0;
+    layer.paint(cx, cy, 0.75, |x, y| {
+        let (l, w) = local(x, y, cx, cy);
+        let c = match shape(l, w)? {
+            1 => pal.turret,
+            2 => pal.front,
+            3 => (210, 210, 200),
+            _ => pal.body,
+        };
         Some((if hit { mix(c, (255, 255, 255), 0.6) } else { c }, false))
     });
 }

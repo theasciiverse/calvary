@@ -161,7 +161,8 @@ impl Game {
     pub fn order(&mut self, slot: usize) {
         let Some(&kind) = BUILDABLE.get(slot) else { return };
         if !self.world.order(Team::Player, kind) {
-            let why = if self.world.find(Class::Garage, Team::Player).is_none() { "no garage" } else { "not enough money" };
+            let (factory, name) = if crate::world::flies(kind) { (Class::Airbase, "no airbase") } else { (Class::Garage, "no garage") };
+            let why = if self.world.find(factory, Team::Player).is_none() { name } else { "not enough money" };
             self.world.say(format!("Cannot build {}: {why}", kind.replace('_', " ")));
         }
     }

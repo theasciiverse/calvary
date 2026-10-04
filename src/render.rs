@@ -7,7 +7,7 @@
 
 use crate::game::{Game, ShotKind, View};
 use crate::sprites::{self, PixelLayer, Pose};
-use crate::world::{Class, Outcome, Team, BUILDABLE};
+use crate::world::{flies, Class, Outcome, Team, BUILDABLE, BUILD_KEYS};
 use crate::terrain::{Rgb, Terrain};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -199,6 +199,7 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
         for e in &w.entities {
             let p = match e.class {
                 Class::Prop => 0,
+                Class::Vehicle if flies(&e.kind) => 3,
                 Class::Vehicle | Class::EnemyTank | Class::PlayerTank => 2,
                 Class::Plane => 3,
                 _ => 1,
@@ -303,6 +304,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             Class::Tower => 'T',
             Class::EnemyTank | Class::PlayerTank => '◆',
             Class::Plane => '+',
+            Class::Vehicle if flies(&e.kind) => '+',
             _ => '•',
         };
         if let Some(pos) = to_cell(e.x, e.y) {
@@ -368,8 +370,18 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     for (i, kind) in BUILDABLE.iter().enumerate() {
         let cost = crate::balance::unit(kind).map_or(0, |s| s.cost);
         let afford = w.money[0] >= cost;
-        let short = kind.replace("_tank", "").replace('_', " ");
-        build.push(Span::styled(format!(" {}", i + 1), Style::default().fg(if afford { AMBER } else { DIM })));
+        let short = match *kind {
+            "electric_car" => "elec",
+            "rocket_tank" => "rocket",
+            "tank_buster" => "buster",
+            "engineer" => "eng",
+            "bomb_truck" => "bomb",
+            "helicopter" => "heli",
+            "peon_tank" => "peon",
+            "cobra_tank" => "cobra",
+            k => k,
+        };
+        build.push(Span::styled(format!(" {}", BUILD_KEYS[i]), Style::default().fg(if afford { AMBER } else { DIM })));
         build.push(Span::styled(format!(" {short} {cost} "), Style::default().fg(if afford { GREEN } else { DIM })));
     }
     let queued = w.queue_len(Team::Player);
@@ -470,6 +482,7 @@ const HELP: &[(&str, &str)] = &[
     ("", ""),
     ("", "COMMAND"),
     ("1 - 8", "build a unit at your garage (costs money)"),
+    ("9 0 B", "build a helicopter, jet or bomber at your airbase"),
     ("J", "switch the route at the junction nearest your supertank"),
     ("T", "turret lock: track the nearest enemy in gun range"),
     ("", "Units drive the paths to the enemy base; money planes fly bank crates home."),

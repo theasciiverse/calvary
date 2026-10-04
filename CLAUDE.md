@@ -215,7 +215,12 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
    `cargo test --release battle_report -- --ignored --nocapture` plays 12
    minutes of a scripted player against the computer (the computer wins
    around 7 minutes when the player has no supertank in the fight).
-6. **Air.** Helicopter, jet, bomber, money plane on the pink air paths.
+6. **Air (done, 2026-10-04).** The airbase builds helicopter (9), jet (0)
+   and bomber (B); they fly the airbase's own route (on `test`, 43 nodes
+   from airbase to enemy airbase: the original's pink paths) straight over
+   terrain and fight like ground units. Sprites with ground shadows and a
+   spinning rotor. Money planes see Plan 3. Open: which ground weapons
+   may hit aircraft (everything can, for now).
 7. **Sound.** The 15 tracks and the sfx through a Rust audio crate (decoding
    in Rust, so mpg123 never ships). Narrative clips for the radio barks.
 8. **Campaign.** The music route as the mission spine, `test`, `snow` and
@@ -249,7 +254,8 @@ python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)
 
 Controls: W/S throttle gear (sticky: R, N, 1, 2, 3, so driving works on
 terminals that never report key release), A/D turn, Q/E turret, SPACE main
-gun, F machine gun, ENTER rocket (two), 1-8 build at the garage,
+gun, F machine gun, ENTER rocket (two), 1-8 build at the garage, 9/0/B
+helicopter/jet/bomber at the airbase,
 J switch route at the nearest junction, T turret lock (tracks the nearest
 enemy within 14 cells and aims shells at its height), TAB
 or M strategy view, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6

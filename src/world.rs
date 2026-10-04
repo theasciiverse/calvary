@@ -23,8 +23,31 @@ const CAPTURE_RANGE: f32 = 2.0;
 /// Instant weapons (speed 0 in the table) draw their beam this long.
 const BEAM_TIME: f32 = 0.15;
 
-/// What the garage offers, in build-key order (keys 1-8).
-pub const BUILDABLE: [&str; 8] = ["peon_tank", "electric_car", "rocket_tank", "trike", "tank_buster", "engineer", "bomb_truck", "cobra_tank"];
+/// What the garage (keys 1-8) and the airbase (9, 0, B) offer, in key order.
+pub const BUILDABLE: [&str; 11] = [
+    "peon_tank",
+    "electric_car",
+    "rocket_tank",
+    "trike",
+    "tank_buster",
+    "engineer",
+    "bomb_truck",
+    "cobra_tank",
+    "helicopter",
+    "jet",
+    "bomber",
+];
+pub const BUILD_KEYS: [&str; 11] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "B"];
+/// Built at the airbase and flown along its (the original's pink) routes.
+pub const AIR_UNITS: [&str; 3] = ["helicopter", "jet", "bomber"];
+
+pub fn flies(kind: &str) -> bool {
+    AIR_UNITS.contains(&kind)
+}
+
+fn factory_for(kind: &str) -> Class {
+    if flies(kind) { Class::Airbase } else { Class::Garage }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Team {
@@ -356,7 +379,7 @@ impl World {
     /// or there is no garage.
     pub fn order(&mut self, team: Team, kind: &'static str) -> bool {
         let Some(stats) = balance::unit(kind) else { return false };
-        if self.find(Class::Garage, team).is_none() || self.money[team.index()] < stats.cost {
+        if self.find(factory_for(kind), team).is_none() || self.money[team.index()] < stats.cost {
             return false;
         }
         self.money[team.index()] -= stats.cost;
@@ -496,7 +519,18 @@ impl World {
             return;
         }
         self.ai_timer = 5.0 + self.rand() * 6.0;
-        let weights = [("peon_tank", 5.0), ("electric_car", 2.0), ("rocket_tank", 2.0), ("trike", 1.5), ("engineer", 1.0), ("tank_buster", 1.0), ("cobra_tank", 0.5)];
+        let weights = [
+            ("peon_tank", 5.0),
+            ("electric_car", 2.0),
+            ("rocket_tank", 2.0),
+            ("trike", 1.5),
+            ("engineer", 1.0),
+            ("tank_buster", 1.0),
+            ("cobra_tank", 0.5),
+            ("helicopter", 0.8),
+            ("jet", 0.5),
+            ("bomber", 0.4),
+        ];
         let total: f32 = weights.iter().map(|w| w.1).sum();
         let mut pick = self.rand() * total;
         for (kind, w) in weights {
@@ -515,11 +549,10 @@ impl World {
             if self.deploy_timer[t] > 0.0 || self.queues[t].is_empty() {
                 continue;
             }
-            let Some(g) = self.find(Class::Garage, team) else {
-                self.queues[t].clear();
+            let kind = self.queues[t].pop_front().unwrap();
+            let Some(g) = self.find(factory_for(kind), team) else {
                 continue;
             };
-            let kind = self.queues[t].pop_front().unwrap();
             let (gx, gy) = (self.entities[g].x, self.entities[g].y);
             let start = self.nearest_node(gx, gy, team, true);
             let stats = balance::unit(kind).unwrap();
@@ -665,9 +698,21 @@ impl World {
         let off = diff.abs();
         diff = diff.clamp(-turn, turn);
         e.heading += diff;
-        // tracks pivot on the spot: far off course, turn first, then drive;
-        // otherwise a unit can orbit a waypoint inside its turning circle
-        let step = if off > 0.9 { 0.0 } else { (speed * dt * (1.0 - off / 1.2)).min(d) };
+        let step = if flies(&e.kind) {
+            // aircraft fly straight at the waypoint and bank round to face it
+            let (dx, dy) = (dx / d, dy / d);
+            let step = (speed * dt).min(d);
+            e.x += dx * step;
+            e.y += dy * step;
+            e.odometer += step;
+            return d - step < NODE_REACHED * 2.0;
+        } else if off > 0.9 {
+            // tracks pivot on the spot: far off course, turn first, then drive;
+            // otherwise a unit can orbit a waypoint inside its turning circle
+            0.0
+        } else {
+            (speed * dt * (1.0 - off / 1.2)).min(d)
+        };
         e.x += e.heading.cos() * step;
         e.y += e.heading.sin() * step;
         e.odometer += step;
@@ -955,6 +1000,22 @@ mod rules {
         // the supertank's cost (10000) is above the first threshold (1000)
         assert_eq!(w.points, 10000);
         assert_eq!(w.upgrade_level(), 1);
+    }
+
+    #[test]
+    fn helicopters_fly_the_air_route() {
+        let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
+        w.ai_timer = f32::MAX;
+        assert!(w.order(Team::Player, "helicopter"));
+        w.step(1.0 / 30.0);
+        let h = w.entities.iter().rposition(|e| e.kind == "helicopter" && e.team == Team::Player).unwrap();
+        let airbase = w.find(Class::Airbase, Team::Player).unwrap();
+        assert!((w.entities[h].x - w.entities[airbase].x).abs() < 0.1, "starts at the airbase");
+        for _ in 0..30 * 15 {
+            w.step(1.0 / 30.0);
+        }
+        // 0.16 cells per tick: 15 s is about 24 cells of route
+        assert!(!w.entities[h].alive || w.entities[h].odometer > 15.0, "flew {}", w.entities[h].odometer);
     }
 
     #[test]
