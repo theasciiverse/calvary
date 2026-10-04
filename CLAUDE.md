@@ -501,6 +501,18 @@ terrain palette, thinner air and lower gravity for the shell arcs, and the
 title globe turning from Earth to Mars. Mars imagery for the globe: NASA
 (MOLA, Viking mosaics); check the exact licence of the chosen map first.
 
+New tech for it (David): different kinds of flying objects and spider
+tanks. What the 1998 data already offers toward an alien front (checked in
+the fork, 2026-10-04): `alien_crust` and `alien_crust2` textures (the
+editor's "alien" tile set), lava, lava rock and crater tiles, `blackhole`
+models, the vortex missile and the plasma bolt. Nothing walks: there is no
+spider, walker or mech model, so spider tanks are new design. In our
+renderer they fit the existing approach: a half-block sprite whose legs
+step on a gait cycle driven by the odometer (as the tread bands are now),
+and a walker could ignore the slope limit that stops wheeled units, so it
+climbs where tanks cannot. Hovering craft reuse the aircraft path: a
+sprite with a ground shadow, flying low along routes.
+
 ## The catalog position
 
 Calvary fills the C&C-speed action-RTS slot. The Asciiverse RTS titles
