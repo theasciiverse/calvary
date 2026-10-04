@@ -564,6 +564,33 @@ fn draw_help(f: &mut Frame, full: Rect) {
 mod tests {
     use super::*;
 
+    /// No panics at any terminal size, in either view, with or without help.
+    #[test]
+    fn renders_at_awkward_sizes() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+        let mut g = Game::new(0).unwrap();
+        for (w, h) in [(1, 1), (2, 3), (10, 3), (10, 4), (30, 8), (79, 24), (300, 100)] {
+            let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+            for view in [View::Tactical, View::Strategy] {
+                for help in [false, true] {
+                    for zoom in 0..ZOOMS.len() {
+                        g.view = view;
+                        g.help = help;
+                        g.zoom = zoom;
+                        g.camera = None;
+                        follow_camera(&mut g, Rect::new(0, 0, w, h));
+                        term.draw(|f| draw(f, &g)).unwrap();
+                        g.world.outcome = Outcome::Won;
+                        term.draw(|f| draw(f, &g)).unwrap();
+                        g.world.outcome = Outcome::Playing;
+                        let _ = screen_to_map(&g, Rect::new(0, 0, w, h), w / 2, h / 2);
+                    }
+                }
+            }
+        }
+    }
+
     /// Clicking the screen cell a junction is drawn in switches that junction.
     #[test]
     fn strategy_click_hits_the_drawn_junction() {
