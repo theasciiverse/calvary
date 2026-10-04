@@ -15,6 +15,7 @@ use std::collections::{HashMap, VecDeque};
 const START_MONEY: i32 = 10000;
 pub const START_LIVES: u32 = 3;
 const BANK_CRATE: i32 = 2000;
+const CRATE_CAPACITY: i32 = 10;
 const BANK_INTERVAL: f32 = 500.0 / ORIGINAL_HZ;
 const DEPLOY_INTERVAL: f32 = 10.0 / ORIGINAL_HZ;
 const NODE_REACHED: f32 = 0.35;
@@ -68,6 +69,8 @@ pub enum Class {
     PlayerTank,
     /// The computer's supertank, guarding its base.
     EnemyTank,
+    /// A money plane: flies its bank's crates to the HQ.
+    Plane,
     Prop,
 }
 
@@ -90,6 +93,10 @@ pub struct Entity {
     pub odometer: f32,
     /// Seconds of hit flash left.
     pub flash: f32,
+    /// Banks: crates waiting. Planes: money carried.
+    pub crates: i32,
+    /// Planes: the bank they serve.
+    pub bank: Option<usize>,
     home: (f32, f32),
 }
 
@@ -101,6 +108,7 @@ impl Entity {
             Class::Tower => 0.7,
             Class::PlayerTank | Class::EnemyTank => 0.9,
             Class::Vehicle => 0.5,
+            Class::Plane => 0.45,
             Class::Prop => 0.5,
         }
     }
@@ -217,7 +225,9 @@ impl World {
         for o in &level.objects {
             let team = Team::from_player(o.player);
             let class = match o.kind.as_str() {
-                "" | "path_object" | "field_camera" | "sfx_obj" | "lightbulb" | "moneyplane" | "moneycrate" | "tunnel" | "tunnel_entrance" => continue,
+                "" | "path_object" | "field_camera" | "sfx_obj" | "lightbulb" | "moneycrate" | "tunnel" | "tunnel_entrance" => continue,
+                "moneyplane" if matches!(team, Team::Player | Team::Enemy) => Class::Plane,
+                "moneyplane" => continue,
                 "mainbasepad" => Class::Hq,
                 "garage" => Class::Garage,
                 "airbase" => Class::Airbase,
@@ -251,6 +261,8 @@ impl World {
                 next_node: None,
                 odometer: 0.0,
                 flash: 0.0,
+                crates: 0,
+                bank: None,
                 home: (o.x, o.y),
             });
         }
@@ -275,6 +287,13 @@ impl World {
             time: 0.0,
             rng: 0x2545_F491_4F6C_DD1D,
         };
+        // each money plane serves the nearest bank of its team
+        for i in 0..w.entities.len() {
+            if w.entities[i].class == Class::Plane {
+                let (x, y, team) = (w.entities[i].x, w.entities[i].y, w.entities[i].team);
+                w.entities[i].bank = w.nearest_bank(x, y, team);
+            }
+        }
         // units placed in the level join the nearest route of their team
         for i in 0..w.entities.len() {
             if w.entities[i].class == Class::Vehicle {
@@ -404,19 +423,69 @@ impl World {
         }
     }
 
+    fn nearest_bank(&self, x: f32, y: f32, team: Team) -> Option<usize> {
+        self.entities
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.alive && e.class == Class::Bank && e.team == team)
+            .min_by(|a, b| (a.1.x - x).hypot(a.1.y - y).total_cmp(&(b.1.x - x).hypot(b.1.y - y)))
+            .map(|(i, _)| i)
+    }
+
+    /// Banks fill a crate every 500 ticks (up to 10, `crate_capacity`); the
+    /// money only arrives when a money plane flies it to the HQ.
     fn economy(&mut self, dt: f32) {
         self.bank_timer -= dt;
         if self.bank_timer <= 0.0 {
             self.bank_timer += BANK_INTERVAL;
-            for team in [Team::Player, Team::Enemy] {
-                let banks = self.entities.iter().filter(|e| e.alive && e.class == Class::Bank && e.team == team).count() as i32;
-                if banks > 0 {
-                    self.money[team.index()] += banks * BANK_CRATE;
-                    if team == Team::Player {
-                        self.say(format!("Money received: {} from {banks} bank{}", banks * BANK_CRATE, if banks == 1 { "" } else { "s" }));
-                    }
+            for e in &mut self.entities {
+                if e.alive && e.class == Class::Bank && matches!(e.team, Team::Player | Team::Enemy) {
+                    e.crates = (e.crates + 1).min(CRATE_CAPACITY);
                 }
             }
+        }
+        for i in 0..self.entities.len() {
+            if self.entities[i].alive && self.entities[i].class == Class::Plane {
+                self.fly_plane(i, dt);
+            }
+        }
+    }
+
+    /// The original's money plane: to its bank, take the crates, to the HQ,
+    /// drop them for money, repeat. Planes fly straight over everything.
+    fn fly_plane(&mut self, i: usize, dt: f32) {
+        let team = self.entities[i].team;
+        let speed = balance::unit("moneyplane").map_or(0.2, |s| s.speed) * ORIGINAL_HZ;
+        let bank = self.entities[i].bank.filter(|&b| self.entities[b].alive && self.entities[b].team == team);
+        if bank.is_none() {
+            let (x, y) = (self.entities[i].x, self.entities[i].y);
+            self.entities[i].bank = self.nearest_bank(x, y, team);
+        }
+        let carrying = self.entities[i].crates > 0;
+        let goal = if carrying { self.find(Class::Hq, team) } else { self.entities[i].bank };
+        let Some(goal) = goal else { return };
+        let (gx, gy) = (self.entities[goal].x, self.entities[goal].y);
+        let e = &mut self.entities[i];
+        let (dx, dy) = (gx - e.x, gy - e.y);
+        let d = dx.hypot(dy);
+        if d > 0.3 {
+            e.heading = dy.atan2(dx);
+            let step = (speed * dt).min(d);
+            e.x += dx / d * step;
+            e.y += dy / d * step;
+            return;
+        }
+        if carrying {
+            let amount = e.crates;
+            e.crates = 0;
+            self.money[team.index()] += amount;
+            if team == Team::Player {
+                self.say(format!("Money received: ${amount}"));
+            }
+        } else if self.entities[goal].crates > 0 {
+            let n = self.entities[goal].crates;
+            self.entities[goal].crates = 0;
+            self.entities[i].crates = n * BANK_CRATE;
         }
     }
 
@@ -470,6 +539,8 @@ impl World {
                 next_node: start,
                 odometer: 0.0,
                 flash: 0.0,
+                crates: 0,
+                bank: None,
                 home: (gx, gy),
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
@@ -884,6 +955,22 @@ mod rules {
         // the supertank's cost (10000) is above the first threshold (1000)
         assert_eq!(w.points, 10000);
         assert_eq!(w.upgrade_level(), 1);
+    }
+
+    #[test]
+    fn money_planes_fly_crates_home() {
+        let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
+        w.ai_timer = f32::MAX;
+        let planes = w.entities.iter().filter(|e| e.class == Class::Plane && e.team == Team::Player).count();
+        assert!(planes > 0, "the level places money planes at the banks");
+        for _ in 0..30 * 49 {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!(w.money[0], START_MONEY, "no money before the first crate");
+        for _ in 0..30 * 60 {
+            w.step(1.0 / 30.0);
+        }
+        assert!(w.money[0] >= START_MONEY + BANK_CRATE, "a crate should have been flown home: {}", w.money[0]);
     }
 
     #[test]

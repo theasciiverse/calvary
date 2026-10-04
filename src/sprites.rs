@@ -223,6 +223,7 @@ pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
             paint_vehicle(layer, look(&e.kind), pal, pose);
         }
         Class::PlayerTank => {}
+        Class::Plane => paint_plane(layer, e, pal),
         Class::Prop => paint_prop(layer, e),
         _ if !e.alive => paint_rubble(layer, e),
         _ => paint_structure(layer, e, pal, time),
@@ -315,6 +316,41 @@ fn paint_structure(layer: &mut PixelLayer, e: &Entity, pal: Palette, time: f32) 
             });
         }
     }
+}
+
+/// Money plane: swept wings, fuselage, tail, and the gold crate slung under
+/// it while it carries money. A soft shadow below sells the height.
+fn paint_plane(layer: &mut PixelLayer, e: &Entity, pal: Palette) {
+    let (cx, cy) = (e.x, e.y);
+    let (hx, hy) = (e.heading.cos(), e.heading.sin());
+    let shadow = (cx + 0.5, cy + 0.6);
+    let hit = e.flash > 0.0;
+    let loaded = e.crates > 0;
+    let shape = move |l: f32, w: f32| {
+        let fuselage = l.abs() <= 0.55 && w.abs() <= 0.08;
+        let wing = l.abs() <= 0.14 + (0.5 - w.abs()) * 0.25 && w.abs() <= 0.5 && l > -0.2 && l < 0.25;
+        let tail = (-0.55..=-0.38).contains(&l) && w.abs() <= 0.2;
+        fuselage || wing || tail
+    };
+    let local = move |x: f32, y: f32, ox: f32, oy: f32| {
+        let (dx, dy) = (x - ox, y - oy);
+        (dx * hx + dy * hy, -dx * hy + dy * hx)
+    };
+    layer.paint(shadow.0, shadow.1, 0.6, |x, y| {
+        let (l, w) = local(x, y, shadow.0, shadow.1);
+        shape(l, w).then_some(((40, 44, 40), false))
+    });
+    layer.paint(cx, cy, 0.6, |x, y| {
+        let (l, w) = local(x, y, cx, cy);
+        if loaded && l.abs() <= 0.12 && w.abs() <= 0.12 {
+            return Some(((236, 194, 58), false));
+        }
+        if !shape(l, w) {
+            return None;
+        }
+        let c = if l > 0.4 { pal.front } else if w.abs() > 0.1 { pal.turret } else { pal.body };
+        Some((if hit { mix(c, (255, 255, 255), 0.6) } else { c }, false))
+    });
 }
 
 fn paint_rubble(layer: &mut PixelLayer, e: &Entity) {

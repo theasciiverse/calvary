@@ -200,9 +200,11 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
    napalm/nuke/titanium; ammo, reloads and armour hit points from
    `def_stank_weapons`). Single-target weapons with a tick count (acid,
    napalm, electric beams) burn once per original tick. Still open:
-   bridger, money planes flying the crates
-   (income is paid directly for now), units placed in `snow` that have no
-   garage to come from.
+   bridger, units placed in `snow` that have no garage to come from.
+   Money as in the original: banks fill a crate every 500 ticks (up to
+   10), and the money planes placed at each bank in the level fly the
+   crates to the HQ, where they pay out; planes can be shot down, and
+   with no HQ nothing arrives.
 4. **Strategy layer (started).** Build bar in the HUD, J switches the
    route at the junction nearest the supertank, the strategy map draws the
    path network (chosen branches bright) and icons for every structure and

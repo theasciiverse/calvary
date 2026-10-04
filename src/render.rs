@@ -194,12 +194,13 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
 
     let mut layer = PixelLayer::new(area, origin, cols);
     let w = &g.world;
-    // scenery first, then structures, then vehicles on top
-    for pass in 0..3 {
+    // scenery first, then structures, then vehicles, aircraft on top
+    for pass in 0..4 {
         for e in &w.entities {
             let p = match e.class {
                 Class::Prop => 0,
                 Class::Vehicle | Class::EnemyTank | Class::PlayerTank => 2,
+                Class::Plane => 3,
                 _ => 1,
             };
             if p == pass && (e.alive || p == 1) {
@@ -301,6 +302,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             Class::Bank => '$',
             Class::Tower => 'T',
             Class::EnemyTank | Class::PlayerTank => '◆',
+            Class::Plane => '+',
             _ => '•',
         };
         if let Some(pos) = to_cell(e.x, e.y) {
@@ -470,7 +472,7 @@ const HELP: &[(&str, &str)] = &[
     ("1 - 8", "build a unit at your garage (costs money)"),
     ("J", "switch the route at the junction nearest your supertank"),
     ("T", "turret lock: track the nearest enemy in gun range"),
-    ("", "Units drive the paths to the enemy base; banks pay every 50 s."),
+    ("", "Units drive the paths to the enemy base; money planes fly bank crates home."),
     ("", "Engineers capture banks and towers. Park at your HQ to rearm."),
     ("", "Supertank kills score points; earn upgrades for your next tank."),
     ("", "Destroy the enemy HQ to win."),
