@@ -281,7 +281,8 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
     // the title: the globe keeps turning behind it, dimmed
     let place = (*page == Page::Main).then(|| items[pick].place());
     draw_globe(f.buffer_mut(), area, t - EPIGRAPH_END, 0.45, view, place.map(|p| (p.1, p.2)));
-    let top = area.y + 1;
+    // breathing room above the title, more on taller windows
+    let top = area.y + (area.height / 14).clamp(1, 5);
     let title_h = draw_big_title(f.buffer_mut(), area, top, t - GLOBE_END);
     let mut y = top + title_h + 1;
     let line = |f: &mut Frame, y: u16, text: Line| {
