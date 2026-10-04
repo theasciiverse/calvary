@@ -405,9 +405,12 @@ every sprite), `src/render.rs` (views, HUD, help), `src/input.rs`,
 `data/levels/` and `data/balance.scm` (verbatim copies from the fork),
 `data/tile_colors.tsv` (generated: name, colour, flags, aliases).
 
-The tactical camera holds still while the tank is in the middle 40% of
-the view, scrolls only near the edges, stops at the map border, and always
-moves in whole terminal cells (fractional camera positions re-sample the
+The tactical camera follows a look-ahead point in front of the tank
+(along the hull, scaled by speed up to 35% of the view, behind when
+reversing, eased in and out), so a moving tank settles near the trailing
+third with two thirds of the view ahead. It holds still while that point
+is in the middle 40% of the view, scrolls only near the edges, stops at
+the map border, and always moves in whole terminal cells (fractional camera positions re-sample the
 terrain every frame and make the ground shimmer).
 
 Colour-key textures (`pink`, `alpha`) that some levels use as stray marker

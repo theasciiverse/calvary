@@ -83,6 +83,9 @@ pub struct Game {
     pub drag: Option<((u16, u16), (u16, u16))>,
     /// The map editor uses the game's view without a supertank on it.
     pub hide_tank: bool,
+    /// Camera look-ahead in map cells: eased toward a point ahead of the
+    /// supertank, further the faster it drives (see `render::follow_camera`).
+    pub look: (f32, f32),
     /// Mouse aim point on screen, for the crosshair.
     pub crosshair: Option<(u16, u16)>,
     /// Distance to the mouse aim point: shells land there.
@@ -133,6 +136,7 @@ impl Game {
             selected: Vec::new(),
             drag: None,
             hide_tank: false,
+            look: (0.0, 0.0),
             crosshair: None,
             aim_range: None,
             shots: Vec::new(),

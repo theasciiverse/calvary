@@ -23,6 +23,13 @@ pub const DEFAULT_ZOOM: usize = 1;
 /// The camera holds still while the tank stays this far (fraction of the view)
 /// from every edge, and scrolls only when it gets closer.
 const EDGE_MARGIN: f32 = 0.3;
+/// At full speed the camera follows a point this far ahead of the tank
+/// (fraction of the view), so there is more to see in the direction of travel.
+/// The dead zone holds that point at its leading edge (0.7), so the tank
+/// itself settles near 0.7 - 0.35 = 0.35 of the view: two thirds ahead.
+const LOOK_AHEAD: f32 = 0.35;
+/// How quickly the look-ahead point catches up, per frame.
+const LOOK_EASE: f32 = 0.06;
 /// Height difference between contour lines at the default zoom, in map cells.
 /// Zooming out spreads them so the ground does not turn into solid hatching.
 const CONTOUR: f32 = 0.5;
@@ -519,8 +526,17 @@ pub fn follow_camera(g: &mut Game, size: Rect) {
     let cols = ZOOMS[g.zoom];
     let rows = cols / 2.0;
     let (vw, vh) = (map.width as f32 / cols, map.height as f32 / rows);
+    // look ahead along the hull, scaled by speed (behind when reversing)
+    let k = g.tank.speed / crate::tank::TOP_SPEED;
+    let want = (g.tank.heading.cos() * k * vw * LOOK_AHEAD, g.tank.heading.sin() * k * vh * LOOK_AHEAD);
+    if g.camera.is_none() {
+        g.look = want;
+    }
+    g.look.0 += (want.0 - g.look.0) * LOOK_EASE;
+    g.look.1 += (want.1 - g.look.1) * LOOK_EASE;
     let (t, terrain) = (&g.tank, &g.terrain);
-    let (mut x, mut y) = g.camera.unwrap_or((t.x - vw / 2.0, t.y - vh / 2.0));
+    let (fx, fy) = (t.x + g.look.0, t.y + g.look.1);
+    let (mut x, mut y) = g.camera.unwrap_or((fx - vw / 2.0, fy - vh / 2.0));
     let follow = |cam: &mut f32, pos: f32, view: f32| {
         let margin = view * EDGE_MARGIN;
         if pos < *cam + margin {
@@ -529,8 +545,8 @@ pub fn follow_camera(g: &mut Game, size: Rect) {
             *cam = pos - view + margin;
         }
     };
-    follow(&mut x, t.x, vw);
-    follow(&mut y, t.y, vh);
+    follow(&mut x, fx, vw);
+    follow(&mut y, fy, vh);
     let clamp = |cam: f32, view: f32, size: usize| {
         if view >= size as f32 {
             (size as f32 - view) / 2.0
@@ -677,6 +693,35 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Driving at full speed, the camera leads: the tank sits toward the
+    /// trailing side, with more of the map visible ahead than behind. (South
+    /// on the test map: it is 150 cells tall, the view about 43, so there is
+    /// room to scroll.)
+    #[test]
+    fn camera_looks_ahead_of_a_moving_tank() {
+        let mut g = Game::new(0).unwrap();
+        let size = Rect::new(0, 0, 160, 45);
+        let (map, _) = split(size);
+        g.tank.x = 50.0;
+        g.tank.y = 20.0;
+        g.tank.heading = std::f32::consts::FRAC_PI_2;
+        g.tank.speed = crate::tank::TOP_SPEED;
+        g.camera = None;
+        follow_camera(&mut g, size);
+        for _ in 0..450 {
+            g.tank.y += crate::tank::TOP_SPEED / 30.0;
+            follow_camera(&mut g, size);
+        }
+        let (_, row) = map_to_screen(&g, map, g.tank.x, g.tank.y).unwrap();
+        assert!((row as f32) < map.height as f32 * 0.42, "tank at row {row} of {}", map.height);
+        // standing still, the look-ahead fades back out
+        g.tank.speed = 0.0;
+        for _ in 0..200 {
+            follow_camera(&mut g, size);
+        }
+        assert!(g.look.1.abs() < 0.1, "look {:?}", g.look);
     }
 
     /// Clicking the screen cell a junction is drawn in switches that junction.
