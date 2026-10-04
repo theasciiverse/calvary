@@ -81,6 +81,8 @@ pub struct Game {
     pub selected: Vec<usize>,
     /// Box selection being dragged: screen cells where it started and is now.
     pub drag: Option<((u16, u16), (u16, u16))>,
+    /// The map editor uses the game's view without a supertank on it.
+    pub hide_tank: bool,
     pub shots: Vec<Shot>,
     pub particles: Vec<Particle>,
     pub view: View,
@@ -126,6 +128,7 @@ impl Game {
             pad: None,
             selected: Vec::new(),
             drag: None,
+            hide_tank: false,
             shots: Vec::new(),
             particles: Vec::new(),
             view: View::Tactical,

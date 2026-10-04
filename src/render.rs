@@ -224,7 +224,9 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     let t = &g.tank;
     let hit = w.player_tank.map_or(0.0, |i| w.entities[i].flash);
     let pose = Pose { x: t.x, y: t.y, heading: t.heading, aim: t.aim(), odometer: t.odometer, muzzle: t.flash, hit };
-    sprites::paint_vehicle(&mut layer, sprites::SUPERTANK, sprites::PLAYER, pose);
+    if !g.hide_tank {
+        sprites::paint_vehicle(&mut layer, sprites::SUPERTANK, sprites::PLAYER, pose);
+    }
     layer.flush(f.buffer_mut(), &g.terrain);
     draw_messages(f, area, g);
 }
@@ -472,7 +474,31 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     }
 }
 
-fn split(full: Rect) -> (Rect, Rect) {
+/// The map view alone (tactical or strategy), for the editor.
+pub fn draw_view(f: &mut Frame, area: Rect, g: &Game) {
+    match g.view {
+        View::Tactical => draw_tactical(f, area, g),
+        View::Strategy => draw_strategy(f, area, g),
+    }
+}
+
+/// Screen cell showing map position (x, y) in a map `area`, if visible.
+pub fn map_to_screen(g: &Game, area: Rect, x: f32, y: f32) -> Option<(u16, u16)> {
+    let (c, r) = match g.view {
+        View::Tactical => {
+            let cols = ZOOMS[g.zoom];
+            let o = g.camera?;
+            ((x - o.0) * cols, (y - o.1) * cols / 2.0)
+        }
+        View::Strategy => {
+            let (s, ox, oy) = strategy_fit(area, &g.terrain);
+            ((x + ox) / s, (y + oy) / s / 2.0)
+        }
+    };
+    (c >= 0.0 && r >= 0.0 && c < area.width as f32 && r < area.height as f32).then(|| (area.x + c as u16, area.y + r as u16))
+}
+
+pub fn split(full: Rect) -> (Rect, Rect) {
     let hud_h = 3.min(full.height);
     let map = Rect { height: full.height - hud_h, ..full };
     let hud = Rect { y: full.y + full.height - hud_h, height: hud_h, ..full };

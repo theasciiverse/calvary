@@ -1,6 +1,7 @@
 mod audio;
 mod balance;
 mod cmap;
+mod editor;
 mod game;
 mod input;
 mod level;
@@ -45,6 +46,32 @@ fn main() -> io::Result<()> {
         std::fs::write(out, text)?;
         println!("{name} -> {out}");
         return Ok(());
+    }
+    // `--edit MAP.cmap` or `--new NAME WxH TILE [PATH]`: the map editor
+    let edit = if let Some(i) = args.iter().position(|a| a == "--edit") {
+        let path = args.get(i + 1).ok_or_else(|| io::Error::other("usage: calvary --edit MAP.cmap"))?;
+        let (level, name, music) = cmap::parse(&std::fs::read_to_string(path)?).map_err(|e| io::Error::other(format!("{path}: {e}")))?;
+        Some(editor::Editor::new(path, level, name, music))
+    } else if let Some(i) = args.iter().position(|a| a == "--new") {
+        let usage = || io::Error::other("usage: calvary --new NAME WxH TILE [PATH]   e.g. --new delphi 120x120 grassfull");
+        let name = args.get(i + 1).ok_or_else(usage)?;
+        let (w, h) = args.get(i + 2).and_then(|d| d.split_once('x')).and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?))).ok_or_else(usage)?;
+        let tile = args.get(i + 3).ok_or_else(usage)?;
+        let path = args.get(i + 4).cloned().unwrap_or_else(|| format!("maps/{name}.cmap"));
+        if std::path::Path::new(&path).exists() {
+            return Err(io::Error::other(format!("{path} exists; open it with --edit")));
+        }
+        Some(editor::Editor::new(&path, editor::Editor::blank(w, h, tile), name.clone(), None))
+    } else {
+        None
+    };
+    if let Some(ed) = edit {
+        let mut terminal = ratatui::init();
+        execute!(io::stdout(), EnableMouseCapture)?;
+        let result = editor::run(&mut terminal, ed);
+        let _ = execute!(io::stdout(), DisableMouseCapture);
+        ratatui::restore();
+        return result;
     }
     // a .cmap path plays that map
     let map = match args.iter().find(|a| a.ends_with(".cmap")) {

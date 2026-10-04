@@ -198,7 +198,23 @@ produces, so the game runs on it unchanged. `calvary --export LEVEL
 OUT.cmap` writes a bundled level in it, `calvary path/to/map.cmap` plays
 one, and a test round-trips all three bundled levels with no difference
 in heights, tiles, objects or links. `maps/piraeus.cmap` is the `test`
-level exported (campaign mission 15). Next: the map editor.
+level exported (campaign mission 15).
+
+The map editor (`src/editor.rs`): `calvary --edit maps/x.cmap`, or
+`calvary --new NAME WxH TILE [PATH]` for a blank map (saved to
+`maps/NAME.cmap` by default). It shows the map through the game's own
+renderer. Tools 1-8: raise, lower, smooth, flatten (to the height under
+the cursor at the start of a stroke), paint tiles, place objects
+(structures, supertank start, money planes, scenery), draw paths (each
+click adds or joins a node; team A links run forward along the chain,
+team E back; Enter ends a chain), erase objects (path links renumbered).
+Arrows/WASD or the mouse move the cursor, Space or left click applies
+(hold the button to keep painting), `[` `]` brush, `,` `.` tile or object,
+T tile set (used, grass, greece, sea, snow, watr, egypt, france, rome,
+crom, lava, marsh, castle, temple, rock, alien), F tile flags (ground,
+water, blocking), P owner, U undo, Tab map view, +/- zoom, F2 save, Esc
+quit (twice when unsaved). Open ideas: test-play from inside the editor,
+object rotation, a tile-transition helper for coastlines.
 
 ## Rendering
 
@@ -294,7 +310,7 @@ level exported (campaign mission 15). Next: the map editor.
    turret lost, supertank lost, enemy base destroyed, mission failed, and
    the per-unit "vehicle ready" calls), fading with distance from the
    supertank. A test decodes every embedded file.
-8. **Campaign (drafted, 2026-10-04).** Forty missions in five acts,
+8. **Campaign (drafted, 2026-10-04; map format and editor built).** Forty missions in five acts,
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md`. Three missions reuse the existing
@@ -322,6 +338,8 @@ cargo run --release -- --at 70,104   # dev aid: start the supertank at a map pos
 cargo run --release -- --mute    # no sound (F8 toggles in game, F9 next track)
 cargo run --release -- --export snow maps/zurich.cmap   # a bundled level as .cmap
 cargo run --release -- maps/piraeus.cmap                # play a .cmap
+cargo run --release -- --new delphi 120x120 grassfull   # new map in the editor
+cargo run --release -- --edit maps/piraeus.cmap         # edit a map
 cargo test                       # level reader + every bundled cell has a tile colour
 RUST_LOG=debug cargo run --release 2>calvary.log   # session log
 python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)

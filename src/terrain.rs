@@ -44,6 +44,19 @@ pub fn tile_name_for(t: &TileInfo) -> Option<String> {
     tile_table().name_of.get(&t.checksum).cloned()
 }
 
+/// Every tile name in the baked table, sorted, for the editor's palette.
+pub fn tile_names() -> Vec<String> {
+    let mut v: Vec<String> = tile_table().name_of.values().cloned().collect();
+    v.sort_unstable_by_key(|n| n.to_lowercase());
+    v.dedup();
+    v
+}
+
+/// Flags the baked table gives a tile name.
+pub fn tile_flags_for_name(name: &str) -> u32 {
+    tile_flags_for_checksum(check_sum32(name.as_bytes())).unwrap_or(0)
+}
+
 /// Flags the baked table gives a tile checksum.
 pub fn tile_flags_for_checksum(checksum: u32) -> Option<u32> {
     tile_table().by_checksum.get(&checksum).map(|&(_, f)| f)
