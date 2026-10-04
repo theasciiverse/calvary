@@ -1,9 +1,12 @@
+mod balance;
 mod game;
 mod input;
 mod level;
 mod render;
+mod sprites;
 mod tank;
 mod terrain;
+mod world;
 
 use game::{Game, DT, LEVELS};
 use input::Input;
@@ -72,6 +75,17 @@ fn run(terminal: &mut DefaultTerminal, start: usize, kitty: bool) -> io::Result<
                 log::info!("help false");
             } else {
                 input.quit = true;
+            }
+        }
+        if std::mem::take(&mut input.switch_route) && !game.help {
+            let (x, y) = (game.tank.x, game.tank.y);
+            if game.world.switch_junction(x, y, 12.0).is_none() {
+                game.world.say("No junction within 12 cells of the supertank");
+            }
+        }
+        if let Some(slot) = input.build.take() {
+            if !game.help {
+                game.order(slot);
             }
         }
         if input.zoom_step != 0 {

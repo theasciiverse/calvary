@@ -18,6 +18,12 @@ const SECTION_MAP_DIMENSIONS_V1: u32 = 0;
 const SECTION_TILE_MATCHUP_V1: u32 = 1;
 const SECTION_OBJECT_TYPES_V1: u32 = 26;
 const SECTION_TEXTURE_NAMES_V2: u32 = 35;
+const SECTION_OBJECTS_V1: u32 = 3;
+const SECTION_OBJECT_LIST: u32 = 0x8000;
+/// `g1_object_class::save` ends with x, y, h, theta, pitch, roll (f32),
+/// flags (u32), health (i16), player (u8).
+const OBJECT_TAIL: usize = 6 * 4 + 4 + 2 + 1;
+const NO_REF: u16 = 0xffff;
 
 /// `g1_tile_class` flags (`tile.h`).
 pub const TILE_WAVE: u32 = 2;
@@ -51,6 +57,28 @@ pub struct Level {
     /// without one every entry, 0 included, is a checksum from the matchup table.
     pub tiles: Vec<TileInfo>,
     pub object_types: Vec<String>,
+    /// Every saved object in save order; references between objects (path
+    /// links) are indexes into this list.
+    pub objects: Vec<ObjectRec>,
+}
+
+/// One object from the level: the base fields every Golgotha object saves.
+#[derive(Clone, Debug)]
+pub struct ObjectRec {
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    /// Height above the map base, in map cells (unused: sprites sit on the ground).
+    #[allow(dead_code)]
+    pub z: f32,
+    pub theta: f32,
+    pub health: i16,
+    /// 1 is the human player (team A), 2 the computer (team E), 0 neutral;
+    /// scenery uses 3 or 4.
+    pub player: u8,
+    /// For `path_object`s: next nodes for team A and for team E.
+    pub links_a: Vec<usize>,
+    pub links_e: Vec<usize>,
 }
 
 /// The original passes 17 as the length of "GOLG_SECTION_ID=32", so the
@@ -130,6 +158,55 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// An object section: u16 type id, then the base block
+/// (`start_version`: u16 version, u16 size including this header) whose last
+/// bytes are the position and owner. The Lisp variables in front of them never
+/// need decoding. Path objects follow with their own versioned block of links.
+fn read_object(data: &[u8], offset: Option<usize>, types: &[String]) -> Result<ObjectRec, String> {
+    let Some(offset) = offset else {
+        return Ok(ObjectRec { kind: String::new(), x: 0.0, y: 0.0, z: 0.0, theta: 0.0, health: 0, player: 4, links_a: vec![], links_e: vec![] });
+    };
+    let mut r = Reader::at(data, offset);
+    let type_id = r.u16()? as usize;
+    r.u16()?; // version
+    let size = r.u16()? as usize;
+    let end = offset + 2 + size;
+    if size < 4 + OBJECT_TAIL {
+        return Err(format!("object at {offset}: base block too small"));
+    }
+    let mut t = Reader::at(data, end - OBJECT_TAIL);
+    let (x, y, z, theta) = (t.f32()?, t.f32()?, t.f32()?, t.f32()?);
+    t.f32()?; // pitch
+    t.f32()?; // roll
+    t.u32()?; // flags
+    let health = t.u16()? as i16;
+    let player = t.u8()?;
+    let kind = types.get(type_id).cloned().unwrap_or_default();
+    let (mut links_a, mut links_e) = (Vec::new(), Vec::new());
+    if kind == "path_object" {
+        // DATA_VERSION2/3: two u32 ticks, the end index of team A's links and of
+        // all links (u8 each), then (path ref, object ref[, u32 desc]) per link
+        let mut p = Reader::at(data, end);
+        let version = p.u16()?;
+        p.u16()?;
+        p.u32()?;
+        p.u32()?;
+        let split = p.u8()? as usize;
+        let total = p.u8()? as usize;
+        for k in 0..total {
+            let path = p.u16()?;
+            p.u16()?;
+            if version >= 3 {
+                p.u32()?;
+            }
+            if path != NO_REF {
+                if k < split { &mut links_a } else { &mut links_e }.push(path as usize);
+            }
+        }
+    }
+    Ok(ObjectRec { kind, x, y, z, theta, health, player, links_a, links_e })
+}
+
 impl Level {
     pub fn parse(data: &[u8]) -> Result<Level, String> {
         let mut r = Reader::at(data, 0);
@@ -197,7 +274,15 @@ impl Level {
             }
         }
 
-        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types })
+        let objects = match section(SECTION_OBJECTS_V1, "objects") {
+            Ok(mut r) => {
+                let count = r.u32()? as usize;
+                (0..count).map(|i| read_object(data, sections.get(&(SECTION_OBJECT_LIST + i as u32)).copied(), &object_types)).collect::<Result<_, _>>()?
+            }
+            Err(_) => Vec::new(),
+        };
+
+        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects })
     }
 
     pub fn tile(&self, cx: usize, cy: usize) -> &TileInfo {
@@ -230,6 +315,27 @@ mod tests {
         assert_eq!(l.tiles.len(), 95);
         assert_eq!(l.tiles[1].name, "greecestreetcorner");
         assert_eq!(l.tiles[54].name, "grassfull");
+    }
+
+    // Positions and owners cross-checked with an independent Python reader.
+    #[test]
+    fn test_level_objects_and_paths() {
+        let l = Level::parse(include_bytes!("../data/levels/test.level")).unwrap();
+        assert_eq!(l.objects.len(), 854);
+        let count = |k: &str| l.objects.iter().filter(|o| o.kind == k).count();
+        assert_eq!(count("path_object"), 251);
+        assert_eq!(count("bank"), 5);
+        let stank = l.objects.iter().find(|o| o.kind == "stank" && o.player == 1).unwrap();
+        assert!((stank.x - 4.8).abs() < 0.1 && (stank.y - 110.0).abs() < 0.1);
+        // team A's route from the player's garage reaches the enemy garage in 48 nodes
+        let mut node = l.objects.iter().position(|o| o.kind == "path_object" && (o.x - 9.95).abs() < 0.05 && (o.y - 104.58).abs() < 0.05).unwrap();
+        let mut hops = 1;
+        while let Some(&next) = l.objects[node].links_a.first() {
+            node = next;
+            hops += 1;
+        }
+        assert_eq!(hops, 48);
+        assert!((l.objects[node].x - 81.4).abs() < 0.1);
     }
 
     #[test]

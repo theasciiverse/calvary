@@ -4,6 +4,7 @@
 use crate::level::Level;
 use crate::tank::{Controls, Tank, CHAIN_RELOAD, MAIN_RELOAD};
 use crate::terrain::Terrain;
+use crate::world::{Class, Outcome, Team, World, BUILDABLE};
 
 pub const DT: f32 = 1.0 / 30.0;
 
@@ -61,6 +62,7 @@ pub struct Game {
     pub level_index: usize,
     pub terrain: Terrain,
     pub tank: Tank,
+    pub world: World,
     pub shots: Vec<Shot>,
     pub particles: Vec<Particle>,
     pub view: View,
@@ -80,12 +82,19 @@ impl Game {
         let src = &LEVELS[level_index];
         let level = Level::parse(src.data).map_err(|e| format!("{}: {e}", src.name))?;
         let terrain = Terrain::from_level(src.name, &level);
-        let (x, y) = spawn_point(&terrain);
+        let world = World::from_level(&level);
+        // the level's own supertank start, else open ground near the centre
+        let start = world.player_tank.map(|i| (world.entities[i].x, world.entities[i].y, world.entities[i].heading));
+        let (cx, cy) = start.map_or((terrain.w as f32 / 2.0, terrain.h as f32 / 2.0), |s| (s.0, s.1));
+        let (x, y) = spawn_point(&terrain, cx, cy);
         log::info!("level {} {}x{} spawn ({x:.1},{y:.1})", src.name, terrain.w, terrain.h);
+        let mut tank = Tank::new(x, y);
+        tank.heading = start.map_or(0.0, |s| s.2);
         Ok(Game {
             level_index,
             terrain,
-            tank: Tank::new(x, y),
+            tank,
+            world,
             shots: Vec::new(),
             particles: Vec::new(),
             view: View::Tactical,
@@ -122,8 +131,30 @@ impl Game {
         log::info!("view {:?}", self.view);
     }
 
+    /// Order build slot `slot` (key 1-8) from the player's garage.
+    pub fn order(&mut self, slot: usize) {
+        let Some(&kind) = BUILDABLE.get(slot) else { return };
+        if !self.world.order(Team::Player, kind) {
+            let why = if self.world.find(Class::Garage, Team::Player).is_none() { "no garage" } else { "not enough money" };
+            self.world.say(format!("Cannot build {}: {why}", kind.replace('_', " ")));
+        }
+    }
+
+    /// Supertank health as a fraction, from its world entity.
+    pub fn tank_health(&self) -> f32 {
+        self.world.player_tank.map_or(1.0, |i| {
+            let e = &self.world.entities[i];
+            (e.hp / e.max_hp).clamp(0.0, 1.0)
+        })
+    }
+
     pub fn update(&mut self, c: &Controls) {
         self.time += DT;
+        if self.world.outcome != Outcome::Playing {
+            self.step_shots();
+            self.step_particles();
+            return;
+        }
         let gear = self.tank.gear;
         self.tank.update(c, &self.terrain, DT);
         if self.tank.gear != gear {
@@ -145,8 +176,52 @@ impl Game {
             self.tank.missiles -= 1;
             self.fire(ShotKind::Missile, 9.0, 30.0, 0.0);
         }
+        self.world.place_player_tank(self.tank.x, self.tank.y, self.tank.heading);
         self.step_shots();
+        let lives = self.world.lives;
+        self.world.step(DT);
+        if self.world.lives < lives && self.world.outcome == Outcome::Playing {
+            self.respawn();
+        }
+        self.refill_at_base();
+        for b in std::mem::take(&mut self.world.blasts) {
+            self.explode(b.x, b.y, (14.0 * b.power) as usize + 4, b.power);
+        }
         self.step_particles();
+    }
+
+    /// A new supertank rolls out next to the HQ.
+    fn respawn(&mut self) {
+        let (hx, hy) = self.world.find(Class::Hq, Team::Player).map_or((self.tank.x, self.tank.y), |i| (self.world.entities[i].x, self.world.entities[i].y));
+        let (x, y) = spawn_point(&self.terrain, hx + 2.5, hy);
+        let heading = self.tank.heading;
+        self.tank = Tank::new(x, y);
+        self.tank.heading = heading;
+        self.world.place_player_tank(x, y, heading);
+        log::info!("supertank respawn at ({x:.1},{y:.1}), lives {}", self.world.lives);
+    }
+
+    /// Parked at the HQ, the supertank is repaired and rearmed (the original
+    /// refills ammo and health inside your headquarters).
+    fn refill_at_base(&mut self) {
+        let Some(hq) = self.world.find(Class::Hq, Team::Player) else { return };
+        let e = &self.world.entities[hq];
+        if (e.x - self.tank.x).hypot(e.y - self.tank.y) > 3.5 {
+            return;
+        }
+        let t = &mut self.tank;
+        let tick = ((self.time * 4.0) as i32) != (((self.time - DT) * 4.0) as i32);
+        if tick {
+            t.main_ammo = (t.main_ammo + 1).min(40);
+            t.chain_ammo = (t.chain_ammo + 25).min(600);
+            if t.missiles < 2 && (self.time as i32) % 5 == 0 {
+                t.missiles += 1;
+            }
+            if let Some(i) = self.world.player_tank {
+                let me = &mut self.world.entities[i];
+                me.hp = (me.hp + me.max_hp * 0.02).min(me.max_hp);
+            }
+        }
     }
 
     fn fire(&mut self, kind: ShotKind, speed: f32, range: f32, spread: f32) {
@@ -160,21 +235,31 @@ impl Game {
 
     fn step_shots(&mut self) {
         let mut hits = Vec::new();
+        let (terrain, world) = (&self.terrain, &self.world);
         self.shots.retain_mut(|s| {
             s.x += s.vx * DT;
             s.y += s.vy * DT;
             s.range -= (s.vx * s.vx + s.vy * s.vy).sqrt() * DT;
-            let ground = self.terrain.height(s.x, s.y);
-            let off_map = self.terrain.cell_at(s.x, s.y).is_none();
-            if off_map || ground > s.z || s.range <= 0.0 {
+            let ground = terrain.height(s.x, s.y);
+            let off_map = terrain.cell_at(s.x, s.y).is_none();
+            let struck = world.hit_test(s.x, s.y, Team::Player);
+            if struck.is_some() || off_map || ground > s.z || s.range <= 0.0 {
                 if !off_map {
-                    hits.push((s.kind, s.x, s.y));
+                    hits.push((s.kind, s.x, s.y, struck));
                 }
                 return false;
             }
             true
         });
-        for (kind, x, y) in hits {
+        for (kind, x, y, struck) in hits {
+            let weapon = match kind {
+                ShotKind::Shell => "b120mm",
+                ShotKind::Bullet => "chain_gun",
+                ShotKind::Missile => "heavy_rocket",
+            };
+            if self.world.outcome == Outcome::Playing {
+                self.world.damage(weapon, x, y, struck, Team::Player);
+            }
             let (n, power) = match kind {
                 ShotKind::Shell => (26, 1.0),
                 ShotKind::Missile => (60, 1.8),
@@ -206,15 +291,14 @@ impl Game {
     }
 }
 
-/// Open ground nearest the map centre. Real levels place the supertank at the
-/// player's base; that waits on reading the object section.
-fn spawn_point(t: &Terrain) -> (f32, f32) {
-    let (cx, cy) = (t.w as i32 / 2, t.h as i32 / 2);
+/// Open ground nearest (x, y).
+fn spawn_point(t: &Terrain, x: f32, y: f32) -> (f32, f32) {
+    let (cx, cy) = (x as i32, y as i32);
     for r in 0..t.w.max(t.h) as i32 {
         for dy in -r..=r {
             for dx in -r..=r {
                 let (x, y) = (cx + dx, cy + dy);
-                if open_ground(t, x, y, 3) {
+                if open_ground(t, x, y, 1) {
                     return (x as f32 + 0.5, y as f32 + 0.5);
                 }
             }

@@ -6,7 +6,8 @@
 //! that moves. Strategy view: the whole map in half-block pixels.
 
 use crate::game::{Game, ShotKind, View};
-use crate::tank::Tank;
+use crate::sprites::{self, PixelLayer, Pose};
+use crate::world::{Class, Outcome, Team, BUILDABLE};
 use crate::terrain::{Rgb, Terrain};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -154,139 +155,6 @@ fn draw_terrain(c: &mut DotCanvas, t: &Terrain, time: f32, contour: f32) {
     }
 }
 
-// Supertank shape, in map cells along (l) and across (w) the hull.
-const HULL_HALF_LEN: f32 = 0.85;
-const HULL_HALF_WID: f32 = 0.6;
-const TRACK_WID: f32 = 0.26;
-const TURRET_R: f32 = 0.36;
-const TURRET_OFFSET: f32 = -0.08;
-const BARREL_LEN: f32 = 1.45;
-const TREAD_BAND: f32 = 0.16;
-
-const HULL_BODY: Rgb = (176, 138, 58);
-const HULL_FRONT: Rgb = (236, 196, 108);
-const TRACK: Rgb = (30, 28, 24);
-const TREAD: Rgb = (112, 106, 92);
-const TURRET: Rgb = (226, 190, 104);
-const TURRET_RIM: Rgb = (120, 92, 40);
-const HATCH: Rgb = (90, 70, 34);
-const BARREL: Rgb = (245, 225, 170);
-const MUZZLE: Rgb = (255, 250, 225);
-
-/// What part of the tank covers a map point, by drawing priority.
-#[derive(Clone, Copy, PartialEq)]
-enum Part {
-    None,
-    Body,
-    Front,
-    Track(bool),
-    Turret,
-    Rim,
-    Hatch,
-    Barrel,
-    Muzzle,
-}
-
-impl Part {
-    fn color(self) -> Rgb {
-        match self {
-            Part::None => (0, 0, 0),
-            Part::Body => HULL_BODY,
-            Part::Front => HULL_FRONT,
-            Part::Track(tread) => if tread { TREAD } else { TRACK },
-            Part::Turret => TURRET,
-            Part::Rim => TURRET_RIM,
-            Part::Hatch => HATCH,
-            Part::Barrel => BARREL,
-            Part::Muzzle => MUZZLE,
-        }
-    }
-
-    /// Thin parts that must survive down-sampling to a single pixel.
-    fn thin(self) -> bool {
-        matches!(self, Part::Barrel | Part::Muzzle)
-    }
-}
-
-fn tank_part(tank: &Tank, x: f32, y: f32, barrel_half: f32) -> Part {
-    let (hx, hy) = (tank.heading.cos(), tank.heading.sin());
-    let a = tank.aim();
-    let (tcx, tcy) = (tank.x + hx * TURRET_OFFSET, tank.y + hy * TURRET_OFFSET);
-    let (dx, dy) = (x - tcx, y - tcy);
-    let (tl, tw) = (dx * a.cos() + dy * a.sin(), -dx * a.sin() + dy * a.cos());
-    if tank.flash > 0.0 && (tl - BARREL_LEN - 0.15).hypot(tw) <= 0.15 + tank.flash * 1.5 {
-        return Part::Muzzle;
-    }
-    if (0.0..=BARREL_LEN).contains(&tl) && tw.abs() <= barrel_half {
-        return if tl > BARREL_LEN - 0.16 { Part::Muzzle } else { Part::Barrel };
-    }
-    let r = tl.hypot(tw);
-    if r <= TURRET_R {
-        return if r <= 0.1 { Part::Hatch } else if r >= TURRET_R - 0.07 { Part::Rim } else { Part::Turret };
-    }
-    let (dx, dy) = (x - tank.x, y - tank.y);
-    let (l, w) = (dx * hx + dy * hy, -dx * hy + dy * hx);
-    if l.abs() > HULL_HALF_LEN || w.abs() > HULL_HALF_WID {
-        return Part::None;
-    }
-    if w.abs() >= HULL_HALF_WID - TRACK_WID {
-        // tread bands are fixed to the ground, so they roll back as the tank drives
-        return Part::Track(((l + tank.odometer) / TREAD_BAND).floor().rem_euclid(2.0) == 0.0);
-    }
-    if l > HULL_HALF_LEN - 0.2 {
-        Part::Front
-    } else {
-        Part::Body
-    }
-}
-
-/// The supertank as a small sprite of half-block pixels: each terminal cell is
-/// two pixels (`▀` with separate foreground and background colours), so every
-/// part keeps its own colour, which a Braille cell cannot do. Each pixel takes
-/// the most common part over a 3x3 sample, except thin parts (barrel), which
-/// win if they touch the pixel at all. Pixels off the tank show the terrain.
-fn draw_tank(buf: &mut Buffer, area: Rect, origin: (f32, f32), cols: f32, terrain: &Terrain, tank: &Tank) {
-    let (cell_w, cell_h) = (1.0 / cols, 2.0 / cols);
-    let (px_w, px_h) = (cell_w, cell_h / 2.0);
-    let barrel_half = (px_w.min(px_h) * 0.35).max(0.07);
-    let reach = HULL_HALF_LEN.hypot(HULL_HALF_WID).max(BARREL_LEN - TURRET_OFFSET + 0.2 + tank.flash * 1.5);
-    let col0 = (((tank.x - reach - origin.0) / cell_w).floor() as i32).max(0);
-    let row0 = (((tank.y - reach - origin.1) / cell_h).floor() as i32).max(0);
-    let col1 = (((tank.x + reach - origin.0) / cell_w).ceil() as i32).min(area.width as i32 - 1);
-    let row1 = (((tank.y + reach - origin.1) / cell_h).ceil() as i32).min(area.height as i32 - 1);
-    let pixel = |x0: f32, y0: f32| {
-        let mut counts: [(Part, u8); 9] = [(Part::None, 0); 9];
-        let mut thin = None;
-        for sy in 0..3 {
-            for sx in 0..3 {
-                let p = tank_part(tank, x0 + (sx as f32 + 0.5) * px_w / 3.0, y0 + (sy as f32 + 0.5) * px_h / 3.0, barrel_half);
-                if p.thin() {
-                    thin = Some(p);
-                }
-                if let Some(e) = counts.iter_mut().find(|e| e.1 > 0 && e.0 == p) {
-                    e.1 += 1;
-                } else if let Some(e) = counts.iter_mut().find(|e| e.1 == 0) {
-                    *e = (p, 1);
-                }
-            }
-        }
-        thin.unwrap_or_else(|| counts.iter().max_by_key(|e| e.1).unwrap().0)
-    };
-    for row in row0..=row1 {
-        for col in col0..=col1 {
-            let (x0, y0) = (origin.0 + col as f32 * cell_w, origin.1 + row as f32 * cell_h);
-            let (top, bottom) = (pixel(x0, y0), pixel(x0, y0 + px_h));
-            if top == Part::None && bottom == Part::None {
-                continue;
-            }
-            let color = |p: Part, y: f32| if p == Part::None { terrain.shaded(x0 + px_w / 2.0, y) } else { p.color() };
-            if let Some(cell) = buf.cell_mut((area.x + col as u16, area.y + row as u16)) {
-                cell.set_char('▀').set_fg(rgb(color(top, y0 + px_h / 2.0))).set_bg(rgb(color(bottom, y0 + px_h * 1.5)));
-            }
-        }
-    }
-}
-
 fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     let origin = g.camera.unwrap_or((g.tank.x, g.tank.y));
     let cols = ZOOMS[g.zoom];
@@ -312,8 +180,69 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
+    for b in &g.world.bolts {
+        let color = bolt_color(b.weapon);
+        if b.speed == 0.0 {
+            c.line(b.from, b.to, color, 7);
+        } else {
+            let (dx, dy) = (b.to.0 - b.x, b.to.1 - b.y);
+            let d = dx.hypot(dy).max(1e-3);
+            c.line((b.x - dx / d * 0.35, b.y - dy / d * 0.35), (b.x, b.y), color, 7);
+        }
+    }
     c.flush(f.buffer_mut());
-    draw_tank(f.buffer_mut(), area, origin, cols, &g.terrain, &g.tank);
+
+    let mut layer = PixelLayer::new(area, origin, cols);
+    let w = &g.world;
+    // scenery first, then structures, then vehicles on top
+    for pass in 0..3 {
+        for e in &w.entities {
+            let p = match e.class {
+                Class::Prop => 0,
+                Class::Vehicle | Class::EnemyTank | Class::PlayerTank => 2,
+                _ => 1,
+            };
+            if p == pass && (e.alive || p == 1) {
+                sprites::paint_entity(&mut layer, e, g.time);
+            }
+        }
+    }
+    let t = &g.tank;
+    let hit = w.player_tank.map_or(0.0, |i| w.entities[i].flash);
+    let pose = Pose { x: t.x, y: t.y, heading: t.heading, aim: t.aim(), odometer: t.odometer, muzzle: t.flash, hit };
+    sprites::paint_vehicle(&mut layer, sprites::SUPERTANK, sprites::PLAYER, pose);
+    layer.flush(f.buffer_mut(), &g.terrain);
+    draw_messages(f, area, g);
+}
+
+fn bolt_color(weapon: &str) -> Rgb {
+    match weapon {
+        "bolt" | "electric_beam" | "beam" | "plasma" => (130, 220, 255),
+        w if w.contains("missile") || w.contains("rocket") => (255, 130, 50),
+        "chain_gun" => (255, 230, 120),
+        "super_mortar" | "napalm" => (255, 90, 40),
+        _ => (255, 250, 230),
+    }
+}
+
+fn team_color(team: Team) -> Color {
+    match team {
+        Team::Player => AMBER,
+        Team::Enemy => Color::Rgb(235, 70, 55),
+        _ => Color::Rgb(205, 205, 200),
+    }
+}
+
+fn draw_messages(f: &mut Frame, area: Rect, g: &Game) {
+    let lines: Vec<Line> = g
+        .world
+        .recent_messages()
+        .map(|m| Line::from(Span::styled(format!(" {m} "), Style::default().fg(GREEN).bg(Color::Black))))
+        .collect();
+    let h = (lines.len() as u16).min(area.height);
+    if h > 0 {
+        f.render_widget(Paragraph::new(lines), Rect { height: h, ..area });
+    }
 }
 
 fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
@@ -334,54 +263,121 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
-    let col = ((g.tank.x + ox) / s) as u16;
-    let row = ((g.tank.y + oy) / s / 2.0) as u16;
-    if col < area.width && row < area.height {
-        if let Some(cell) = buf.cell_mut((area.x + col, area.y + row)) {
+    let to_cell = |x: f32, y: f32| {
+        let (c, r) = ((x + ox) / s, (y + oy) / s / 2.0);
+        (c >= 0.0 && r >= 0.0 && (c as u16) < area.width && (r as u16) < area.height).then(|| (area.x + c as u16, area.y + r as u16))
+    };
+    let w = &g.world;
+    // ground paths, as the original radar drew them; the player's chosen
+    // branches bright, the others dim
+    for (i, n) in w.nodes.iter().enumerate() {
+        for (k, &l) in n.links_a.iter().enumerate() {
+            let chosen = n.links_a.len() == 1 || w.route_choice.get(&i).copied().unwrap_or(0) == k;
+            let m = &w.nodes[l];
+            let steps = ((m.x - n.x).hypot(m.y - n.y) / (s * 0.8)).ceil().max(1.0) as usize;
+            for st in 0..=steps {
+                let t = st as f32 / steps as f32;
+                if let Some(pos) = to_cell(n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t) {
+                    if let Some(cell) = buf.cell_mut(pos) {
+                        cell.set_char('·').set_fg(if chosen { Color::Rgb(235, 235, 225) } else { Color::Rgb(120, 120, 115) });
+                    }
+                }
+            }
+        }
+    }
+    for e in w.entities.iter().filter(|e| e.alive && e.class != Class::Prop) {
+        let glyph = match e.class {
+            Class::Hq => 'H',
+            Class::Garage => 'G',
+            Class::Airbase => 'A',
+            Class::Bank => '$',
+            Class::Tower => 'T',
+            Class::EnemyTank | Class::PlayerTank => '◆',
+            _ => '•',
+        };
+        if let Some(pos) = to_cell(e.x, e.y) {
+            if let Some(cell) = buf.cell_mut(pos) {
+                cell.set_char(glyph).set_fg(team_color(e.team)).set_bg(Color::Black);
+            }
+        }
+    }
+    if let Some(pos) = to_cell(g.tank.x, g.tank.y) {
+        if let Some(cell) = buf.cell_mut(pos) {
             cell.set_char('◆').set_fg(AMBER).set_bg(Color::Black);
         }
     }
+    draw_messages(f, area, g);
 }
 
 fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     let t = &g.tank;
-    let compass = ((t.heading.to_degrees() + 90.0).rem_euclid(360.0)) as i32;
+    let w = &g.world;
     let view = match g.view {
-        View::Tactical => ["TACTICAL far", "TACTICAL", "TACTICAL close", "TACTICAL closest"][g.zoom],
-        View::Strategy => "STRATEGY",
+        View::Tactical => ["far", "normal", "close", "closest"][g.zoom],
+        View::Strategy => "map",
     };
     let label = |s: &str| Span::styled(s.to_string(), Style::default().fg(DIM));
     let value = |s: String| Span::styled(s, Style::default().fg(GREEN));
+    let hp = g.tank_health();
+    let hp_color = if hp > 0.5 { GREEN } else if hp > 0.25 { AMBER } else { Color::Rgb(235, 70, 55) };
     let line1 = Line::from(vec![
         Span::styled(" CALVARY ", Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD)),
-        label("  map "),
-        value(format!("{} {}x{}", g.terrain.name, g.terrain.w, g.terrain.h)),
-        label("  view "),
-        value(view.to_string()),
+        label("  $"),
+        Span::styled(format!("{}", w.money[0]), Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
+        label("  armor "),
+        Span::styled(format!("{:3.0}%", hp * 100.0), Style::default().fg(hp_color)),
+        label("  tanks "),
+        value(format!("{}", w.lives)),
         label("  gear "),
         Span::styled(t.gear_label(), Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
         label("  spd "),
-        value(format!("{:4.1}", t.speed)),
-        label("  hdg "),
-        value(format!("{compass:03}")),
-        label("  pos "),
-        value(format!("{:.0},{:.0} alt {:.1}", t.x, t.y, g.terrain.height(t.x, t.y))),
+        value(format!("{:3.1}", t.speed)),
         label("  gun "),
         value(format!("{}", t.main_ammo)),
         label("  mg "),
         value(format!("{}", t.chain_ammo)),
         label("  msl "),
         value(format!("{}", t.missiles)),
+        label("  map "),
+        value(format!("{} ({view})", g.terrain.name)),
         if t.blocked { Span::styled("  BLOCKED", Style::default().fg(AMBER)) } else { Span::raw("") },
     ]);
-    let line2 = Line::from(label(
-        " W/S gear  A/D turn  Q/E turret  SPACE gun  F machine gun  ENTER missile  TAB map  +/- zoom  F1/H help  ESC quit",
-    ));
-    f.render_widget(Paragraph::new(vec![line1, line2]).style(Style::default().bg(Color::Black)), area);
+    let mut build = vec![label(" BUILD ")];
+    for (i, kind) in BUILDABLE.iter().enumerate() {
+        let cost = crate::balance::unit(kind).map_or(0, |s| s.cost);
+        let afford = w.money[0] >= cost;
+        let short = kind.replace("_tank", "").replace('_', " ");
+        build.push(Span::styled(format!(" {}", i + 1), Style::default().fg(if afford { AMBER } else { DIM })));
+        build.push(Span::styled(format!(" {short} {cost} "), Style::default().fg(if afford { GREEN } else { DIM })));
+    }
+    let queued = w.queue_len(Team::Player);
+    if queued > 0 {
+        build.push(label(&format!("  queued {queued}")));
+    }
+    let line3 = Line::from(label(" W/S gear  A/D turn  Q/E turret  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  F1/H help  ESC quit"));
+    f.render_widget(Paragraph::new(vec![line1, Line::from(build), line3]).style(Style::default().bg(Color::Black)), area);
+
+    if w.outcome != Outcome::Playing {
+        let (title, text, color) = match w.outcome {
+            Outcome::Won => (" VICTORY ", "The enemy base is destroyed.", AMBER),
+            _ => (" DEFEAT ", "The battle is lost.", Color::Rgb(235, 70, 55)),
+        };
+        let full = f.area();
+        let (bw, bh) = (44.min(full.width), 5.min(full.height));
+        let r = Rect { x: full.x + (full.width - bw) / 2, y: full.y + (full.height - bh) / 2, width: bw, height: bh };
+        let block = Block::bordered()
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(color))
+            .title(Span::styled(title, Style::default().fg(Color::Black).bg(color).add_modifier(Modifier::BOLD)))
+            .style(Style::default().bg(Color::Black));
+        let body = vec![Line::from(Span::styled(format!(" {text}"), Style::default().fg(GREEN))), Line::from(label(" [ ] next level, Esc quit"))];
+        f.render_widget(Clear, r);
+        f.render_widget(Paragraph::new(body).block(block), r);
+    }
 }
 
 fn split(full: Rect) -> (Rect, Rect) {
-    let hud_h = 2.min(full.height);
+    let hud_h = 3.min(full.height);
     let map = Rect { height: full.height - hud_h, ..full };
     let hud = Rect { y: full.y + full.height - hud_h, height: hud_h, ..full };
     (map, hud)
@@ -449,12 +445,18 @@ const HELP: &[(&str, &str)] = &[
     ("", "VIEW"),
     ("Tab / M", "tactical view / whole map"),
     ("+ / -", "zoom the tactical view in / out"),
+    ("", ""),
+    ("", "COMMAND"),
+    ("1 - 8", "build a unit at your garage (costs money)"),
+    ("J", "switch the route at the junction nearest your supertank"),
+    ("", "Units drive the paths to the enemy base; banks pay every 50 s."),
+    ("", "Engineers capture banks and towers. Park at your HQ to rearm."),
+    ("", "Destroy the enemy HQ to win."),
     ("[ ]", "previous / next level"),
     ("F1 / H / ?", "this help (the game pauses)"),
     ("Esc", "close help, or quit"),
     ("", ""),
     ("", "Rock edges, deep water and steep slopes stop the tank."),
-    ("", "Units, bases and paths come next; for now: drive and shoot."),
 ];
 
 fn draw_help(f: &mut Frame, full: Rect) {
