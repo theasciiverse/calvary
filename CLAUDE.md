@@ -327,6 +327,19 @@ Open questions:
 - Pace: units drive at the original 0.08 cells per tick (0.8 cells/s), so
   on `test` a push takes about five minutes. Faithful, maybe slow for a
   terminal session; a game-speed option is easy if playtesting says so.
+- Credits tribute (waiting on David): the fork's movie level carries a
+  Crack dot Com logo billboard (`1crackbillboard*`, plasma ball and
+  lightning) and the team's group photo on a supertank (`1group_ontank*`).
+  Showing them on the Credits screen in half-block pixels would be a
+  fitting nod; still to check that both are in the 1998 public-domain
+  textures (not only the fork), and David to decide given that "Crack dot
+  Com" stays a trademark and the photo shows real people.
+- Globe shape: in David's terminal the title globe comes out a little
+  taller than wide, because the terminal reports no pixel size and the
+  2:1 cell fallback is off for his font. Options: a `CALVARY_CELL_ASPECT`
+  override, or measuring the cell size with an escape-code query.
+- Mouse aim is new (2026-10-04) and untested by hand; the pad layout too
+  (only detection was verified here).
 
 ## The skeleton
 
@@ -463,6 +476,14 @@ CLAUDE.md as a courtesy notification. Update that entry to the Calvary name
 if not already done.)
 
 ## Status
+
+As of 2026-10-04: opening and title (textured Earth, regions per battle,
+credits), a full battle on `test` with units, economy, air, upgrades,
+the ported `ai_joe`, sound, keyboard + mouse + gamepad controls, the
+`.cmap` format and map editor, and a 40-mission campaign draft
+(`CAMPAIGN.md`). Next candidates: decode the original's Lisp variables
+(bridger, 3 campaign missions), test-play from the editor, the first new
+campaign map (Al Basrah).
 
 Playable battle on `test`: both bases, the path network, units built from
 the garage, towers, banks, capturable neutrals, the computer player, and a
