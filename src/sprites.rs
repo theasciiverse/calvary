@@ -70,6 +70,24 @@ impl PixelLayer {
         }
     }
 
+/// Draw the painted pixels on black, leaving cells with no pixel untouched
+    /// (the credits draw sprites over their own background).
+    pub fn flush_black(&self, buf: &mut Buffer) {
+        let w = self.area.width as usize;
+        for row in 0..self.area.height as usize {
+            for col in 0..w {
+                let (top, bottom) = (self.px[2 * row * w + col], self.px[(2 * row + 1) * w + col]);
+                if top.is_none() && bottom.is_none() {
+                    continue;
+                }
+                let (t, b) = (top.unwrap_or((0, 0, 0)), bottom.unwrap_or((0, 0, 0)));
+                if let Some(cell) = buf.cell_mut((self.area.x + col as u16, self.area.y + row as u16)) {
+                    cell.set_char('▀').set_fg(Color::Rgb(t.0, t.1, t.2)).set_bg(Color::Rgb(b.0, b.1, b.2));
+                }
+            }
+        }
+    }
+
     pub fn flush(&self, buf: &mut Buffer, terrain: &Terrain) {
         let w = self.area.width as usize;
         for row in 0..self.area.height as usize {
@@ -357,9 +375,14 @@ fn paint_plane(layer: &mut PixelLayer, e: &Entity, pal: Palette) {
 /// Helicopter (body, tail boom, spinning rotor), jet (delta) or bomber (long
 /// straight wings), each with a shadow on the ground below.
 fn paint_aircraft(layer: &mut PixelLayer, e: &Entity, pal: Palette, time: f32) {
-    let (cx, cy) = (e.x, e.y);
-    let (hx, hy) = (e.heading.cos(), e.heading.sin());
-    let kind = e.kind.clone();
+    paint_aircraft_at(layer, &e.kind, e.x, e.y, e.heading, pal, e.flash > 0.0, time);
+}
+
+/// An aircraft sprite anywhere, without a world entity (used by the credits).
+#[allow(clippy::too_many_arguments)]
+pub fn paint_aircraft_at(layer: &mut PixelLayer, kind: &str, cx: f32, cy: f32, heading: f32, pal: Palette, hit: bool, time: f32) {
+    let (hx, hy) = (heading.cos(), heading.sin());
+    let kind = kind.to_string();
     let rotor = time * 14.0;
     let shape = move |l: f32, w: f32| -> Option<u8> {
         match kind.as_str() {
@@ -394,7 +417,6 @@ fn paint_aircraft(layer: &mut PixelLayer, e: &Entity, pal: Palette, time: f32) {
         let (l, w) = local(x, y, shadow.0, shadow.1);
         shape(l, w).filter(|&p| p != 3).map(|_| ((40, 44, 40), false))
     });
-    let hit = e.flash > 0.0;
     layer.paint(cx, cy, 0.75, |x, y| {
         let (l, w) = local(x, y, cx, cy);
         let c = match shape(l, w)? {

@@ -5,3 +5,9 @@ NASA's usage guidelines (https://www.nasa.gov/nasa-brand-center/images-and-media
 checked 2026-10-04): NASA images and texture maps "generally are not subject
 to copyright in the United States" and may be used in computer graphical
 simulations. Credit: NASA.
+
+data/team.ppm: the Golgotha team photo, assembled from the four
+1group_ontank_{tl,tr,bl,br}.jpg textures in the original 1998 release
+(golgotha-textures.tar.gz), which Crack dot Com put into the public domain
+with the game's graphics. They used it as a billboard in the game's movie
+level; Calvary shows it in the credits.

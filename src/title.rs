@@ -15,7 +15,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseButton,
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Clear, Paragraph};
+use ratatui::widgets::{Block, Paragraph};
 use ratatui::{DefaultTerminal, Frame};
 use std::io;
 use std::time::{Duration, Instant};
@@ -38,18 +38,6 @@ const EPIGRAPH: [&str; 6] = [
     "The field of Golgotha and dead men's skulls.",
 ];
 
-/// The Golgotha team, as crack.com's credits page lists them (names as
-/// published there).
-const CREDITS: &[(&str, &str)] = &[
-    ("Design and business", "Dave Taylor"),
-    ("Programming", "Jonathan Clark, Oliver Yu, Trey Harrision"),
-    ("Artwork and level design", "Kevin Tyler, Stephen Wilson"),
-    ("Sound and music", "Gene Rosenburg"),
-    ("System administration", "Jacob Leverich"),
-    ("Intro movie", "Josh Prykril"),
-    ("Programming", "Ken Baird"),
-    ("The name, the plot, the voices", "Carly Taylor"),
-];
 
 /// Where things are, for the globe: the bundled levels' scenery and the
 /// campaign's cities (CAMPAIGN.md), by the names maps are likely to carry.
@@ -169,6 +157,7 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
     // globe orientation (spin = longitude facing us, tilt = latitude), eased
     // toward the selected entry's place once the title is up
     let mut view = (0.0f32, 0.0f32);
+    let mut credits_at = Instant::now();
     let mut last = Instant::now();
     loop {
         let t = start.elapsed().as_secs_f32();
@@ -186,7 +175,7 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
         }
         let mut rows: Vec<Rect> = Vec::new();
         terminal.draw(|f| {
-            rows = draw(f, t, &items, pick, &page, view);
+            rows = draw(f, t, &items, pick, &page, view, credits_at.elapsed().as_secs_f32());
         })?;
         input.poll_pad();
         // the pad: d-pad up/down move, A or Start picks, B backs out
@@ -239,6 +228,9 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
         }
         if page != Page::Main {
             if confirm || back {
+                if page == Page::Credits {
+                    audio.play_music("Splash_Screen_Opus.mp3");
+                }
                 page = Page::Main;
             }
             continue;
@@ -254,16 +246,25 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
                 Item::Level(i, _) => return Ok(Choice::Level(*i)),
                 Item::Map(p) => return Ok(Choice::Map(p.clone())),
                 Item::Controls => page = Page::Controls,
-                Item::Credits => page = Page::Credits,
+                Item::Credits => {
+                    page = Page::Credits;
+                    credits_at = Instant::now();
+                    // the end of the road in the campaign
+                    audio.play_music("Jerusalem_Israel.mp3");
+                }
                 Item::Quit => return Ok(Choice::Quit),
             }
         }
     }
 }
 
-fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (f32, f32)) -> Vec<Rect> {
+fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (f32, f32), credits_t: f32) -> Vec<Rect> {
     let area = f.area();
     f.render_widget(Block::default().style(Style::default().bg(Color::Black)), area);
+    if *page == Page::Credits && t >= GLOBE_END {
+        draw_credits(f, area, credits_t);
+        return Vec::new();
+    }
     if t < EPIGRAPH_END {
         draw_epigraph(f, area, t);
         return Vec::new();
@@ -327,7 +328,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
             }
         }
         Page::Controls => render::draw_help(f, area),
-        Page::Credits => draw_credits(f, area),
+        Page::Credits => {}
     }
     // the dedication, on every title page
     // the dedication sits low, two rows above the bottom edge
@@ -362,29 +363,40 @@ fn draw_epigraph(f: &mut Frame, area: Rect, t: f32) {
     }
 }
 
-/// NASA's Blue Marble (public domain, see data/EARTH.txt), 512x256, as PPM.
+/// NASA's Blue Marble (public domain, see data/IMAGES.txt), 512x256, as PPM.
 static EARTH: &[u8] = include_bytes!("../data/earth.ppm");
 
 /// The texture's pixels (RGB) and width/height, parsed once.
+/// "P6\n<w> <h>\n255\n" then RGB bytes.
+fn parse_ppm(bytes: &[u8]) -> (Vec<u8>, usize, usize) {
+    let mut fields = Vec::new();
+    let mut pos = 0;
+    while fields.len() < 4 {
+        while bytes[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        let start = pos;
+        while !bytes[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        fields.push(std::str::from_utf8(&bytes[start..pos]).unwrap_or("0").to_string());
+    }
+    let (w, h) = (fields[1].parse().unwrap_or(1), fields[2].parse().unwrap_or(1));
+    (bytes[pos + 1..].to_vec(), w, h)
+}
+
 fn earth() -> &'static (Vec<u8>, usize, usize) {
     static TEX: std::sync::OnceLock<(Vec<u8>, usize, usize)> = std::sync::OnceLock::new();
-    TEX.get_or_init(|| {
-        // "P6\n512 256\n255\n" then RGB bytes
-        let mut fields = Vec::new();
-        let mut pos = 0;
-        while fields.len() < 4 {
-            while EARTH[pos].is_ascii_whitespace() {
-                pos += 1;
-            }
-            let start = pos;
-            while !EARTH[pos].is_ascii_whitespace() {
-                pos += 1;
-            }
-            fields.push(std::str::from_utf8(&EARTH[start..pos]).unwrap_or("0").to_string());
-        }
-        let (w, h) = (fields[1].parse().unwrap_or(1), fields[2].parse().unwrap_or(1));
-        (EARTH[pos + 1..].to_vec(), w, h)
-    })
+    TEX.get_or_init(|| parse_ppm(EARTH))
+}
+
+/// The Golgotha team on a supertank, from the 1998 release's textures
+/// (see data/IMAGES.txt).
+static TEAM: &[u8] = include_bytes!("../data/team.ppm");
+
+fn team() -> &'static (Vec<u8>, usize, usize) {
+    static IMG: std::sync::OnceLock<(Vec<u8>, usize, usize)> = std::sync::OnceLock::new();
+    IMG.get_or_init(|| parse_ppm(TEAM))
 }
 
 fn sample_earth(lat: f32, lon: f32) -> (f32, f32, f32) {
@@ -541,33 +553,314 @@ fn draw_big_title(buf: &mut Buffer, area: Rect, top: u16, t: f32) -> u16 {
     5
 }
 
-fn draw_credits(f: &mut Frame, full: Rect) {
-    let mut lines = vec![
-        Line::from(Span::styled(" GOLGOTHA, Crack dot Com, 1996-1998", Style::default().fg(AMBER).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(" as credited on crack.com", Style::default().fg(DIM))),
-        Line::from(""),
-    ];
-    for (role, names) in CREDITS {
-        lines.push(Line::from(vec![Span::styled(format!(" {role:<32}"), Style::default().fg(DIM)), Span::styled(names.to_string(), Style::default().fg(GREEN))]));
+/// The credits, Nintendo style: the team photo, then the key people one by
+/// one over it, then everyone rolling upward.
+const PHOTO_END: f32 = 6.0;
+const CARD: f32 = 3.2;
+const CARDS: [(&str, &str); 4] = [
+    ("Design and business", "Dave Taylor"),
+    ("Programming", "Jonathan Clark"),
+    ("The name, the plot, the voices", "Carly Taylor"),
+    ("Sound and music", "Gene Rosenburg"),
+];
+const ROLL_SPEED: f32 = 1.4;
+
+/// The rolling credits: (style, text). Style 0 heading, 1 name, 2 note.
+const ROLL: &[(u8, &str)] = &[
+    (0, "GOLGOTHA"),
+    (2, "Crack dot Com, 1996-1998"),
+    (2, ""),
+    (2, "Design and business"),
+    (1, "Dave Taylor"),
+    (2, ""),
+    (2, "Programming"),
+    (1, "Jonathan Clark"),
+    (1, "Oliver Yu"),
+    (1, "Trey Harrision"),
+    (2, ""),
+    (2, "Artwork and level design"),
+    (1, "Kevin Tyler"),
+    (1, "Stephen Wilson"),
+    (2, ""),
+    (2, "Sound and music"),
+    (1, "Gene Rosenburg"),
+    (2, ""),
+    (2, "System administration"),
+    (1, "Jacob Leverich"),
+    (2, ""),
+    (2, "Whose work did not make the 1998 release"),
+    (1, "Josh Prykril, the intro movie"),
+    (1, "Ken Baird, programming"),
+    (1, "Carly Taylor, the name Golgotha,"),
+    (1, "the plot, and the voice direction"),
+    (2, "and all the volunteer voice talent,"),
+    (2, "and everyone who made a Golgotha fan site"),
+    (2, ""),
+    (2, "With Crack dot Com's thanks to"),
+    (1, "TelStar  Red Hat  Origin  Bungie  Octogon"),
+    (1, "AMD  SGI  DEC  Microsoft  3Dfx  3Dlabs"),
+    (1, "Matrox  PowerVR  Aureal  Diamond  Creative Labs"),
+    (1, "S3  Logitech  id Software  Eclipse Games  IDT  Cyrix"),
+    (2, ""),
+    (2, "Given to the world in the public domain"),
+    (1, "October 22, 1998"),
+    (2, ""),
+    (2, ""),
+    (0, "GOLGOTHA FOREVER"),
+    (1, "Patrick Grawehr and the revival team,"),
+    (2, "who kept the game alive"),
+    (2, ""),
+    (2, ""),
+    (0, "CALVARY"),
+    (2, "Asciiverse, 2026"),
+    (2, ""),
+    (2, "Their game, their maps, their music,"),
+    (2, "finished in a terminal."),
+    (2, ""),
+    (2, "Music: the Golgotha soundtrack by Gene Rosenburg"),
+    (2, "The Earth: NASA Blue Marble"),
+    (2, "Story: after Carly Taylor's Golgotha Transmission"),
+];
+
+/// Game pieces rising with the roll: (roll line, unit kind, enemy colours,
+/// side: -1 left, 1 right).
+const ILLUSTRATIONS: [(usize, &str, bool, f32); 10] = [
+    (0, "stank", false, -1.0),
+    (6, "peon_tank", true, 1.0),
+    (11, "helicopter", false, -1.0),
+    (15, "cobra_tank", false, 1.0),
+    (21, "electric_car", true, -1.0),
+    (29, "bomber", false, 1.0),
+    (35, "jet", true, -1.0),
+    (39, "rocket_tank", false, 1.0),
+    (44, "stank", false, -1.0),
+    (44, "stank", true, 1.0),
+];
+
+/// Draw the illustration sprites for the roll, `rise` rows up from the bottom.
+fn draw_illustrations(buf: &mut Buffer, area: Rect, rise: f32, ct: f32) {
+    use crate::sprites::{self, PixelLayer, Pose};
+    // 6 columns per map cell: a supertank is about 10 columns long
+    let cols = 6.0;
+    let mut layer = PixelLayer::new(area, (0.0, 0.0), cols);
+    let bottom = area.height as f32;
+    for (i, &(line, kind, enemy, side)) in ILLUSTRATIONS.iter().enumerate() {
+        let row = bottom - rise + line as f32 + 0.5;
+        if row < -4.0 || row > bottom + 4.0 {
+            continue;
+        }
+        let col = area.width as f32 * (0.5 + side * 0.33);
+        let (x, y) = (col / cols, row * 2.0 / cols);
+        let pal = if enemy { sprites::ENEMY } else { sprites::PLAYER };
+        // each turns slowly; the two supertanks at the end face each other
+        let heading = if line == 44 { if side < 0.0 { 0.0 } else { std::f32::consts::PI } } else { ct * 0.5 + i as f32 * 1.3 };
+        if crate::world::flies(kind) {
+            sprites::paint_aircraft_at(&mut layer, kind, x, y, heading, pal, false, ct);
+        } else {
+            let pose = Pose { x, y, heading, aim: heading + (ct * 0.7 + i as f32).sin() * 0.6, odometer: ct * 1.5, muzzle: 0.0, hit: 0.0 };
+            sprites::paint_vehicle(&mut layer, sprites::look(kind), pal, pose);
+        }
     }
-    lines.extend([
-        Line::from(""),
-        Line::from(Span::styled(" Released to the public domain on October 22, 1998:", Style::default().fg(BONE))),
-        Line::from(Span::styled(" the source, the graphics, the music and the levels.", Style::default().fg(BONE))),
-        Line::from(""),
-        Line::from(Span::styled(" CALVARY, Asciiverse, 2026", Style::default().fg(AMBER).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(" Their game, their maps, their music, finished in a terminal.", Style::default().fg(GREEN))),
-        Line::from(Span::styled(" With thanks to Patrick Grawehr and the Golgotha Forever revival.", Style::default().fg(GREEN))),
-    ]);
-    let w = 78.min(full.width);
-    let h = (lines.len() as u16 + 2).min(full.height);
-    let area = Rect { x: full.x + (full.width - w) / 2, y: full.y + (full.height - h) / 2, width: w, height: h };
-    let block = Block::bordered()
-        .border_type(BorderType::Double)
-        .border_style(Style::default().fg(GREEN))
-        .title(Span::styled(" CREDITS ", Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD)))
-        .title_bottom(Span::styled(" any key to go back ", Style::default().fg(DIM)))
-        .style(Style::default().bg(Color::Black));
-    f.render_widget(Clear, area);
-    f.render_widget(Paragraph::new(lines).block(block), area);
+    layer.flush_black(buf);
+}
+
+/// The finale: a night sky with stars and fireworks, `te` seconds in.
+fn draw_fireworks(buf: &mut Buffer, area: Rect, te: f32) {
+    let (w, h) = (area.width as usize, area.height as usize * 2);
+    let mut px: Vec<Option<(f32, f32, f32)>> = vec![None; w * h];
+    let mut put = |x: f32, y: f32, c: (f32, f32, f32)| {
+        if x >= 0.0 && y >= 0.0 && (x as usize) < w && (y as usize) < h {
+            let i = y as usize * w + x as usize;
+            // overlapping sparks add up, like light
+            px[i] = Some(match px[i] {
+                Some(o) => ((o.0 + c.0).min(255.0), (o.1 + c.1).min(255.0), (o.2 + c.2).min(255.0)),
+                None => c,
+            });
+        }
+    };
+    const COLOURS: [(f32, f32, f32); 5] = [(255.0, 180.0, 40.0), (80.0, 220.0, 120.0), (235.0, 70.0, 55.0), (240.0, 240.0, 230.0), (120.0, 210.0, 255.0)];
+    // a burst every 0.55 s; each rises for 0.7 s, then bursts for 2 s
+    let first = ((te - 2.7) / 0.55).floor().max(0.0) as u32;
+    let last = (te / 0.55).floor() as u32;
+    for k in first..=last {
+        let t0 = k as f32 * 0.55;
+        let local = te - t0;
+        if local < 0.0 {
+            continue;
+        }
+        let r = |n: u32| (hash(k, n) % 1000) as f32 / 1000.0;
+        let (bx, by) = (w as f32 * (0.12 + 0.76 * r(1)), h as f32 * (0.12 + 0.35 * r(2)));
+        let c = COLOURS[(hash(k, 3) % 5) as usize];
+        if local < 0.7 {
+            // the rocket climbing, with a short trail
+            let k2 = local / 0.7;
+            let y = h as f32 - (h as f32 - by) * k2;
+            for tr in 0..4 {
+                put(bx, y + tr as f32 * 1.5, (255.0 * (1.0 - tr as f32 * 0.25), 200.0 * (1.0 - tr as f32 * 0.25), 120.0 * (1.0 - tr as f32 * 0.25)));
+            }
+            continue;
+        }
+        let b = local - 0.7;
+        if b > 2.0 {
+            continue;
+        }
+        let fade = (1.0 - b / 2.0).max(0.0).powf(1.3);
+        let sparks = 50 + (hash(k, 4) % 30);
+        let speed = w as f32 * (0.06 + 0.05 * r(5));
+        for i in 0..sparks {
+            let a = i as f32 / sparks as f32 * std::f32::consts::TAU + r(6);
+            // each spark its own speed, so the burst fills out; out fast,
+            // slowing, falling; late sparks twinkle
+            let own = 0.45 + 0.55 * (hash(k * 131 + i, 7) % 1000) as f32 / 1000.0;
+            let twinkle = if b > 1.2 && hash(k + i, (te * 12.0) as u32) % 3 == 0 { 0.3 } else { 1.0 };
+            let fade = fade * twinkle;
+            let d = speed * own * (1.0 - (-b * 2.2).exp());
+            let (x, y) = (bx + a.cos() * d, by + a.sin() * d * 0.9 + 6.0 * b * b);
+            put(x, y, (c.0 * fade, c.1 * fade, c.2 * fade));
+            // a fainter trail behind each spark
+            let d2 = d * 0.85;
+            put(bx + a.cos() * d2, by + a.sin() * d2 * 0.9 + 6.0 * b * b, (c.0 * fade * 0.4, c.1 * fade * 0.4, c.2 * fade * 0.4));
+        }
+    }
+    let sky = |y: usize| (6.0 + 10.0 * y as f32 / h as f32, 8.0 + 10.0 * y as f32 / h as f32, 22.0 + 18.0 * y as f32 / h as f32);
+    for row in 0..area.height as usize {
+        for col in 0..w {
+            let pick = |y: usize| {
+                // stars, fewer and of varied brightness, twinkling
+                let s = hash(col as u32 + 7, y as u32 + 11);
+                let base = if s % 151 == 0 && (te * 2.0 + (s % 13) as f32).sin() > -0.2 {
+                    let k = 90.0 + (s % 120) as f32;
+                    (k, k, k * 0.95)
+                } else {
+                    sky(y)
+                };
+                // fireworks add light to the sky, so they fade into it
+                let light = px[y * w + col].unwrap_or((0.0, 0.0, 0.0));
+                ((base.0 + light.0).min(255.0), (base.1 + light.1).min(255.0), (base.2 + light.2).min(255.0))
+            };
+            let (t, b) = (pick(row * 2), pick(row * 2 + 1));
+            if let Some(cell) = buf.cell_mut((area.x + col as u16, area.y + row as u16)) {
+                cell.set_char('▀').set_fg(Color::Rgb(t.0 as u8, t.1 as u8, t.2 as u8)).set_bg(Color::Rgb(b.0 as u8, b.1 as u8, b.2 as u8));
+            }
+        }
+    }
+}
+
+fn faded(c: (u8, u8, u8), k: f32) -> Color {
+    let k = k.clamp(0.0, 1.0);
+    Color::Rgb((c.0 as f32 * k) as u8, (c.1 as f32 * k) as u8, (c.2 as f32 * k) as u8)
+}
+
+/// The team photo in half-block pixels, fitted into `area`'s top part.
+fn draw_photo(buf: &mut Buffer, area: Rect, bright: f32) -> Rect {
+    let (px, iw, ih) = team();
+    // a half-block pixel is about square: one column wide, half a row tall
+    let max_w = (area.width as f32 * 0.72) as usize;
+    let max_h = (area.height as f32 * 0.62) as usize * 2;
+    let scale = (max_w as f32 / *iw as f32).min(max_h as f32 / *ih as f32);
+    let (w, h) = ((*iw as f32 * scale) as usize, (*ih as f32 * scale) as usize / 2 * 2);
+    let x0 = area.x + (area.width - w as u16) / 2;
+    let y0 = area.y + (area.height as f32 * 0.08) as u16;
+    let at = |x: usize, y: usize| {
+        let (sx, sy) = (((x as f32 + 0.5) / scale) as usize, ((y as f32 + 0.5) / scale) as usize);
+        let i = (sy.min(ih - 1) * iw + sx.min(iw - 1)) * 3;
+        faded((px[i], px[i + 1], px[i + 2]), bright)
+    };
+    for row in 0..h / 2 {
+        for col in 0..w {
+            if let Some(cell) = buf.cell_mut((x0 + col as u16, y0 + row as u16)) {
+                cell.set_char('▀').set_fg(at(col, row * 2)).set_bg(at(col, row * 2 + 1));
+            }
+        }
+    }
+    Rect { x: x0, y: y0, width: w as u16, height: (h / 2) as u16 }
+}
+
+fn draw_credits(f: &mut Frame, area: Rect, ct: f32) {
+    let roll_at = PHOTO_END + CARDS.len() as f32 * CARD;
+    // when the last line has risen to the middle, the night and the fireworks
+    let mid = (area.y + area.height / 2) as f32;
+    let roll_end = roll_at + ((area.y + area.height) as f32 + ROLL.len() as f32 + 2.0 - mid) / ROLL_SPEED;
+    if ct >= roll_end {
+        draw_fireworks(f.buffer_mut(), area, ct - roll_end);
+        let center = |f: &mut Frame, y: u16, text: &str, c: Color| {
+            f.render_widget(Paragraph::new(Line::from(Span::styled(text.to_string(), Style::default().fg(c).add_modifier(Modifier::BOLD)))).centered(), Rect { y, height: 1, ..area });
+        };
+        let k = ((ct - roll_end) / 1.5).min(1.0);
+        center(f, area.y + area.height * 2 / 3, "Thank you for playing.", faded((255, 180, 40), k));
+        center(f, area.y + area.height * 2 / 3 + 2, "any key to return", faded((70, 110, 80), k));
+        return;
+    }
+    // the photo: fades in, holds, dims behind the cards, fades as the roll rises
+    let bright = if ct < 2.5 {
+        ct / 2.5
+    } else if ct < PHOTO_END {
+        1.0
+    } else if ct < roll_at {
+        0.35
+    } else {
+        (0.35 - (ct - roll_at) / 4.0 * 0.25).max(0.1)
+    };
+    let photo = draw_photo(f.buffer_mut(), area, bright);
+    let center = |f: &mut Frame, y: u16, text: &str, c: Color, bold: bool| {
+        if y >= area.y && y < area.y + area.height {
+            let mut st = Style::default().fg(c).bg(Color::Black);
+            if bold {
+                st = st.add_modifier(Modifier::BOLD);
+            }
+            f.render_widget(Paragraph::new(Line::from(Span::styled(text.to_string(), st))).centered(), Rect { y, height: 1, ..area });
+        }
+    };
+    let below = photo.y + photo.height + 2;
+    if ct < PHOTO_END {
+        let k = ((ct - 1.0) / 1.5).clamp(0.0, 1.0);
+        center(f, below, "Crack dot Com, 1998", faded((255, 180, 40), k), true);
+        center(f, below + 1, "the Golgotha team", faded((70, 110, 80), k), false);
+    } else if ct < roll_at {
+        let i = ((ct - PHOTO_END) / CARD) as usize;
+        let local = (ct - PHOTO_END) - i as f32 * CARD;
+        let k = (local / 0.6).min((CARD - local) / 0.6).clamp(0.0, 1.0);
+        let (role, name) = CARDS[i.min(CARDS.len() - 1)];
+        let spaced: String = name.to_uppercase().chars().flat_map(|c| [c, ' ']).collect();
+        let mid = photo.y + photo.height / 2;
+        center(f, mid - 1, role, faded((150, 190, 160), k), false);
+        center(f, mid + 1, spaced.trim_end(), faded((255, 180, 40), k), true);
+    } else {
+        let rise = (ct - roll_at) * ROLL_SPEED;
+        draw_illustrations(f.buffer_mut(), area, rise, ct);
+        let bottom = (area.y + area.height) as f32;
+        for (i, (style, text)) in ROLL.iter().enumerate() {
+            let y = bottom - rise + i as f32;
+            if y < area.y as f32 || y >= bottom {
+                continue;
+            }
+            let (c, bold) = match style {
+                0 => ((255, 180, 40), true),
+                1 => ((80, 220, 120), false),
+                _ => ((150, 170, 155), false),
+            };
+            center(f, y as u16, text, faded(c, 1.0), bold);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    /// The whole credits timeline renders at any size: photo, cards, roll
+    /// with illustrations, and the fireworks finale.
+    #[test]
+    fn credits_render_from_start_to_fireworks() {
+        for (w, h) in [(20, 8), (80, 24), (160, 50), (300, 100)] {
+            let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+            let mut ct = 0.0;
+            while ct < 140.0 {
+                term.draw(|f| draw_credits(f, f.area(), ct)).unwrap();
+                ct += 0.37;
+            }
+        }
+    }
 }
