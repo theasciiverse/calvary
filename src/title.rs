@@ -215,6 +215,9 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
                         _ => {}
                     }
                 }
+                Event::Mouse(m) if matches!(m.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) && t >= GLOBE_END && page == Page::Main => {
+                    moves += if m.kind == MouseEventKind::ScrollUp { 1 } else { -1 };
+                }
                 Event::Mouse(m) if m.kind == MouseEventKind::Down(MouseButton::Left) => {
                     if t < GLOBE_END {
                         start = skipped();

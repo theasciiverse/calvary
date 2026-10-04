@@ -378,7 +378,8 @@ unless it is on one of your units (selects it) or on a junction (switches
 it); left drag box-selects; right button commands the selection (go
 there, or attack what is under it) or, with nothing selected, fires the
 machine gun. Q/E or the pad's right stick take the turret back from the
-mouse. On the strategy map the mouse only selects and commands.
+mouse. The scroll wheel zooms (battle and editor) and moves
+through the title menu. On the strategy map the mouse only selects and commands.
 
 Gamepad (gilrs, feature `gamepad`, on by default; the same approach as
 `games/marble-recovery`): left stick drives with analog throttle and

@@ -381,6 +381,9 @@ fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: 
             }
         }
         MouseEventKind::Up(MouseButton::Right) => input.mouse_chain = false,
+        // the wheel zooms the tactical view
+        MouseEventKind::ScrollUp => game.zoom_by(1),
+        MouseEventKind::ScrollDown => game.zoom_by(-1),
         _ => {}
     }
 }
@@ -477,5 +480,12 @@ mod tests {
         on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Left), east));
         assert!(!input.controls(std::time::Instant::now()).fire_main);
         assert_eq!(game.selected, vec![u]);
+
+        // the wheel zooms
+        let z = game.zoom;
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::ScrollUp, east));
+        assert_eq!(game.zoom, z + 1);
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::ScrollDown, east));
+        assert_eq!(game.zoom, z);
     }
 }

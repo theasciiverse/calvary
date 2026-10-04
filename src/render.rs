@@ -583,7 +583,7 @@ const HELP: &[(&str, &str)] = &[
     ("", ""),
     ("", "VIEW"),
     ("Tab / M", "tactical view / whole map"),
-    ("+ / -", "zoom the tactical view in / out"),
+    ("+ / - / wheel", "zoom the tactical view in / out"),
     ("", ""),
     ("", "UNITS"),
     ("Mouse", "point to aim the turret; shells land where you point"),

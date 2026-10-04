@@ -535,6 +535,8 @@ pub fn run(terminal: &mut DefaultTerminal, mut ed: Editor) -> io::Result<()> {
                         ed.applying = true;
                     }
                     MouseEventKind::Up(MouseButton::Left) => ed.applying = false,
+                    MouseEventKind::ScrollUp => ed.game.zoom_by(1),
+                    MouseEventKind::ScrollDown => ed.game.zoom_by(-1),
                     _ => {}
                 }
                 ed.quit_armed = false;
