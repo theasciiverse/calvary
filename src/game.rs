@@ -75,6 +75,8 @@ pub struct Game {
     /// Turret lock: the turret tracks the nearest enemy in gun range.
     pub lock: bool,
     lock_on: Option<usize>,
+    /// Connected gamepad's name and its build cursor, for the HUD.
+    pub pad: Option<(String, usize)>,
     pub shots: Vec<Shot>,
     pub particles: Vec<Particle>,
     pub view: View,
@@ -109,6 +111,7 @@ impl Game {
             world,
             lock: false,
             lock_on: None,
+            pad: None,
             shots: Vec::new(),
             particles: Vec::new(),
             view: View::Tactical,
@@ -256,7 +259,7 @@ impl Game {
             self.world.sound("fire/supertank_fires_rocket_22khz.mp3", None, 0.8);
             self.fire(ShotKind::Missile, self.tank.rocket_weapon, 9.0, 30.0, 0.0);
         }
-        if c.turret == 0 {
+        if c.turret == 0.0 && c.aim.is_none() {
             self.track_target();
         }
         self.world.place_player_tank(self.tank.x, self.tank.y, self.tank.heading);

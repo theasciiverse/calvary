@@ -404,6 +404,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     for (i, kind) in BUILDABLE.iter().enumerate() {
         let cost = crate::balance::unit(kind).map_or(0, |s| s.cost);
         let afford = w.money[0] >= cost;
+        let cursor = g.pad.as_ref().is_some_and(|p| p.1 == i);
         let short = match *kind {
             "electric_car" => "elec",
             "rocket_tank" => "rocket",
@@ -415,14 +416,21 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
             "cobra_tank" => "cobra",
             k => k,
         };
+        let mark = if cursor { Style::default().fg(Color::Black).bg(if afford { AMBER } else { DIM }) } else { Style::default() };
         build.push(Span::styled(format!(" {}", BUILD_KEYS[i]), Style::default().fg(if afford { AMBER } else { DIM })));
-        build.push(Span::styled(format!(" {short} {cost} "), Style::default().fg(if afford { GREEN } else { DIM })));
+        build.push(Span::styled(format!(" {short} {cost} "), if cursor { mark } else { Style::default().fg(if afford { GREEN } else { DIM }) }));
     }
     let queued = w.queue_len(Team::Player);
     if queued > 0 {
         build.push(label(&format!("  queued {queued}")));
     }
-    let line3 = Line::from(label(" W/S gear  A/D turn  Q/E turret  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  T lock  F1/H help  ESC quit"));
+    let line3 = match &g.pad {
+        Some((name, _)) => Line::from(vec![
+            Span::styled(format!(" {name} "), Style::default().fg(Color::Black).bg(GREEN)),
+            label("  L stick drive  R stick aim  RT gun  LT mg  RB rocket  LB lock  D-pad+A build  B route  Y map  Start help"),
+        ]),
+        None => Line::from(label(" W/S gear  A/D turn  Q/E turret  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  T lock  F1/H help  ESC quit")),
+    };
     f.render_widget(Paragraph::new(vec![line1, Line::from(build), line3]).style(Style::default().bg(Color::Black)), area);
 
     if w.outcome != Outcome::Playing {
@@ -513,6 +521,13 @@ const HELP: &[(&str, &str)] = &[
     ("", "VIEW"),
     ("Tab / M", "tactical view / whole map"),
     ("+ / -", "zoom the tactical view in / out"),
+    ("", ""),
+    ("", "GAMEPAD"),
+    ("Sticks", "left drives (analog), right points the turret"),
+    ("RT LT RB LB", "main gun, machine gun, rocket, turret lock"),
+    ("D-pad", "left/right pick a unit, A builds; up/down zoom"),
+    ("B Y", "switch nearest junction, map view"),
+    ("Start Back", "help, next music track"),
     ("", ""),
     ("", "COMMAND"),
     ("1 - 8", "build a unit at your garage (costs money)"),

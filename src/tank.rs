@@ -43,10 +43,15 @@ pub fn reload(weapon: &str) -> f32 {
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Controls {
-    /// -1 left, 1 right.
-    pub turn: i8,
-    pub turret: i8,
+    /// -1 left .. 1 right (keys give -1, 0, 1; a stick anything between).
+    pub turn: f32,
+    /// Turret rotation rate, -1 .. 1.
+    pub turret: f32,
     pub gear_step: i32,
+    /// Analog throttle from a gamepad, -1 .. 1; overrides the gear while set.
+    pub throttle: Option<f32>,
+    /// Absolute turret aim (map angle) from a gamepad's right stick.
+    pub aim: Option<f32>,
     pub fire_main: bool,
     pub fire_chain: bool,
     pub fire_missile: bool,
@@ -122,10 +127,22 @@ impl Tank {
         }
         // reversing turns the hull the way a car does
         let dir = if self.speed < -0.05 { -1.0 } else { 1.0 };
-        self.heading = (self.heading + c.turn as f32 * TURN_SPEED * dt * dir).rem_euclid(std::f32::consts::TAU);
-        self.turret = (self.turret + c.turret as f32 * TURRET_SPEED * dt).rem_euclid(std::f32::consts::TAU);
+        self.heading = (self.heading + c.turn * TURN_SPEED * dt * dir).rem_euclid(std::f32::consts::TAU);
+        if let Some(aim) = c.aim {
+            // swing the turret toward a world direction at its own speed
+            let want = aim - self.heading;
+            let diff = (want - self.turret + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+            let step = TURRET_SPEED * dt;
+            self.turret = (self.turret + diff.clamp(-step, step)).rem_euclid(std::f32::consts::TAU);
+        } else {
+            self.turret = (self.turret + c.turret * TURRET_SPEED * dt).rem_euclid(std::f32::consts::TAU);
+        }
 
-        let target = GEARS[self.gear] * TOP_SPEED;
+        let target = match c.throttle {
+            // reverse is as slow as the R gear
+            Some(t) => t.clamp(GEARS[0], 1.0) * TOP_SPEED,
+            None => GEARS[self.gear] * TOP_SPEED,
+        };
         let dv = (target - self.speed).clamp(-ACCEL * dt, ACCEL * dt);
         self.speed += dv;
 

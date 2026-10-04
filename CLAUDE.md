@@ -313,6 +313,19 @@ at start, pauses the game), ESC closes help or quits. With the kitty
 keyboard protocol keys are exact; otherwise a key counts as held while OS
 repeats keep arriving.
 
+Gamepad (gilrs, feature `gamepad`, on by default; the same approach as
+`games/marble-recovery`): left stick drives with analog throttle and
+steering (a W/S press hands driving back to the gears), right stick points
+the turret in a map direction, RT main gun, LT machine gun, RB rocket, LB
+turret lock, d-pad left/right moves a build cursor shown in the HUD and A
+builds, B switches the nearest junction, Y map view, d-pad up/down zoom,
+Start help, Back next music track. Only pads in SDL's controller database
+are used, because gilrs also reports 3D mice and tablet key pads as
+gamepads (David's 3Dconnexion receiver is one; it is skipped, the 8BitDo
+SF30 Pro in XInput mode shows as "Xbox 360 Controller" and is used);
+`CALVARY_ANY_PAD=1` accepts everything. `--no-default-features` builds
+without it.
+
 Layout: `src/level.rs` (format reader, objects, paths + tests),
 `src/balance.rs` (reads `data/balance.scm`), `src/terrain.rs` (heights,
 tile colours, shading), `src/tank.rs` (supertank physics), `src/world.rs`

@@ -69,11 +69,14 @@ fn run(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, start: usize, a
         game.tank.y = y;
     }
     let mut input = Input::new(kitty);
+    input.open_pad();
     let tick = Duration::from_secs_f32(DT);
     let mut next = Instant::now() + tick;
     let mut next_snapshot = Instant::now();
     while !input.quit {
         render::follow_camera(&mut game, terminal.size()?.into());
+        input.poll_pad();
+        game.pad = input.pad_name.clone().map(|n| (n, input.build_cursor));
         terminal.draw(|f| render::draw(f, &game))?;
         if event::poll(next.saturating_duration_since(Instant::now()))? {
             loop {
