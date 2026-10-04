@@ -226,6 +226,15 @@ pub struct Blast {
     pub power: f32,
 }
 
+/// A sound for the audio layer: a file from `audio::SFX`, where it happened
+/// (None: the radio, heard everywhere) and how loud.
+#[derive(Clone, Copy, Debug)]
+pub struct Sfx {
+    pub name: &'static str,
+    pub at: Option<(f32, f32)>,
+    pub volume: f32,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Outcome {
     Playing,
@@ -239,6 +248,8 @@ pub struct World {
     pub bolts: Vec<Bolt>,
     /// Explosions for the renderer's particle system, drained by `Game`.
     pub blasts: Vec<Blast>,
+    /// Sounds for the audio layer, drained by the main loop.
+    pub sounds: Vec<Sfx>,
     pub money: [i32; 2],
     pub lives: u32,
     pub player_tank: Option<usize>,
@@ -333,6 +344,7 @@ impl World {
             nodes,
             bolts: Vec::new(),
             blasts: Vec::new(),
+            sounds: Vec::new(),
             money: [START_MONEY; 2],
             lives: START_LIVES,
             player_tank,
@@ -379,6 +391,15 @@ impl World {
         self.rng ^= self.rng >> 7;
         self.rng ^= self.rng << 17;
         (self.rng >> 40) as f32 / (1u64 << 24) as f32
+    }
+
+    pub fn sound(&mut self, name: &'static str, at: Option<(f32, f32)>, volume: f32) {
+        self.sounds.push(Sfx { name, at, volume });
+    }
+
+    /// The original's radio voice lines.
+    pub fn radio(&mut self, name: &'static str) {
+        self.sound(name, None, 0.9);
     }
 
     pub fn say(&mut self, text: impl Into<String>) {
@@ -545,6 +566,7 @@ impl World {
             self.money[team.index()] += amount;
             if team == Team::Player {
                 self.say(format!("Money received: ${amount}"));
+                self.radio("narrative/money_received_22khz.mp3");
             }
         } else if self.entities[goal].crates > 0 {
             let n = self.entities[goal].crates;
@@ -674,6 +696,7 @@ impl World {
             }
             if team == Team::Player {
                 self.say(format!("Vehicle advancing: {kind}"));
+                self.radio(crate::audio::ready_voice(kind));
             }
         }
     }
@@ -845,6 +868,16 @@ impl World {
         });
         let Some(s) = spot else { return false };
         let kind = self.entities[s].kind.clone();
+        let (class, was) = (self.entities[s].class, self.entities[s].team);
+        if me.team == Team::Player {
+            self.radio(match class {
+                Class::Bank => "narrative/bank_captured_22khz.mp3",
+                Class::Tower => "narrative/turret_captured_22khz.mp3",
+                _ => "narrative/building_captured_22khz.mp3",
+            });
+        } else if was == Team::Player {
+            self.radio(if class == Class::Bank { "narrative/bank_lost_22khz.mp3" } else { "narrative/turret_lost_22khz.mp3" });
+        }
         self.entities[s].team = me.team;
         self.entities[s].target = None;
         self.entities[i].alive = false;
@@ -855,6 +888,8 @@ impl World {
 
     fn fire(&mut self, i: usize, weapon: &'static str, target: usize) {
         let Some(w) = balance::weapon(weapon) else { return };
+        let at = (self.entities[i].x, self.entities[i].y);
+        self.sound(crate::audio::fire_sound(weapon), Some(at), 0.5);
         let (e, t) = (&self.entities[i], &self.entities[target]);
         let speed = if w.speed <= 0.0 { 0.0 } else { (w.speed * ORIGINAL_HZ).max(4.0) };
         let aim = e.heading + e.turret;
@@ -1007,6 +1042,8 @@ impl World {
             // the supertank respawns at the HQ while lives remain
             e.hp = e.max_hp;
             self.blasts.push(Blast { x, y, power: 2.5 });
+            self.sound("explosion/generic.mp3", Some((x, y)), 1.0);
+            self.radio("narrative/supertank_lost_22khz.mp3");
             self.lives = self.lives.saturating_sub(1);
             if self.lives == 0 {
                 self.entities[j].alive = false;
@@ -1019,6 +1056,15 @@ impl World {
         }
         e.alive = false;
         self.blasts.push(Blast { x, y, power: 1.0 + r });
+        let boom = if matches!(class, Class::Vehicle | Class::EnemyTank | Class::Plane) { "explosion/ground_vehicle.mp3" } else { "explosion/generic.mp3" };
+        self.sound(boom, Some((x, y)), 1.0);
+        match (class, team) {
+            (Class::Hq, Team::Enemy) => self.radio("narrative/enemy_base_destroyed_22khz.mp3"),
+            (Class::Hq, Team::Player) => self.radio("narrative/mission_failed_22khz.mp3"),
+            (Class::Bank, Team::Player) => self.radio("narrative/bank_lost_22khz.mp3"),
+            (Class::Tower, Team::Player) => self.radio("narrative/turret_lost_22khz.mp3"),
+            _ => {}
+        }
         log::info!("destroyed {team:?} {kind}");
         match (class, team) {
             (Class::Hq, Team::Enemy) => {

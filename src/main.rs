@@ -1,3 +1,4 @@
+mod audio;
 mod balance;
 mod game;
 mod input;
@@ -37,6 +38,9 @@ fn main() -> io::Result<()> {
         let (x, y) = v.split_once(',')?;
         Some((x.parse::<f32>().ok()?, y.parse::<f32>().ok()?))
     });
+    // open audio before the alternate screen, so any ALSA chatter lands above it
+    let mut audio = audio::Audio::new(args.iter().any(|a| a == "--mute"));
+    log::info!("audio available {} muted {}", audio.available(), audio.muted);
     let mut terminal = ratatui::init();
     let kitty = supports_keyboard_enhancement().unwrap_or(false);
     if kitty {
@@ -48,7 +52,7 @@ fn main() -> io::Result<()> {
     log::info!("start kitty_keyboard={kitty}");
     // clicks switch routes at junctions, like the original's strategy mode
     execute!(io::stdout(), EnableMouseCapture)?;
-    let result = run(&mut terminal, start, at, kitty);
+    let result = run(&mut terminal, &mut audio, start, at, kitty);
     let _ = execute!(io::stdout(), DisableMouseCapture);
     if kitty {
         let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
@@ -57,8 +61,9 @@ fn main() -> io::Result<()> {
     result
 }
 
-fn run(terminal: &mut DefaultTerminal, start: usize, at: Option<(f32, f32)>, kitty: bool) -> io::Result<()> {
+fn run(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, start: usize, at: Option<(f32, f32)>, kitty: bool) -> io::Result<()> {
     let mut game = Game::new(start).map_err(io::Error::other)?;
+    audio.play_music(audio::track_for_level(LEVELS[start].name));
     if let Some((x, y)) = at {
         game.tank.x = x;
         game.tank.y = y;
@@ -130,6 +135,7 @@ fn run(terminal: &mut DefaultTerminal, start: usize, at: Option<(f32, f32)>, kit
             let i = (game.level_index as i32 + std::mem::take(&mut input.level_step)).rem_euclid(n) as usize;
             let (view, help, zoom) = (game.view, game.help, game.zoom);
             game = Game::new(i).map_err(io::Error::other)?;
+            audio.play_music(audio::track_for_level(LEVELS[i].name));
             game.view = view;
             game.help = help;
             game.zoom = zoom;
@@ -146,6 +152,21 @@ fn run(terminal: &mut DefaultTerminal, start: usize, at: Option<(f32, f32)>, kit
         }
         if steps == 5 {
             next = now + tick;
+        }
+        if std::mem::take(&mut input.next_track) {
+            audio.next_track();
+            game.world.say(format!("Music: {}", audio.track_name().replace('_', " ")));
+        }
+        if std::mem::take(&mut input.toggle_sound) {
+            audio.toggle_mute();
+            game.world.say(if audio.muted { "Sound off" } else { "Sound on" });
+        }
+        let (lx, ly) = (game.tank.x, game.tank.y);
+        for s in std::mem::take(&mut game.world.sounds) {
+            match s.at {
+                Some((x, y)) => audio.play_at(s.name, x, y, lx, ly, s.volume),
+                None => audio.play(s.name, s.volume),
+            }
         }
         if now >= next_snapshot {
             let t = &game.tank;

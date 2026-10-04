@@ -61,6 +61,8 @@ pub struct Input {
     pub build: Option<usize>,
     pub switch_route: bool,
     pub toggle_lock: bool,
+    pub next_track: bool,
+    pub toggle_sound: bool,
 }
 
 impl Input {
@@ -80,6 +82,8 @@ impl Input {
             build: None,
             switch_route: false,
             toggle_lock: false,
+            next_track: false,
+            toggle_sound: false,
         }
     }
 
@@ -124,6 +128,8 @@ impl Input {
             KeyCode::Char(']') => self.level_step += 1,
             KeyCode::Char('j') | KeyCode::Char('J') => self.switch_route = true,
             KeyCode::Char('t') | KeyCode::Char('T') => self.toggle_lock = true,
+            KeyCode::F(9) => self.next_track = true,
+            KeyCode::F(8) => self.toggle_sound = true,
             KeyCode::Char(c @ '1'..='9') => self.build = Some(c as usize - '1' as usize),
             KeyCode::Char('0') => self.build = Some(9),
             KeyCode::Char('b') | KeyCode::Char('B') => self.build = Some(10),

@@ -526,6 +526,7 @@ const HELP: &[(&str, &str)] = &[
     ("", "Destroy the enemy HQ to win."),
     ("[ ]", "previous / next level"),
     ("F1 / H / ?", "this help (the game pauses)"),
+    ("F9 / F8", "next music track / sound on or off (start with --mute)"),
     ("Esc", "close help, or quit"),
     ("", ""),
     ("", "Rock edges, deep water and steep slopes stop the tank."),

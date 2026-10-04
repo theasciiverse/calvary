@@ -229,8 +229,19 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
    terrain and fight like ground units. Sprites with ground shadows and a
    spinning rotor. Money planes see Plan 3. Open: which ground weapons
    may hit aircraft (everything can, for now).
-7. **Sound.** The 15 tracks and the sfx through a Rust audio crate (decoding
-   in Rust, so mpg123 never ships). Narrative clips for the radio barks.
+7. **Sound (done, 2026-10-04).** The 15 original tracks (`data/music`)
+   and the original sfx set (`data/sfx`, 102 files) are bundled and the
+   ones in use are compiled into the binary (`src/audio.rs`), decoded by
+   rodio's pure-Rust symphonia, so the release's mpg123 decoder never
+   ships. Each level plays its place's track (test: Greece, snow: Zurich,
+   egypt2: Cairo), F9 steps through the tracks as in the original, F8
+   toggles sound, `--mute` starts silent; no audio device means silence,
+   not an error. Effects: supertank main gun per upgrade level, rockets,
+   machine gun, unit and tower fire, explosions, and the original radio
+   voice lines (money received, bank/turret/building captured, bank and
+   turret lost, supertank lost, enemy base destroyed, mission failed, and
+   the per-unit "vehicle ready" calls), fading with distance from the
+   supertank. A test decodes every embedded file.
 8. **Campaign.** The music route as the mission spine, `test`, `snow` and
    `egypt2` as the first maps, new maps for the rest (an in-game or offline level
    format for new terrain; the original editor is not portable). Story
@@ -255,6 +266,7 @@ cargo run --release              # test level
 cargo run --release -- snow      # snow level (also: egypt2)
 cargo run --release -- --info    # what the level reader sees
 cargo run --release -- --at 70,104   # dev aid: start the supertank at a map position
+cargo run --release -- --mute    # no sound (F8 toggles in game, F9 next track)
 cargo test                       # level reader + every bundled cell has a tile colour
 RUST_LOG=debug cargo run --release 2>calvary.log   # session log
 python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)

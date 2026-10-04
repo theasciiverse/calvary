@@ -235,17 +235,25 @@ impl Game {
             self.tank.main_ammo -= 1;
             self.tank.main_cooldown = tank::reload(self.tank.main_weapon);
             self.tank.flash = 0.12;
+            let sound = match self.tank.main_weapon {
+                "acid" => "fire/supertank_acid_main_barrel_interrior_22khz.mp3",
+                "napalm" => "fire/supertank_plazma_fireball_22khz.mp3",
+                _ => "fire/supertank/main1.mp3",
+            };
+            self.world.sound(sound, None, 0.8);
             self.fire(ShotKind::Shell, self.tank.main_weapon, 16.0, 14.0, 0.0);
         }
         if c.fire_chain && self.tank.chain_cooldown == 0.0 && self.tank.chain_ammo > 0 {
             self.tank.chain_ammo -= 1;
             self.tank.chain_cooldown = CHAIN_RELOAD;
             let spread = (self.rand() - 0.5) * 0.08;
+            self.world.sound("fire/machine_gun_fire_22khz_lp.wav", None, 0.5);
             self.fire(ShotKind::Bullet, "chain_gun", 24.0, 8.0, spread);
         }
         if c.fire_missile && self.tank.missiles > 0 && self.tank.rocket_cooldown == 0.0 {
             self.tank.missiles -= 1;
             self.tank.rocket_cooldown = tank::reload(self.tank.rocket_weapon);
+            self.world.sound("fire/supertank_fires_rocket_22khz.mp3", None, 0.8);
             self.fire(ShotKind::Missile, self.tank.rocket_weapon, 9.0, 30.0, 0.0);
         }
         if c.turret == 0 {
@@ -352,6 +360,15 @@ impl Game {
             true
         });
         for (kind, weapon, x, y, struck) in hits {
+            let boom = match weapon {
+                "acid" => "explosion/acid.mp3",
+                "nuke_missile" | "vortex_missile" => "explosion/super_mortar.mp3",
+                _ if kind == ShotKind::Bullet => "",
+                _ => "explosion/old_generic.mp3",
+            };
+            if !boom.is_empty() {
+                self.world.sound(boom, Some((x, y)), 0.7);
+            }
             log::debug!(
                 "impact {kind:?} at ({x:.1},{y:.1}) struck {:?} ground {:.2}",
                 struck.map(|i| &self.world.entities[i].kind),
