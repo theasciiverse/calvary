@@ -73,17 +73,59 @@ pub fn camera(g: &Game, heading: f32, up: f32) -> (f32, f32, f32) {
     (x, y, (tank_ground + up).max(own_ground + 1.0))
 }
 
-pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
+/// The projection for a view of `area`: horizon row and focal length (in
+/// pixels) and the camera position.
+struct View {
+    w: usize,
+    h: usize,
+    horizon: f32,
+    focal: f32,
+    cam: (f32, f32, f32),
+}
+
+fn view(g: &Game, area: Rect) -> View {
     let (w, h) = (area.width as usize, area.height as usize * 2);
+    let horizon = h as f32 * HORIZON;
+    let focal = (w.max(1) as f32 / 2.0) / (FOV / 2.0).tan();
+    // high enough that the tank lands at TANK_AT of the view
+    let up = ((TANK_AT * h as f32 - horizon) * BACK / focal).clamp(1.2, 6.0);
+    View { w, h, horizon, focal, cam: camera(g, g.chase_heading, up) }
+}
+
+/// What the mouse points at in follow mode: the ground under screen cell
+/// (col, row) of the view `area`, found by marching that column's ray as the
+/// renderer does, or None when it points at the sky (then aim along the
+/// column at full range). Also returns the column's map angle.
+pub fn pick(g: &Game, area: Rect, col: u16, row: u16) -> (f32, Option<(f32, f32)>) {
+    let v = view(g, area);
+    let (cx, cy, cz) = v.cam;
+    let a = ((col.saturating_sub(area.x) as f32 + 0.5) / v.w.max(1) as f32 - 0.5) * FOV;
+    let angle = g.chase_heading + a;
+    let (rx, ry) = (angle.cos(), angle.sin());
+    let py = (row.saturating_sub(area.y) as f32 + 0.5) * 2.0;
+    let mut dist = 0.6;
+    while dist < FAR {
+        let (x, y) = (cx + rx * dist, cy + ry * dist);
+        if g.terrain.cell_at(x, y).is_some() {
+            let sy = v.horizon + (cz - g.terrain.height(x, y) * RELIEF) * v.focal / (dist * a.cos());
+            if sy <= py {
+                return (angle, Some((x, y)));
+            }
+        }
+        dist += 0.12 + dist * 0.012;
+    }
+    (angle, None)
+}
+
+pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
+    let v = view(g, area);
+    let (w, h) = (v.w, v.h);
     if w == 0 || h == 0 {
         return;
     }
     let heading = g.chase_heading;
-    let horizon = h as f32 * HORIZON;
-    let focal = (w as f32 / 2.0) / (FOV / 2.0).tan();
-    // high enough that the tank lands at TANK_AT of the view
-    let up = ((TANK_AT * h as f32 - horizon) * BACK / focal).clamp(1.2, 6.0);
-    let (cx, cy, cz) = camera(g, heading, up);
+    let (horizon, focal) = (v.horizon, v.focal);
+    let (cx, cy, cz) = v.cam;
     let mut f = Frame { w, h, px: vec![(0, 0, 0); w * h], depth: vec![f32::MAX; w * h] };
 
     // sky
@@ -323,7 +365,23 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::{Game, View};
+    use crate::game::{Game, View as GameView};
+
+    /// The mouse picks the ground the renderer drew: the screen centre at the
+    /// tank's row lands on the ground by the tank, the top row is sky.
+    #[test]
+    fn picking_matches_the_projection() {
+        let mut g = Game::new(0).unwrap();
+        g.view = crate::game::View::Chase;
+        g.chase_heading = g.tank.heading;
+        let area = Rect::new(0, 0, 160, 42);
+        let tank_row = (TANK_AT * area.height as f32) as u16;
+        let (angle, ground) = pick(&g, area, area.width / 2, tank_row);
+        assert!((angle - g.tank.heading).abs() < 0.02);
+        let (x, y) = ground.expect("ground under the tank");
+        assert!((x - g.tank.x).hypot(y - g.tank.y) < 2.0, "picked ({x:.1},{y:.1}), tank at ({:.1},{:.1})", g.tank.x, g.tank.y);
+        assert!(pick(&g, area, area.width / 2, 0).1.is_none(), "top row is sky");
+    }
 
     /// `cargo test --release chase_frame_time -- --ignored --nocapture`:
     /// how long one follow-mode frame takes at several terminal sizes.
@@ -331,7 +389,7 @@ mod tests {
     #[ignore]
     fn chase_frame_time() {
         let mut g = Game::new(0).unwrap();
-        g.view = View::Chase;
+        g.view = GameView::Chase;
         g.chase_heading = g.tank.heading;
         for (w, h) in [(80, 24), (160, 45), (240, 70), (300, 100)] {
             let area = Rect::new(0, 0, w, h);

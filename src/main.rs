@@ -314,12 +314,19 @@ fn run(
 fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: event::MouseEvent) {
     let here = (m.column, m.row);
     let tactical = game.view == game::View::Tactical;
+    // the mouse aims and fires in both driving views
+    let aiming = tactical || game.view == game::View::Chase;
     input.mouse_at = Some(here);
     match m.kind {
         MouseEventKind::Moved => {
-            if tactical {
+            if aiming {
                 input.mouse_aiming = true;
             }
+        }
+        MouseEventKind::Down(MouseButton::Left) if game.view == game::View::Chase => {
+            // follow mode: no selecting by click, the left button only fires
+            input.mouse_aiming = true;
+            input.mouse_main = true;
         }
         MouseEventKind::Down(MouseButton::Left) => {
             game.drag = Some((here, here));
@@ -372,13 +379,13 @@ fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: 
             }
         }
         MouseEventKind::Down(MouseButton::Right) => {
-            let Some((x, y, reach)) = render::screen_to_map(game, size, here.0, here.1) else { return };
-            if game.selected.is_empty() {
-                if tactical {
+            if game.selected.is_empty() || game.view == game::View::Chase {
+                if aiming {
                     input.mouse_chain = true;
                 }
                 return;
             }
+            let Some((x, y, reach)) = render::screen_to_map(game, size, here.0, here.1) else { return };
             match game.world.enemy_at(x, y, reach.max(0.6)) {
                 Some(t) => game.command(world::Command::Attack(t)),
                 None => game.command(world::Command::Move(x, y)),
@@ -397,10 +404,33 @@ fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: 
 fn mouse_aim(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect) {
     game.crosshair = None;
     input.mouse_aim = None;
-    if !input.mouse_aiming || game.view != game::View::Tactical || game.help {
+    if !input.mouse_aiming || game.help {
         return;
     }
     let Some(pos) = input.mouse_at else { return };
+    if game.view == game::View::Chase {
+        // follow mode: the ground under the pointer, or along it into the sky
+        let (map, _) = render::split(size);
+        if pos.1 >= map.y + map.height {
+            return;
+        }
+        let (angle, ground) = chase::pick(game, map, pos.0, pos.1);
+        input.mouse_aim = Some(match ground {
+            Some((x, y)) => {
+                let (dx, dy) = (x - game.tank.x, y - game.tank.y);
+                if dx.hypot(dy) < 0.6 {
+                    return;
+                }
+                (dy.atan2(dx), dx.hypot(dy))
+            }
+            None => (angle, f32::MAX),
+        });
+        game.crosshair = Some(pos);
+        return;
+    }
+    if game.view != game::View::Tactical {
+        return;
+    }
     let Some((x, y, _)) = render::screen_to_map(game, size, pos.0, pos.1) else { return };
     let (dx, dy) = (x - game.tank.x, y - game.tank.y);
     if dx.hypot(dy) < 0.6 {
@@ -444,6 +474,32 @@ mod tests {
 
     fn mouse(kind: MouseEventKind, at: (u16, u16)) -> MouseEvent {
         MouseEvent { kind, column: at.0, row: at.1, modifiers: KeyModifiers::NONE }
+    }
+
+    #[test]
+    fn mouse_aims_and_fires_in_follow_mode() {
+        let size = Rect::new(0, 0, 160, 45);
+        let mut game = Game::new(0).unwrap();
+        game.help = false;
+        game.cycle_view();
+        assert_eq!(game.view, game::View::Chase);
+        let mut input = Input::new(false);
+        // a point right of centre, on the ground below the horizon
+        let at = (120, 34);
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Moved, at));
+        mouse_aim(&mut game, &mut input, size);
+        let (angle, _) = input.mouse_aim.expect("aiming in follow mode");
+        // right of centre turns the aim clockwise of the hull (toward +y of heading)
+        let rel = (angle - game.chase_heading + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+        assert!(rel > 0.05, "aim {rel} should be right of the hull");
+        assert_eq!(game.crosshair, Some(at));
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Left), at));
+        assert!(input.controls(std::time::Instant::now()).fire_main);
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Up(MouseButton::Left), at));
+        // even with units selected, the right button is the machine gun here
+        game.selected = vec![0];
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Right), at));
+        assert!(input.controls(std::time::Instant::now()).fire_chain);
     }
 
     #[test]

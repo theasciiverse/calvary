@@ -588,6 +588,11 @@ pub fn draw(f: &mut Frame, g: &Game) {
         View::Strategy => draw_strategy(f, map, g),
         View::Chase => {
             crate::chase::draw(f.buffer_mut(), map, g);
+            if let Some(pos) = g.crosshair {
+                if let Some(cell) = f.buffer_mut().cell_mut(pos) {
+                    cell.set_char('╋').set_fg(AMBER);
+                }
+            }
             draw_messages(f, map, g);
         }
     }

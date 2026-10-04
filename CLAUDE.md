@@ -251,8 +251,12 @@ object rotation, a tile-transition helper for coastlines.
   screen (raised only to clear the terrain under the camera), so a hill
   ahead blocks the view as it would. Billboards standing between the
   camera and the tank are not drawn, so the tank is never hidden. Tab still
-  opens the map and returns to the view you came from. The mouse does not
-  aim in this view yet, and the camera follows the hull, so a turret locked
+  opens the map and returns to the view you came from. The mouse aims
+  here too: `chase::pick` marches the pointer's column ray like the
+  renderer and finds the ground under the pointer (or, pointing at the
+  sky, aims along that column at full range); left button main gun, right
+  button machine gun (no selecting by click in this view). The camera
+  follows the hull, so a turret locked
   far to the side can have its target off screen (a turret-follow camera is
   an option). Frame time, `cargo test --release chase_frame_time --
   --ignored --nocapture`: about 1.2 ms at 160x45, 2.5 ms at 300x100.
