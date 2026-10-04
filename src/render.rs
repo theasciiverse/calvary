@@ -634,7 +634,7 @@ pub fn draw_help(f: &mut Frame, full: Rect) {
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(GREEN))
         .title(Span::styled(" CALVARY: CONTROLS ", Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD)))
-        .title_bottom(Span::styled(" F1 / H / Esc to close ", Style::default().fg(DIM)))
+        .title_bottom(Span::styled(" F1 / H / Esc to close, pad: Start, A or B ", Style::default().fg(DIM)))
         .style(Style::default().bg(Color::Black));
     f.render_widget(Clear, area);
     f.render_widget(Paragraph::new(lines).block(block), area);

@@ -202,6 +202,13 @@ fn run(
         if std::mem::take(&mut input.toggle_lock) && !game.help {
             game.toggle_lock();
         }
+        // with the help window open, the pad's A or B closes it (Start toggles it)
+        if game.help && input.pad_name.is_some() && (input.build.is_some() || input.switch_route) {
+            input.build = None;
+            input.switch_route = false;
+            game.help = false;
+            log::info!("help false (pad)");
+        }
         if std::mem::take(&mut input.switch_route) && !game.help {
             let (x, y) = (game.tank.x, game.tank.y);
             if game.world.switch_junction(x, y, 12.0).is_none() {
