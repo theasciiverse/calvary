@@ -352,6 +352,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
     // crosshair where the turret points, 12 cells out
     let aim_at = (t.x + aim.cos() * 12.0, t.y + aim.sin() * 12.0);
     let ground = g.terrain.height(aim_at.0, aim_at.1) * RELIEF + 0.5;
+    if !g.show_aim {
+        return;
+    }
     if let Some((sx, sy, _)) = project(aim_at.0, aim_at.1, ground) {
         let (cx_, cy_) = (sx as i32, (sy / 2.0) as i32);
         if cx_ >= 0 && cy_ >= 0 && (cx_ as u16) < area.width && (cy_ as u16) < area.height {

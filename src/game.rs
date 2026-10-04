@@ -94,6 +94,8 @@ pub struct Game {
     prev_view: View,
     /// Mouse aim point on screen, for the crosshair.
     pub crosshair: Option<(u16, u16)>,
+    /// Follow mode marks where the turret points (off for the credits' battle).
+    pub show_aim: bool,
     /// Distance to the mouse aim point: shells land there.
     aim_range: Option<f32>,
     pub shots: Vec<Shot>,
@@ -146,6 +148,7 @@ impl Game {
             chase_heading: 0.0,
             prev_view: View::Tactical,
             crosshair: None,
+            show_aim: true,
             aim_range: None,
             shots: Vec::new(),
             particles: Vec::new(),

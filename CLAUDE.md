@@ -353,13 +353,10 @@ Open questions:
 - Pace: units drive at the original 0.08 cells per tick (0.8 cells/s), so
   on `test` a push takes about five minutes. Faithful, maybe slow for a
   terminal session; a game-speed option is easy if playtesting says so.
-- Credits tribute (waiting on David): the fork's movie level carries a
-  Crack dot Com logo billboard (`1crackbillboard*`, plasma ball and
-  lightning) and the team's group photo on a supertank (`1group_ontank*`).
-  Showing them on the Credits screen in half-block pixels would be a
-  fitting nod; still to check that both are in the 1998 public-domain
-  textures (not only the fork), and David to decide given that "Crack dot
-  Com" stays a trademark and the photo shows real people.
+- Credits tribute (done 2026-10-04): the team photo on a supertank
+  (`1group_ontank*`, in the 1998 public-domain textures) opens the
+  credits. The Crack dot Com billboard is not used ("Crack dot Com" stays
+  a trademark).
 - Globe shape (settled 2026-10-04): in David's terminal the title globe
   comes out a little taller than wide (no pixel size reported, so the 2:1
   cell fallback is used). He likes it that way: leave it, no aspect fix.
@@ -475,13 +472,34 @@ release's own textures, `1group_ontank_*`; it was a billboard in their
 movie level), then name cards over it one by one (Dave Taylor, Jonathan
 Clark, Carly Taylor, Gene Rosenburg), then the full roll rising with game
 sprites alongside it (supertanks, peon and cobra tanks, helicopter,
-bomber, jet...), then a night sky with fireworks and "Thank you for
-playing." The roll lists the Golgotha team exactly as crack.com's credits
+bomber, jet...), then the finale. The roll is drawn in Braille dots with
+the public domain X11 misc-fixed 5x8 font (`data/font5x8.txt`, baked by
+`tools/font5x8.py`; headings at twice the size) and moves a quarter row
+at a time, 4 rows a second; lines are kept to about 35 characters so it
+fits 120 columns, and narrower terminals fall back to plain text a row at
+a time. The finale: Switzerland (`snow`) playing itself in the follow
+view, framed like a picture (a thin gilt frame, about 2:1, black around;
+full screen only when the terminal is too small), muted to near grey, our garage building and the supertank riding
+behind the lead of the convoy (firing at what comes near, backing out
+when stuck), with "Thank you / for playing." under it in large
+half-block letters from the same font. The roll lists the Golgotha team exactly as crack.com's credits
 page did (copy and URL in
 `references/Golgotha/crack-com-story/`), including Carly Taylor as the
 creator of the name and the plot. Esc in a battle returns to the title
 (opening skipped); Ctrl+C quits outright; `--no-intro` starts at the
 title; a level, map or `--at` argument skips the title entirely.
+
+## A sequel idea: Hellas Planitia (David, 2026-10-04)
+
+David sees a follow-up set on Mars, at Hellas Planitia, the great impact
+basin (about 2,300 km across and 7 km deep, the lowest ground on the
+planet). The original story never leaves Earth (checked against the
+recovered crack.com pages), so this would be our own continuation; the
+teaser's "awesome supernatural conflict behind a veil of political
+discord" is the natural bridge. Engine-wise it is mostly data: a red
+terrain palette, thinner air and lower gravity for the shell arcs, and the
+title globe turning from Earth to Mars. Mars imagery for the globe: NASA
+(MOLA, Viking mosaics); check the exact licence of the chosen map first.
 
 ## The catalog position
 
