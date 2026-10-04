@@ -171,6 +171,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
         if e.class == Class::PlayerTank {
             continue;
         }
+        // nothing standing between the camera and the tank: it would hide it
+        let (dx, dy) = (e.x - cx, e.y - cy);
+        if dx * hx + dy * hy < BACK - 0.6 && (dx * right.0 + dy * right.1).abs() < 1.6 + e.radius() {
+            continue;
+        }
         let alive = e.alive;
         if !alive && matches!(e.class, Class::Vehicle | Class::EnemyTank | Class::Plane) {
             continue;
@@ -279,6 +284,34 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             if let Some(cell) = buf.cell_mut((area.x + cx_ as u16, area.y + cy_ as u16)) {
                 cell.set_char('╋').set_fg(Color::Rgb(255, 180, 40));
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::{Game, View};
+
+    /// `cargo test --release chase_frame_time -- --ignored --nocapture`:
+    /// how long one follow-mode frame takes at several terminal sizes.
+    #[test]
+    #[ignore]
+    fn chase_frame_time() {
+        let mut g = Game::new(0).unwrap();
+        g.view = View::Chase;
+        g.chase_heading = g.tank.heading;
+        for (w, h) in [(80, 24), (160, 45), (240, 70), (300, 100)] {
+            let area = Rect::new(0, 0, w, h);
+            let mut buf = Buffer::empty(area);
+            let n = 30;
+            let t0 = std::time::Instant::now();
+            for i in 0..n {
+                g.chase_heading += 0.05 * i as f32;
+                draw(&mut buf, area, &g);
+            }
+            let ms = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+            println!("{w}x{h}: {ms:.2} ms per frame");
         }
     }
 }

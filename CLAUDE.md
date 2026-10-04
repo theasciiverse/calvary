@@ -249,8 +249,13 @@ object rotation, a tile-transition helper for coastlines.
   camera sits behind the tank on a heading that eases after the hull,
   anchored to the tank's ground so the tank stays three quarters down the
   screen (raised only to clear the terrain under the camera), so a hill
-  ahead blocks the view as it would. Tab still opens the map and returns
-  to the view you came from. The mouse does not aim in this view yet.
+  ahead blocks the view as it would. Billboards standing between the
+  camera and the tank are not drawn, so the tank is never hidden. Tab still
+  opens the map and returns to the view you came from. The mouse does not
+  aim in this view yet, and the camera follows the hull, so a turret locked
+  far to the side can have its target off screen (a turret-follow camera is
+  an option). Frame time, `cargo test --release chase_frame_time --
+  --ignored --nocapture`: about 1.2 ms at 160x45, 2.5 ms at 300x100.
 - **First person (next):** the same renderer with the camera at the
   turret looking along the aim, as the third entry in M's cycle.
 - **Earlier note, first person / chase view (v2):** the original's main driving view. The
