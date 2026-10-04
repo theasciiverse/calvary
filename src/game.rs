@@ -45,6 +45,13 @@ pub struct Shot {
     pub vx: f32,
     pub vy: f32,
     pub range: f32,
+    /// Ballistic flight: launch height, straight-line climb to the landing
+    /// height over `span` cells, plus an arc peaking `apex` cells above it.
+    pub z0: f32,
+    pub climb: f32,
+    pub span: f32,
+    pub apex: f32,
+    pub flown: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -63,6 +70,9 @@ pub struct Game {
     pub terrain: Terrain,
     pub tank: Tank,
     pub world: World,
+    /// Turret lock: the turret tracks the nearest enemy in gun range.
+    pub lock: bool,
+    lock_on: Option<usize>,
     pub shots: Vec<Shot>,
     pub particles: Vec<Particle>,
     pub view: View,
@@ -95,6 +105,8 @@ impl Game {
             terrain,
             tank,
             world,
+            lock: false,
+            lock_on: None,
             shots: Vec::new(),
             particles: Vec::new(),
             view: View::Tactical,
@@ -140,6 +152,40 @@ impl Game {
         }
     }
 
+    pub fn toggle_lock(&mut self) {
+        self.lock = !self.lock;
+        self.lock_on = None;
+        log::info!("turret lock {}", self.lock);
+    }
+
+    /// Name of the locked target, if the lock has one.
+    pub fn lock_target(&self) -> Option<&str> {
+        self.lock_on.filter(|_| self.lock).map(|i| self.world.entities[i].kind.as_str())
+    }
+
+    /// Lock on: the nearest live enemy within gun range (14 cells); the
+    /// swing the turret at it at the turret's own speed.
+    fn track_target(&mut self) {
+        if !self.lock {
+            return;
+        }
+        let (tx, ty) = (self.tank.x, self.tank.y);
+        let w = &self.world;
+        let valid = |i: usize| w.entities[i].is_target() && w.entities[i].team == Team::Enemy && (w.entities[i].x - tx).hypot(w.entities[i].y - ty) <= 14.0;
+        // always the nearest: a tank closing in matters more than a building
+        self.lock_on = (0..w.entities.len()).filter(|&i| valid(i)).min_by(|&a, &b| {
+            let d = |i: usize| (w.entities[i].x - tx).hypot(w.entities[i].y - ty);
+            d(a).total_cmp(&d(b))
+        });
+        if let Some(i) = self.lock_on {
+            let e = &self.world.entities[i];
+            let want = (e.y - ty).atan2(e.x - tx) - self.tank.heading;
+            let diff = (want - self.tank.turret + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+            let step = 3.0 * DT;
+            self.tank.turret = (self.tank.turret + diff.clamp(-step, step)).rem_euclid(std::f32::consts::TAU);
+        }
+    }
+
     /// Supertank health as a fraction, from its world entity.
     pub fn tank_health(&self) -> f32 {
         self.world.player_tank.map_or(1.0, |i| {
@@ -175,6 +221,9 @@ impl Game {
         if c.fire_missile && self.tank.missiles > 0 {
             self.tank.missiles -= 1;
             self.fire(ShotKind::Missile, 9.0, 30.0, 0.0);
+        }
+        if c.turret == 0 {
+            self.track_target();
         }
         self.world.place_player_tank(self.tank.x, self.tank.y, self.tank.heading);
         self.step_shots();
@@ -230,7 +279,23 @@ impl Game {
         let (x, y) = (t.x + a.cos() * 1.1, t.y + a.sin() * 1.1);
         let z = self.terrain.height(t.x, t.y) + 0.6;
         log::debug!("fire {kind:?} from ({x:.1},{y:.1}) aim {a:.2}");
-        self.shots.push(Shot { kind, x, y, z, vx: a.cos() * speed, vy: a.sin() * speed, range });
+        // shells and missiles fly an arc to the locked target, or to full range;
+        // bullets fly flat
+        let (span, land) = self
+            .lock_on
+            .filter(|_| self.lock && kind != ShotKind::Bullet)
+            .map(|i| {
+                let e = &self.world.entities[i];
+                ((e.x - x).hypot(e.y - y).clamp(1.0, range), self.terrain.height(e.x, e.y) + 0.4)
+            })
+            .unwrap_or_else(|| {
+                let (ex, ey) = (x + a.cos() * range, y + a.sin() * range);
+                (range, self.terrain.height(ex, ey).max(z - 1.0))
+            });
+        let climb = (land - z) / span;
+        let apex = if kind == ShotKind::Bullet { 0.0 } else { span * 0.18 };
+        let range = if kind == ShotKind::Bullet { range } else { span + 0.5 };
+        self.shots.push(Shot { kind, x, y, z, vx: a.cos() * speed, vy: a.sin() * speed, range, z0: z, climb, span, apex, flown: 0.0 });
     }
 
     fn step_shots(&mut self) {
@@ -239,7 +304,11 @@ impl Game {
         self.shots.retain_mut(|s| {
             s.x += s.vx * DT;
             s.y += s.vy * DT;
-            s.range -= (s.vx * s.vx + s.vy * s.vy).sqrt() * DT;
+            let flown = (s.vx * s.vx + s.vy * s.vy).sqrt() * DT;
+            s.range -= flown;
+            s.flown += flown;
+            let f = (s.flown / s.span).min(1.0);
+            s.z = s.z0 + s.climb * s.flown + 4.0 * s.apex * f * (1.0 - f);
             let ground = terrain.height(s.x, s.y);
             let off_map = terrain.cell_at(s.x, s.y).is_none();
             let struck = world.hit_test(s.x, s.y, Team::Player);
@@ -257,6 +326,11 @@ impl Game {
                 ShotKind::Bullet => "chain_gun",
                 ShotKind::Missile => "heavy_rocket",
             };
+            log::debug!(
+                "impact {kind:?} at ({x:.1},{y:.1}) struck {:?} ground {:.2}",
+                struck.map(|i| &self.world.entities[i].kind),
+                self.terrain.height(x, y)
+            );
             if self.world.outcome == Outcome::Playing {
                 self.world.damage(weapon, x, y, struck, Team::Player);
             }

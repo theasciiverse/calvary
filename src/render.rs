@@ -207,6 +207,11 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
+    for e in &w.entities {
+        if e.class != Class::PlayerTank {
+            sprites::paint_health(&mut layer, e);
+        }
+    }
     let t = &g.tank;
     let hit = w.player_tank.map_or(0.0, |i| w.entities[i].flash);
     let pose = Pose { x: t.x, y: t.y, heading: t.heading, aim: t.aim(), odometer: t.odometer, muzzle: t.flash, hit };
@@ -341,6 +346,11 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
         label("  map "),
         value(format!("{} ({view})", g.terrain.name)),
         if t.blocked { Span::styled("  BLOCKED", Style::default().fg(AMBER)) } else { Span::raw("") },
+        match g.lock_target() {
+            Some(name) => Span::styled(format!("  LOCK {}", name.replace('_', " ")), Style::default().fg(Color::Rgb(235, 70, 55)).add_modifier(Modifier::BOLD)),
+            None if g.lock => Span::styled("  LOCK -", Style::default().fg(DIM)),
+            None => Span::raw(""),
+        },
     ]);
     let mut build = vec![label(" BUILD ")];
     for (i, kind) in BUILDABLE.iter().enumerate() {
@@ -354,7 +364,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     if queued > 0 {
         build.push(label(&format!("  queued {queued}")));
     }
-    let line3 = Line::from(label(" W/S gear  A/D turn  Q/E turret  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  F1/H help  ESC quit"));
+    let line3 = Line::from(label(" W/S gear  A/D turn  Q/E turret  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  T lock  F1/H help  ESC quit"));
     f.render_widget(Paragraph::new(vec![line1, Line::from(build), line3]).style(Style::default().bg(Color::Black)), area);
 
     if w.outcome != Outcome::Playing {
@@ -449,6 +459,7 @@ const HELP: &[(&str, &str)] = &[
     ("", "COMMAND"),
     ("1 - 8", "build a unit at your garage (costs money)"),
     ("J", "switch the route at the junction nearest your supertank"),
+    ("T", "turret lock: track the nearest enemy in gun range"),
     ("", "Units drive the paths to the enemy base; banks pay every 50 s."),
     ("", "Engineers capture banks and towers. Park at your HQ to rearm."),
     ("", "Destroy the enemy HQ to win."),

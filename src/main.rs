@@ -27,7 +27,13 @@ fn main() -> io::Result<()> {
         print_info();
         return Ok(());
     }
-    let start = arg.and_then(|a| LEVELS.iter().position(|l| l.name == a)).unwrap_or(0);
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let start = args.iter().find_map(|a| LEVELS.iter().position(|l| l.name == *a)).unwrap_or(0);
+    // developer aid: `--at X,Y` starts the supertank at a map position
+    let at = args.iter().position(|a| a == "--at").and_then(|i| args.get(i + 1)).and_then(|v| {
+        let (x, y) = v.split_once(',')?;
+        Some((x.parse::<f32>().ok()?, y.parse::<f32>().ok()?))
+    });
     let mut terminal = ratatui::init();
     let kitty = supports_keyboard_enhancement().unwrap_or(false);
     if kitty {
@@ -37,7 +43,7 @@ fn main() -> io::Result<()> {
         execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
     }
     log::info!("start kitty_keyboard={kitty}");
-    let result = run(&mut terminal, start, kitty);
+    let result = run(&mut terminal, start, at, kitty);
     if kitty {
         let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
     }
@@ -45,8 +51,12 @@ fn main() -> io::Result<()> {
     result
 }
 
-fn run(terminal: &mut DefaultTerminal, start: usize, kitty: bool) -> io::Result<()> {
+fn run(terminal: &mut DefaultTerminal, start: usize, at: Option<(f32, f32)>, kitty: bool) -> io::Result<()> {
     let mut game = Game::new(start).map_err(io::Error::other)?;
+    if let Some((x, y)) = at {
+        game.tank.x = x;
+        game.tank.y = y;
+    }
     let mut input = Input::new(kitty);
     let tick = Duration::from_secs_f32(DT);
     let mut next = Instant::now() + tick;
@@ -76,6 +86,9 @@ fn run(terminal: &mut DefaultTerminal, start: usize, kitty: bool) -> io::Result<
             } else {
                 input.quit = true;
             }
+        }
+        if std::mem::take(&mut input.toggle_lock) && !game.help {
+            game.toggle_lock();
         }
         if std::mem::take(&mut input.switch_route) && !game.help {
             let (x, y) = (game.tank.x, game.tank.y);

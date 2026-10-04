@@ -379,3 +379,22 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         Some((c, false))
     });
 }
+
+/// A thin health bar above anything that has taken damage.
+pub fn paint_health(layer: &mut PixelLayer, e: &Entity) {
+    if !e.alive || e.class == Class::Prop || e.hp >= e.max_hp {
+        return;
+    }
+    let k = (e.hp / e.max_hp).clamp(0.0, 1.0);
+    let half = (e.radius() * 0.9).max(0.45);
+    let thick = layer.pixel_size() * 0.6;
+    let y = e.y - e.radius() - thick * 2.0;
+    let color = if k > 0.5 { (90, 220, 110) } else if k > 0.25 { (255, 180, 40) } else { (235, 70, 55) };
+    let (x0, x1) = (e.x - half, e.x - half + 2.0 * half * k);
+    layer.paint(e.x, y, half + 0.2, |x, py| {
+        if (py - y).abs() > thick || x < e.x - half || x > e.x + half {
+            return None;
+        }
+        Some((if x >= x0 && x <= x1 { color } else { (40, 40, 38) }, true))
+    });
+}

@@ -535,7 +535,9 @@ impl World {
             if let Some(w) = weapon {
                 if d <= wrange {
                     if self.entities[i].cooldown == 0.0 {
-                        let delay = stats.map_or(1.0, |s| s.fire_delay).max(1.0) / ORIGINAL_HZ;
+                        // the supertank row has fire delay 0; give the computer's
+                        // supertank the player's own 120mm reload instead
+                        let delay = if class == Class::EnemyTank { crate::tank::MAIN_RELOAD } else { stats.map_or(1.0, |s| s.fire_delay).max(1.0) / ORIGINAL_HZ };
                         self.entities[i].cooldown = delay;
                         self.fire(i, w, t);
                     }

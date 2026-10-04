@@ -125,6 +125,22 @@ experiments); `demo`, `ch03`, `axhausen01`, `te01`-`te03`, `castles`,
 `new`, `empty` and `large` read as flat (all heights 5); `egypt` and
 `movie` use an older cell/vertex format the reader does not handle.
 
+Objects and paths: each object section (`0x8000 + i`) is a u16 type id
+(an index into the object type names) followed by the base save block,
+`start_version` u16 version + u16 size (the size includes that 4-byte
+header). The block ends with x, y, h, theta, pitch, roll (f32), flags
+(u32), health (i16), player (u8), so position and owner are read from its
+tail and the serialized Lisp variables in front never need decoding.
+`path_object` adds a second versioned block: two u32 ticks, two u8 link
+counts (team A's end, then the total), then per link a u16 path ref, a u16
+object ref and (version 3) a u32 description. Object refs are u16 indexes
+into the level's object list. On `test`: 854 objects, 251 path nodes;
+player 1 is the human (team A), player 2 the computer (team E), player 0
+neutral (capturable banks and towers), 3 and 4 scenery. Team A's links
+from the player garage reach the enemy garage in 48 nodes.
+`snow` is a skirmish sketch (bases, a few placed units, 6 path nodes, no
+garages); `egypt2` holds scenery only (no bases, no paths).
+
 Format, as implemented in `src/level.rs`: signature
 `check_sum32("GOLG_SECTION_ID=3")` (the original passes length 17, so the
 "2" is never summed), then a directory of (u32 id, u32 absolute offset),
@@ -169,18 +185,26 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
 
 1. **Skeleton (done, 2026-10-04).** Level reader (3 levels), terrain, supertank driving
    and firing, two views, session logging. See "The skeleton" below.
-2. **Objects out of levels.** Decode `li_type_info` and the object sections
-   so bases, factories, banks, turrets, path nodes and the supertank start
-   come straight from the original levels. Fallback if the Lisp decoding
-   fights back: build the fork once (32-bit) and add a dump-to-JSON tool.
-3. **Ground war on paths.** Factories, the path network, peon tank, rocket
-   tank, electric car, trike, bomb truck, engineer (takeover), bridger;
-   turrets and towers; banks and money. Port `balance.scm` 1:1 as data.
-   Health, damage, the supertank upgrade levels, HQ refill.
-4. **Strategy layer.** Build bar, choosing paths for new units (mouse click
-   on path nodes, keyboard cycling as fallback), unit select/unlink/stop,
-   the radar with icons. Win/lose on HQ destruction.
-5. **AI.** Port `ai_joe` (build logic and formations), then tune.
+2. **Objects out of levels (done, 2026-10-04).** No Lisp decoding needed:
+   see "Objects and paths" under Level files.
+3. **Ground war on paths (mostly done, 2026-10-04).** Garage builds (keys
+   1-8), units drive the team's path links, fight, die; towers, the enemy
+   supertank, banks and money, engineers capture, trikes and bomb trucks
+   ram, `balance.scm` embedded verbatim and parsed at startup, HQ rearm,
+   supertank lives and respawn, win/lose on HQ destruction. Still open:
+   bridger, the supertank upgrade levels, money planes flying the crates
+   (income is paid directly for now), units placed in `snow` that have no
+   garage to come from.
+4. **Strategy layer (started).** Build bar in the HUD, J switches the
+   route at the junction nearest the supertank, the strategy map draws the
+   path network (chosen branches bright) and icons for every structure and
+   unit. Still open: mouse clicks on path nodes, unit select/unlink/stop.
+5. **AI.** The computer now buys a weighted random unit every 5-11 s and
+   picks junction branches by rotation; port `ai_joe` (build logic and
+   formations) next, then tune. Balance probe:
+   `cargo test --release battle_report -- --ignored --nocapture` plays 12
+   minutes of a scripted player against the computer (the computer wins
+   around 7 minutes when the player has no supertank in the fight).
 6. **Air.** Helicopter, jet, bomber, money plane on the pink air paths.
 7. **Sound.** The 15 tracks and the sfx through a Rust audio crate (decoding
    in Rust, so mpg123 never ships). Narrative clips for the radio barks.
@@ -197,6 +221,9 @@ Open questions:
 - Which fork level is the Switzerland demo and which the Cairo one.
 - The flat levels (`ch03`, `axhausen01`, ...): genuinely flat, or terrain
   stored somewhere the reader does not look yet.
+- Pace: units drive at the original 0.08 cells per tick (0.8 cells/s), so
+  on `test` a push takes about five minutes. Faithful, maybe slow for a
+  terminal session; a game-speed option is easy if playtesting says so.
 
 ## The skeleton
 
@@ -204,6 +231,7 @@ Open questions:
 cargo run --release              # test level
 cargo run --release -- snow      # snow level (also: egypt2)
 cargo run --release -- --info    # what the level reader sees
+cargo run --release -- --at 70,104   # dev aid: start the supertank at a map position
 cargo test                       # level reader + every bundled cell has a tile colour
 RUST_LOG=debug cargo run --release 2>calvary.log   # session log
 python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)
@@ -211,18 +239,24 @@ python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)
 
 Controls: W/S throttle gear (sticky: R, N, 1, 2, 3, so driving works on
 terminals that never report key release), A/D turn, Q/E turret, SPACE main
-gun, F machine gun, ENTER guided missile (two, fired straight for now), TAB
+gun, F machine gun, ENTER heavy rocket (two), 1-8 build at the garage,
+J switch route at the nearest junction, T turret lock (tracks the nearest
+enemy within 14 cells and aims shells at its height), TAB
 or M strategy view, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6
 columns per map cell; contour spacing scales with it), `[` `]` previous/next level, F1/H/? help window (opens
 at start, pauses the game), ESC closes help or quits. With the kitty
 keyboard protocol keys are exact; otherwise a key counts as held while OS
 repeats keep arriving.
 
-Layout: `src/level.rs` (format reader + tests), `src/terrain.rs` (heights,
-tile colours, shading), `src/tank.rs` (supertank, numbers from
-`balance.scm`), `src/game.rs` (world, shots, particles, bundled levels),
-`src/input.rs`, `src/render.rs`, `data/levels/` (verbatim copies from the
-fork), `data/tile_colors.tsv` (generated: name, colour, flags, aliases).
+Layout: `src/level.rs` (format reader, objects, paths + tests),
+`src/balance.rs` (reads `data/balance.scm`), `src/terrain.rs` (heights,
+tile colours, shading), `src/tank.rs` (supertank physics), `src/world.rs`
+(entities, path graph, combat, economy, computer player, battle probe),
+`src/game.rs` (ties the supertank, its shots, the world and particles
+together; bundled levels), `src/sprites.rs` (half-block pixel layer and
+every sprite), `src/render.rs` (views, HUD, help), `src/input.rs`,
+`data/levels/` and `data/balance.scm` (verbatim copies from the fork),
+`data/tile_colors.tsv` (generated: name, colour, flags, aliases).
 
 The tactical camera holds still while the tank is in the middle 40% of
 the view, scrolls only near the edges, stops at the map border, and always
@@ -232,8 +266,13 @@ terrain every frame and make the ground shimmer).
 Colour-key textures (`pink`, `alpha`) that some levels use as stray marker
 cells are painted like their neighbours.
 
-Shots fly level at muzzle height and stop when the terrain rises above
-them, so hills give cover. Blocking tiles (the original `BLOCKING` flag,
+Shells and rockets fly a ballistic arc (apex 18% of the distance) to the
+locked target or to full range, and stop where the terrain rises above
+them, so tall hills still give cover; machine gun bullets fly flat. The
+player's weapons use the table's b120mm, chain_gun and heavy_rocket.
+Unit weapons fly to their target point (guided missiles and rockets home)
+and instant weapons (speed 0: bolt, electric beam) hit at once and draw a
+beam. Health bars appear over anything damaged. Blocking tiles (the original `BLOCKING` flag,
 e.g. rock edges along rivers) and slopes steeper than 1.6 stop the tank.
 
 Session logging follows the Asciiverse convention: every raw key event, view,
@@ -269,7 +308,9 @@ if not already done.)
 
 ## Status
 
-Playable skeleton: drive and shoot across three original terrain levels.
-No units, no objectives yet.
+Playable battle on `test`: both bases, the path network, units built from
+the garage, towers, banks, capturable neutrals, the computer player, and a
+win/lose condition. `snow` and `egypt2` load their objects but are not
+full battles (see Level files).
 Conceived 2026-07-02 at scout camp. Renamed from Golgotha 2026-07-08.
-Sources checked and skeleton built 2026-10-04.
+Sources checked, skeleton built, objects/paths/units/economy added 2026-10-04.

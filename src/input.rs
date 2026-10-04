@@ -60,6 +60,7 @@ pub struct Input {
     /// Garage build slot (keys 1-8).
     pub build: Option<usize>,
     pub switch_route: bool,
+    pub toggle_lock: bool,
 }
 
 impl Input {
@@ -78,6 +79,7 @@ impl Input {
             zoom_step: 0,
             build: None,
             switch_route: false,
+            toggle_lock: false,
         }
     }
 
@@ -121,6 +123,7 @@ impl Input {
             KeyCode::Tab | KeyCode::Char('m') | KeyCode::Char('M') => self.toggle_view = true,
             KeyCode::Char(']') => self.level_step += 1,
             KeyCode::Char('j') | KeyCode::Char('J') => self.switch_route = true,
+            KeyCode::Char('t') | KeyCode::Char('T') => self.toggle_lock = true,
             KeyCode::Char(c @ '1'..='8') => self.build = Some(c as usize - '1' as usize),
             KeyCode::Char('+') | KeyCode::Char('=') => self.zoom_step += 1,
             KeyCode::Char('-') | KeyCode::Char('_') => self.zoom_step -= 1,
