@@ -270,10 +270,11 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
    turret lost, supertank lost, enemy base destroyed, mission failed, and
    the per-unit "vehicle ready" calls), fading with distance from the
    supertank. A test decodes every embedded file.
-8. **Campaign.** The music route as the mission spine, `test`, `snow` and
-   `egypt2` as the first maps, new maps for the rest (an in-game or offline level
-   format for new terrain; the original editor is not portable). Story
-   text, briefings, the missing script written fresh.
+8. **Campaign (drafted, 2026-10-04).** Forty missions in five acts,
+   following the original premise and music from Iraq through Egypt,
+   Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
+   back to Jerusalem: see `CAMPAIGN.md`. Three missions reuse the existing
+   maps; the rest need a terrain format and map editor of our own.
 9. **v2: first-person driving** (see Rendering).
 
 Open questions:
