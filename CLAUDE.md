@@ -334,10 +334,9 @@ Open questions:
   fitting nod; still to check that both are in the 1998 public-domain
   textures (not only the fork), and David to decide given that "Crack dot
   Com" stays a trademark and the photo shows real people.
-- Globe shape: in David's terminal the title globe comes out a little
-  taller than wide, because the terminal reports no pixel size and the
-  2:1 cell fallback is off for his font. Options: a `CALVARY_CELL_ASPECT`
-  override, or measuring the cell size with an escape-code query.
+- Globe shape (settled 2026-10-04): in David's terminal the title globe
+  comes out a little taller than wide (no pixel size reported, so the 2:1
+  cell fallback is used). He likes it that way: leave it, no aspect fix.
 - Mouse aim is new (2026-10-04) and untested by hand; the pad layout too
   (only detection was verified here).
 
