@@ -184,6 +184,22 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
 (`li_save_object`) before their position, so they need the level's
 `li_type_info` section decoded first; not done yet.
 
+### Calvary's own maps (`.cmap`)
+
+New maps (the campaign's 37 new missions) use a plain-text TOML format,
+`src/cmap.rs` (format description at the top of that file): name, size,
+optional music track, a legend of one printable character per tile type
+(`char flags name`, with the original's level-facing tile names and its
+water/blocking flags), the tile grid as rows of those characters, vertex
+heights as rows of two-digit hex, and one object per line
+(`kind player x y theta health [A:links] [E:links]`, path links naming
+other lines by index). It loads into the same `Level` the original reader
+produces, so the game runs on it unchanged. `calvary --export LEVEL
+OUT.cmap` writes a bundled level in it, `calvary path/to/map.cmap` plays
+one, and a test round-trips all three bundled levels with no difference
+in heights, tiles, objects or links. `maps/piraeus.cmap` is the `test`
+level exported (campaign mission 15). Next: the map editor.
+
 ## Rendering
 
 - **Tactical view (built):** top-down, centred on the supertank. One map
@@ -304,6 +320,8 @@ cargo run --release -- snow      # snow level (also: egypt2)
 cargo run --release -- --info    # what the level reader sees
 cargo run --release -- --at 70,104   # dev aid: start the supertank at a map position
 cargo run --release -- --mute    # no sound (F8 toggles in game, F9 next track)
+cargo run --release -- --export snow maps/zurich.cmap   # a bundled level as .cmap
+cargo run --release -- maps/piraeus.cmap                # play a .cmap
 cargo test                       # level reader + every bundled cell has a tile colour
 RUST_LOG=debug cargo run --release 2>calvary.log   # session log
 python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)

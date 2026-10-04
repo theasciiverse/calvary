@@ -99,13 +99,21 @@ impl Game {
     pub fn new(level_index: usize) -> Result<Game, String> {
         let src = &LEVELS[level_index];
         let level = Level::parse(src.data).map_err(|e| format!("{}: {e}", src.name))?;
-        let terrain = Terrain::from_level(src.name, &level);
-        let world = World::from_level(&level);
+        let mut game = Game::from_level(src.name, &level);
+        game.level_index = level_index;
+        Ok(game)
+    }
+
+    /// A game on any parsed level: a bundled original or a `.cmap`.
+    pub fn from_level(name: &str, level: &Level) -> Game {
+        let level_index = 0;
+        let terrain = Terrain::from_level(name, level);
+        let world = World::from_level(level);
         // the level's own supertank start, else open ground near the centre
         let start = world.player_tank.map(|i| (world.entities[i].x, world.entities[i].y, world.entities[i].heading));
         let (cx, cy) = start.map_or((terrain.w as f32 / 2.0, terrain.h as f32 / 2.0), |s| (s.0, s.1));
         let (x, y) = spawn_point(&terrain, cx, cy);
-        log::info!("level {} {}x{} spawn ({x:.1},{y:.1})", src.name, terrain.w, terrain.h);
+        log::info!("level {} {}x{} spawn ({x:.1},{y:.1})", name, terrain.w, terrain.h);
         let mut tank = Tank::new(x, y, 0);
         tank.heading = start.map_or(0.0, |s| s.2);
         let mut game = Game {
@@ -128,7 +136,7 @@ impl Game {
             rng: 0x9E37_79B9_7F4A_7C15,
         };
         game.arm_player_entity();
-        Ok(game)
+        game
     }
 
     /// The supertank's world entity takes its hit points from the armour.

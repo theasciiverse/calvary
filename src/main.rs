@@ -1,5 +1,6 @@
 mod audio;
 mod balance;
+mod cmap;
 mod game;
 mod input;
 mod level;
@@ -32,6 +33,27 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // `--export NAME OUT.cmap`: write a bundled level in Calvary's own format
+    if let Some(i) = args.iter().position(|a| a == "--export") {
+        let (Some(name), Some(out)) = (args.get(i + 1), args.get(i + 2)) else {
+            eprintln!("usage: calvary --export LEVEL OUT.cmap   (levels: {})", LEVELS.iter().map(|l| l.name).collect::<Vec<_>>().join(", "));
+            std::process::exit(2);
+        };
+        let src = LEVELS.iter().find(|l| l.name == name).ok_or_else(|| io::Error::other(format!("no bundled level {name}")))?;
+        let level = level::Level::parse(src.data).map_err(io::Error::other)?;
+        let text = cmap::export(&level, src.name, Some(audio::track_for_level(src.name)), terrain::tile_name_for).map_err(io::Error::other)?;
+        std::fs::write(out, text)?;
+        println!("{name} -> {out}");
+        return Ok(());
+    }
+    // a .cmap path plays that map
+    let map = match args.iter().find(|a| a.ends_with(".cmap")) {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)?;
+            Some(cmap::parse(&text).map_err(|e| io::Error::other(format!("{path}: {e}")))?)
+        }
+        None => None,
+    };
     let start = args.iter().find_map(|a| LEVELS.iter().position(|l| l.name == *a)).unwrap_or(0);
     // developer aid: `--at X,Y` starts the supertank at a map position
     let at = args.iter().position(|a| a == "--at").and_then(|i| args.get(i + 1)).and_then(|v| {
@@ -52,7 +74,7 @@ fn main() -> io::Result<()> {
     log::info!("start kitty_keyboard={kitty}");
     // clicks switch routes at junctions, like the original's strategy mode
     execute!(io::stdout(), EnableMouseCapture)?;
-    let result = run(&mut terminal, &mut audio, start, at, kitty);
+    let result = run(&mut terminal, &mut audio, start, map, at, kitty);
     let _ = execute!(io::stdout(), DisableMouseCapture);
     if kitty {
         let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
@@ -61,9 +83,24 @@ fn main() -> io::Result<()> {
     result
 }
 
-fn run(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, start: usize, at: Option<(f32, f32)>, kitty: bool) -> io::Result<()> {
-    let mut game = Game::new(start).map_err(io::Error::other)?;
-    audio.play_music(audio::track_for_level(LEVELS[start].name));
+fn run(
+    terminal: &mut DefaultTerminal,
+    audio: &mut audio::Audio,
+    start: usize,
+    map: Option<(level::Level, String, Option<String>)>,
+    at: Option<(f32, f32)>,
+    kitty: bool,
+) -> io::Result<()> {
+    let mut game = match &map {
+        Some((level, name, music)) => {
+            audio.play_music(music.as_deref().unwrap_or(audio::track_for_level(name)));
+            Game::from_level(name, level)
+        }
+        None => {
+            audio.play_music(audio::track_for_level(LEVELS[start].name));
+            Game::new(start).map_err(io::Error::other)?
+        }
+    };
     if let Some((x, y)) = at {
         game.tank.x = x;
         game.tank.y = y;

@@ -16,21 +16,37 @@ const MARKER_TILES: &[&str] = &["pink", "alpha"];
 struct TileTable {
     by_name: HashMap<String, (Rgb, u32)>,
     by_checksum: HashMap<u32, (Rgb, u32)>,
+    name_of: HashMap<u32, String>,
 }
 
 fn tile_table() -> &'static TileTable {
     static TABLE: OnceLock<TileTable> = OnceLock::new();
     TABLE.get_or_init(|| {
-        let mut t = TileTable { by_name: HashMap::new(), by_checksum: HashMap::new() };
+        let mut t = TileTable { by_name: HashMap::new(), by_checksum: HashMap::new(), name_of: HashMap::new() };
         for line in include_str!("../data/tile_colors.tsv").lines().filter(|l| !l.starts_with('#')) {
             let f: Vec<&str> = line.split('\t').collect();
             let [name, r, g, b, flags] = f[..] else { continue };
             let (Ok(r), Ok(g), Ok(b), Ok(flags)) = (r.parse(), g.parse(), b.parse(), flags.parse()) else { continue };
             t.by_name.insert(name.to_lowercase(), ((r, g, b), flags));
             t.by_checksum.insert(check_sum32(name.as_bytes()), ((r, g, b), flags));
+            t.name_of.insert(check_sum32(name.as_bytes()), name.to_string());
         }
         t
     })
+}
+
+/// A tile's level-facing name: its own, or the baked table's for a tile that
+/// only carries a checksum (levels without a texture name table).
+pub fn tile_name_for(t: &TileInfo) -> Option<String> {
+    if !t.name.is_empty() {
+        return Some(t.name.clone());
+    }
+    tile_table().name_of.get(&t.checksum).cloned()
+}
+
+/// Flags the baked table gives a tile checksum.
+pub fn tile_flags_for_checksum(checksum: u32) -> Option<u32> {
+    tile_table().by_checksum.get(&checksum).map(|&(_, f)| f)
 }
 
 /// Colour and flags for a level tile. A named tile keeps the level's own flags.
