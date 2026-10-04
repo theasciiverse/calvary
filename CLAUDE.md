@@ -25,6 +25,33 @@ European publisher, the company ran out of money and closed in September
 1998. On Oct. 22 1998 they released the source code and game data to the
 public domain rather than let the work disappear.
 
+## The original story (recovered 2026-10-04)
+
+From crack.com's own "Golgotha Script" pages (1997-98, via the Internet
+Archive; copies and URLs in `references/Golgotha/crack-com-story/`):
+
+- 2048: global nuclear disarmament and the murder of a beloved American
+  archaeologist lead to an American military incursion into Iraq, a
+  European military power play, and World War III.
+- Commander John Fisher II, leading the American force sent into Iraq,
+  questions his mission, abandons his country and takes his troops on an
+  "epic quest for truth", discovering "an awesome supernatural conflict
+  behind a veil of political discord".
+- With him: Lieutenant Elaine Kruese and Sergeant Reid Charles, "among
+  the first to learn what has really happened at Golgotha".
+- The epic was to run through "over 40 cities all over the world".
+- Act 1, Scene 1 ("The Golgotha Transmission"): a press conference; a
+  reporter asks Lieutenant Kruese what really happened at the Golgotha
+  site "back in '48". The site title page quotes Shakespeare's Richard II
+  ("...this land be call'd / The field of Golgotha and dead men's skulls").
+
+The music titles fit this exactly: Al Basrah and Nakhayb (the Iraq
+incursion), the European capitals (the power play), Jerusalem (Golgotha)
+and "Norway Nephelim Battle" (the Nephilim of Genesis 6: the supernatural
+conflict). Licence: the public-domain statement names "source, graphics,
+music, and level files"; the web pages are not named, so use them as the
+basis for Calvary's own writing rather than copying their text verbatim.
+
 ## Sources (checked 2026-10-04)
 
 All under `asciiverse/references/Golgotha/` (note: `references/`,
@@ -99,10 +126,11 @@ mpg123 decoder (non-profit only); never call the game Golgotha.
   tarballs. The fork has `snow` (150x150, a river valley with a lake;
   plausibly the Swiss level) and `egypt2` (75x105, a walled town with
   roads and terraces; plausibly Cairo). Neither is confirmed by name.
-- "Complete voice actor script": not found anywhere in either source tree.
-  What exists: 10 short narrative clips ("bank captured", "supertank lost"
-  ...) and one computer voice clip in the sfx. Treat the script as lost
-  unless it turns up.
+- "Complete voice actor script": not in either source tree (only 10
+  narrative clips and one computer voice clip in the sfx), but crack.com
+  published the opening and a story teaser in 1997; both pages are
+  recovered from the Internet Archive into
+  `references/Golgotha/crack-com-story/` (see "The original story").
 - "15 pieces of music, 100+ sfx, 2000+ textures": confirmed (15 mp3
   including the splash theme; 120 sfx entries; 2079 texture entries).
 - "Mostly complete engine": about 245,000 lines of C++ (i4 core 86k, game
