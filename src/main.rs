@@ -9,6 +9,7 @@ mod render;
 mod sprites;
 mod tank;
 mod terrain;
+mod title;
 mod world;
 
 use game::{Game, DT, LEVELS};
@@ -101,7 +102,34 @@ fn main() -> io::Result<()> {
     log::info!("start kitty_keyboard={kitty}");
     // clicks switch routes at junctions, like the original's strategy mode
     execute!(io::stdout(), EnableMouseCapture)?;
-    let result = run(&mut terminal, &mut audio, start, map, at, kitty);
+    let mut input = Input::new(kitty);
+    input.open_pad();
+    // a level, map or position on the command line starts that battle
+    // directly; otherwise the title, and back to it after each battle
+    let direct = map.is_some() || at.is_some() || args.iter().any(|a| LEVELS.iter().any(|l| l.name == *a));
+    let result = if direct {
+        run(&mut terminal, &mut audio, &mut input, start, map, at)
+    } else {
+        let mut first = !args.iter().any(|a| a == "--no-intro");
+        loop {
+            let choice = title::run(&mut terminal, &mut audio, &mut input, !first);
+            first = false;
+            let r = match choice {
+                Ok(title::Choice::Level(i)) => run(&mut terminal, &mut audio, &mut input, i, None, None),
+                Ok(title::Choice::Map(path)) => match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| cmap::parse(&t)) {
+                    Ok(m) => run(&mut terminal, &mut audio, &mut input, 0, Some(m), None),
+                    Err(e) => Err(io::Error::other(format!("{path}: {e}"))),
+                },
+                Ok(title::Choice::Quit) => break Ok(()),
+                Err(e) => break Err(e),
+            };
+            if r.is_err() || input.exit_app {
+                break r;
+            }
+            input.quit = false;
+            input.escape = false;
+        }
+    };
     let _ = execute!(io::stdout(), DisableMouseCapture);
     if kitty {
         let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
@@ -113,10 +141,10 @@ fn main() -> io::Result<()> {
 fn run(
     terminal: &mut DefaultTerminal,
     audio: &mut audio::Audio,
+    input: &mut Input,
     start: usize,
     map: Option<(level::Level, String, Option<String>)>,
     at: Option<(f32, f32)>,
-    kitty: bool,
 ) -> io::Result<()> {
     let mut game = match &map {
         Some((level, name, music)) => {
@@ -132,14 +160,13 @@ fn run(
         game.tank.x = x;
         game.tank.y = y;
     }
-    let mut input = Input::new(kitty);
-    input.open_pad();
     let tick = Duration::from_secs_f32(DT);
     let mut next = Instant::now() + tick;
     let mut next_snapshot = Instant::now();
     while !input.quit {
         render::follow_camera(&mut game, terminal.size()?.into());
         input.poll_pad();
+        input.menu_moves = 0;
         game.pad = input.pad_name.clone().map(|n| (n, input.build_cursor));
         terminal.draw(|f| render::draw(f, &game))?;
         if event::poll(next.saturating_duration_since(Instant::now()))? {

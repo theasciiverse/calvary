@@ -361,13 +361,15 @@ repeats keep arriving.
 Gamepad (gilrs, feature `gamepad`, on by default; the same approach as
 `games/marble-recovery`): left stick drives with analog throttle and
 steering (a W/S press hands driving back to the gears), right stick points
-the turret in a map direction, RT main gun, LT machine gun, RB rocket, LB
-turret lock, d-pad left/right moves a build cursor shown in the HUD and A
-builds, B switches the nearest junction, Y map view, d-pad up/down zoom,
-Start help, Back next music track. Only pads in SDL's controller database
-are used, because gilrs also reports 3D mice and tablet key pads as
-gamepads (David's 3Dconnexion receiver is one; it is skipped, the 8BitDo
-SF30 Pro in XInput mode shows as "Xbox 360 Controller" and is used);
+the turret in a map direction and clicks for the turret lock, RT main gun,
+LT machine gun, X rocket, LB/RB zoom out/in, d-pad left/right moves a
+build cursor shown in the HUD and A builds, d-pad up rallies nearby units
+and down holds them, B switches the nearest junction, Y map view, Start
+help, Back next music track; in the title menu the d-pad moves and A or
+Start picks. Only pads in SDL's controller database are used, because
+gilrs also reports 3D mice and tablet key pads as gamepads (David's
+3Dconnexion receiver is one; it is skipped, the 8BitDo SF30 Pro in XInput
+mode shows as "Xbox 360 Controller" and is used);
 `CALVARY_ANY_PAD=1` accepts everything. `--no-default-features` builds
 without it.
 
@@ -400,6 +402,24 @@ e.g. rock edges along rivers) and slopes steeper than 1.6 stop the tank.
 
 Session logging follows the Asciiverse convention: every raw key event, view,
 gear and level changes, each shot, and a state snapshot every 500 ms.
+
+## Title and opening (`src/title.rs`)
+
+Starting without a level or map argument plays the opening over the
+splash theme: the Shakespeare epigraph from crack.com's own Golgotha pages
+(Richard II, IV.i, "...the field of Golgotha and dead men's skulls"), then
+the original Act 1 Scene 1's spinning globe against the stars, in Braille,
+with the Golgotha site (Jerusalem, 31.8 N 35.2 E) pulsing red, captioned
+"2048" and "The Golgotha Transmission". Any key, click or pad button
+skips it. The title: CALVARY in block letters over the dimmed globe, a
+menu (the three bundled levels, every `maps/*.cmap`, Controls, Credits,
+Quit; keys, mouse or pad), and a dedication to Dave Taylor, Jonathan
+Clark, Carly Taylor and the team. Credits list the Golgotha team exactly
+as crack.com's credits page did (copy and URL in
+`references/Golgotha/crack-com-story/`), including Carly Taylor as the
+creator of the name and the plot. Esc in a battle returns to the title
+(opening skipped); Ctrl+C quits outright; `--no-intro` starts at the
+title; a level, map or `--at` argument skips the title entirely.
 
 ## The catalog position
 

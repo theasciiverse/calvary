@@ -449,7 +449,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     let line3 = match &g.pad {
         Some((name, _)) => Line::from(vec![
             Span::styled(format!(" {name} "), Style::default().fg(Color::Black).bg(GREEN)),
-            label("  L stick drive  R stick aim  RT gun  LT mg  RB rocket  LB lock  D-pad+A build  B route  Y map  Start help"),
+            label("  L stick drive  R stick aim (click lock)  RT gun  LT mg  X rocket  LB/RB zoom  D-pad+A build  B route  Y map"),
         ]),
         None => Line::from(label(" W/S gear  A/D turn  Q/E turret  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  T lock  F1/H help  ESC quit")),
     };
@@ -586,10 +586,11 @@ const HELP: &[(&str, &str)] = &[
     ("G X R Z", "rally on me, hold, back to route, clear selection"),
     ("", ""),
     ("", "GAMEPAD"),
-    ("Sticks", "left drives (analog), right points the turret"),
-    ("RT LT RB LB", "main gun, machine gun, rocket, turret lock"),
-    ("D-pad", "left/right pick a unit, A builds; up/down zoom"),
-    ("B Y X", "switch nearest junction, map view, rally nearby units"),
+    ("Sticks", "left drives (analog), right aims; click right for lock"),
+    ("RT LT X", "main gun, machine gun, rocket"),
+    ("LB RB", "zoom out / in"),
+    ("D-pad", "left/right pick a unit, A builds; up rally, down hold"),
+    ("B Y", "switch nearest junction, map view"),
     ("Start Back", "help, next music track"),
     ("", ""),
     ("", "COMMAND"),
@@ -610,7 +611,7 @@ const HELP: &[(&str, &str)] = &[
     ("", "Rock edges, deep water and steep slopes stop the tank."),
 ];
 
-fn draw_help(f: &mut Frame, full: Rect) {
+pub fn draw_help(f: &mut Frame, full: Rect) {
     let lines: Vec<Line> = HELP
         .iter()
         .map(|&(key, text)| {

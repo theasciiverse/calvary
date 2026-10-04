@@ -1,10 +1,11 @@
 //! Keyboard and gamepad state.
 //!
 //! Gamepad (feature `gamepad`, on by default, via gilrs): left stick drives
-//! (analog throttle and steering), right stick points the turret, RT main gun,
-//! LT machine gun, RB rocket, LB turret lock, d-pad left/right picks a unit
-//! and A builds it, B switches the nearest junction, Y the map, d-pad up/down
-//! zoom, Start help, Back next music track. As in marble-recovery, only pads
+//! (analog throttle and steering), right stick points the turret and clicks
+//! for the turret lock, RT main gun, LT machine gun, X rocket, LB/RB zoom
+//! out/in, d-pad left/right picks a unit and A builds it, d-pad up rallies
+//! nearby units and down holds them, B switches the nearest junction, Y the
+//! map, Start help, Back next music track. As in marble-recovery, only pads
 //! in SDL's controller database count (gilrs also reports 3D mice and tablet
 //! key pads as gamepads); `CALVARY_ANY_PAD=1` accepts everything.
 //!
@@ -82,6 +83,10 @@ pub struct Input {
     drive_by_pad: bool,
     /// Build menu cursor for the pad (d-pad left/right, A builds).
     pub build_cursor: usize,
+    /// D-pad up/down presses for menus (+1 = up); the game ignores them.
+    pub menu_moves: i32,
+    /// Ctrl+C: leave the program, not just the battle.
+    pub exit_app: bool,
     /// Esc: closes the help window if it is open, otherwise quits.
     pub escape: bool,
     pub toggle_help: bool,
@@ -117,6 +122,8 @@ impl Input {
             pad_rocket: false,
             drive_by_pad: false,
             build_cursor: 0,
+            menu_moves: 0,
+            exit_app: false,
             escape: false,
             toggle_help: false,
             toggle_view: false,
@@ -189,7 +196,10 @@ impl Input {
             KeyCode::Char('[') => self.level_step -= 1,
             KeyCode::Esc => self.escape = true,
             KeyCode::F(1) | KeyCode::Char('h') | KeyCode::Char('H') | KeyCode::Char('?') => self.toggle_help = true,
-            KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => self.quit = true,
+            KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.quit = true;
+                self.exit_app = true;
+            }
             _ => {}
         }
     }
@@ -237,19 +247,25 @@ impl Input {
                         log::debug!("pad button {b:?}");
                         let slots = crate::world::BUILDABLE.len();
                         match b {
-                            Button::RightTrigger => self.pad_rocket = true,
-                            Button::LeftTrigger => self.toggle_lock = true,
+                            Button::West => self.pad_rocket = true,
+                            Button::RightThumb => self.toggle_lock = true,
+                            Button::RightTrigger => self.zoom_step += 1,
+                            Button::LeftTrigger => self.zoom_step -= 1,
                             Button::South => self.build = Some(self.build_cursor),
                             Button::East => self.switch_route = true,
                             Button::North => self.toggle_view = true,
                             Button::DPadLeft => self.build_cursor = (self.build_cursor + slots - 1) % slots,
                             Button::DPadRight => self.build_cursor = (self.build_cursor + 1) % slots,
-                            Button::DPadUp => self.zoom_step += 1,
-                            Button::DPadDown => self.zoom_step -= 1,
+                            Button::DPadUp => {
+                                self.menu_moves += 1;
+                                self.unit_key = Some('p');
+                            }
+                            Button::DPadDown => {
+                                self.menu_moves -= 1;
+                                self.unit_key = Some('x');
+                            }
                             Button::Start => self.toggle_help = true,
                             Button::Select => self.next_track = true,
-                            // select the units around the supertank and call them in
-                            Button::West => self.unit_key = Some('p'),
                             _ => {}
                         }
                     }
