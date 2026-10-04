@@ -280,9 +280,8 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
     }
     // the title: the globe keeps turning behind it, dimmed
     let place = (*page == Page::Main).then(|| items[pick].place());
-    // the globe ends just above the dedication
-    let band = area.height.saturating_sub(3 + (area.height / 12).clamp(2, 6) + 1);
-    draw_globe(f.buffer_mut(), area, band, t - EPIGRAPH_END, 0.45, view, place.map(|p| (p.1, p.2)));
+    // the Earth fills the screen, centred, as in the opening
+    draw_globe(f.buffer_mut(), area, area.height, t - EPIGRAPH_END, 0.45, view, place.map(|p| (p.1, p.2)));
     // breathing room above the title, more on taller windows
     let top = area.y + (area.height / 14).clamp(1, 5);
     let title_h = draw_big_title(f.buffer_mut(), area, top, t - GLOBE_END);
@@ -331,7 +330,8 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
         Page::Credits => draw_credits(f, area),
     }
     // the dedication, on every title page
-    let foot = area.y + area.height.saturating_sub(3 + (area.height / 12).clamp(2, 6));
+    // the dedication sits low, two rows above the bottom edge
+    let foot = area.y + area.height.saturating_sub(5);
     line(f, foot, Line::from(Span::styled("Built on GOLGOTHA (1998) by Crack dot Com, given to the world in the public domain.", Style::default().fg(DIM))));
     line(
         f,
