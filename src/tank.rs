@@ -52,6 +52,8 @@ pub struct Controls {
     pub throttle: Option<f32>,
     /// Absolute turret aim (map angle) from a gamepad's right stick.
     pub aim: Option<f32>,
+    /// Swing the turret back to straight ahead (C, or the left stick click).
+    pub center: bool,
     pub fire_main: bool,
     pub fire_chain: bool,
     pub fire_missile: bool,
@@ -78,6 +80,8 @@ pub struct Tank {
     pub main_cooldown: f32,
     pub chain_cooldown: f32,
     pub rocket_cooldown: f32,
+    /// Turret swinging back to straight ahead until it gets there.
+    pub centering: bool,
     /// Set when the tank stopped against a wall, slope or the map edge this tick.
     pub blocked: bool,
     /// Distance rolled, signed; drives the tread animation.
@@ -107,6 +111,7 @@ impl Tank {
             main_cooldown: 0.0,
             chain_cooldown: 0.0,
             rocket_cooldown: 0.0,
+            centering: false,
             blocked: false,
             odometer: 0.0,
             flash: 0.0,
@@ -128,7 +133,24 @@ impl Tank {
         // reversing turns the hull the way a car does
         let dir = if self.speed < -0.05 { -1.0 } else { 1.0 };
         self.heading = (self.heading + c.turn * TURN_SPEED * dt * dir).rem_euclid(std::f32::consts::TAU);
-        if let Some(aim) = c.aim {
+        if c.center {
+            self.centering = true;
+        }
+        if c.turret != 0.0 || c.aim.is_some() {
+            self.centering = false;
+        }
+        if self.centering {
+            // turret angle as -pi..pi, so it turns the short way back to zero
+            let diff = (self.turret + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+            let step = TURRET_SPEED * dt;
+            if diff.abs() <= step {
+                self.turret = 0.0;
+                self.centering = false;
+            } else {
+                // shortest way round to zero
+                self.turret = (self.turret - diff.signum() * step).rem_euclid(std::f32::consts::TAU);
+            }
+        } else if let Some(aim) = c.aim {
             // swing the turret toward a world direction at its own speed
             let want = aim - self.heading;
             let diff = (want - self.turret + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
@@ -171,5 +193,33 @@ impl Tank {
         self.flash = (self.flash - dt).max(0.0);
         self.chain_cooldown = (self.chain_cooldown - dt).max(0.0);
         self.rocket_cooldown = (self.rocket_cooldown - dt).max(0.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::LEVELS;
+    use crate::level::Level;
+
+    #[test]
+    fn centering_brings_the_turret_straight_ahead_the_short_way() {
+        let level = Level::parse(LEVELS[0].data).unwrap();
+        let terrain = Terrain::from_level("test", &level);
+        for start in [0.5f32, 5.8, 3.0] {
+            let mut t = Tank::new(50.0, 75.0, 0);
+            t.turret = start;
+            let c = Controls { center: true, ..Default::default() };
+            t.update(&c, &terrain, 1.0 / 30.0);
+            let after_one = t.turret;
+            let idle = Controls::default();
+            for _ in 0..90 {
+                t.update(&idle, &terrain, 1.0 / 30.0);
+            }
+            assert_eq!(t.turret, 0.0, "from {start}");
+            // the first step went toward zero, not away
+            let dist = |a: f32| a.min(std::f32::consts::TAU - a);
+            assert!(dist(after_one) < dist(start), "from {start}: {after_one}");
+        }
     }
 }

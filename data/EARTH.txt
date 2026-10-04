@@ -1,0 +1,7 @@
+data/earth.ppm: NASA Visible Earth, "Blue Marble: Land Surface, Shallow Water
+and Shaded Topography" (image record 57752), downscaled to 512x256.
+Source: https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57752/land_shallow_topo_2048.jpg
+NASA's usage guidelines (https://www.nasa.gov/nasa-brand-center/images-and-media/,
+checked 2026-10-04): NASA images and texture maps "generally are not subject
+to copyright in the United States" and may be used in computer graphical
+simulations. Credit: NASA.

@@ -263,30 +263,45 @@ fn draw_epigraph(f: &mut Frame, area: Rect, t: f32) {
     }
 }
 
-/// Rough continents as ellipses in (latitude, longitude, half-height,
-/// half-width) degrees: enough for a globe made of Braille dots.
-const LAND: [(f32, f32, f32, f32); 14] = [
-    (5.0, 20.0, 33.0, 21.0),
-    (50.0, 15.0, 12.0, 22.0),
-    (60.0, 60.0, 14.0, 40.0),
-    (45.0, 95.0, 18.0, 40.0),
-    (25.0, 45.0, 10.0, 11.0),
-    (21.0, 78.0, 11.0, 8.0),
-    (5.0, 105.0, 8.0, 13.0),
-    (-25.0, 134.0, 11.0, 17.0),
-    (48.0, -100.0, 20.0, 32.0),
-    (15.0, -90.0, 7.0, 9.0),
-    (-15.0, -60.0, 23.0, 14.0),
-    (72.0, -40.0, 8.0, 14.0),
-    (64.0, 15.0, 6.0, 8.0),
-    (-82.0, 0.0, 8.0, 180.0),
-];
+/// NASA's Blue Marble (public domain, see data/EARTH.txt), 512x256, as PPM.
+static EARTH: &[u8] = include_bytes!("../data/earth.ppm");
 
-fn land(lat: f32, lon: f32) -> bool {
-    LAND.iter().any(|&(la, lo, rh, rw)| {
-        let dlon = ((lon - lo + 540.0) % 360.0) - 180.0;
-        ((lat - la) / rh).powi(2) + (dlon / rw).powi(2) <= 1.0
+/// The texture's pixels (RGB) and width/height, parsed once.
+fn earth() -> &'static (Vec<u8>, usize, usize) {
+    static TEX: std::sync::OnceLock<(Vec<u8>, usize, usize)> = std::sync::OnceLock::new();
+    TEX.get_or_init(|| {
+        // "P6\n512 256\n255\n" then RGB bytes
+        let mut fields = Vec::new();
+        let mut pos = 0;
+        while fields.len() < 4 {
+            while EARTH[pos].is_ascii_whitespace() {
+                pos += 1;
+            }
+            let start = pos;
+            while !EARTH[pos].is_ascii_whitespace() {
+                pos += 1;
+            }
+            fields.push(std::str::from_utf8(&EARTH[start..pos]).unwrap_or("0").to_string());
+        }
+        let (w, h) = (fields[1].parse().unwrap_or(1), fields[2].parse().unwrap_or(1));
+        (EARTH[pos + 1..].to_vec(), w, h)
     })
+}
+
+fn sample_earth(lat: f32, lon: f32) -> (f32, f32, f32) {
+    let (px, w, h) = earth();
+    let u = ((lon / std::f32::consts::TAU + 0.5).rem_euclid(1.0) * *w as f32) as usize % w;
+    let v = (((0.5 - lat / std::f32::consts::PI) * *h as f32) as usize).min(h - 1);
+    let i = (v * w + u) * 3;
+    (px[i] as f32, px[i + 1] as f32, px[i + 2] as f32)
+}
+
+/// Terminal cell height over width, from the terminal when it says, else 2.
+fn cell_aspect() -> f32 {
+    match ratatui::crossterm::terminal::window_size() {
+        Ok(w) if w.width > 0 && w.height > 0 && w.columns > 0 && w.rows > 0 => (w.height as f32 / w.rows as f32) / (w.width as f32 / w.columns as f32),
+        _ => 2.0,
+    }
 }
 
 fn hash(x: u32, y: u32) -> u32 {
@@ -295,67 +310,61 @@ fn hash(x: u32, y: u32) -> u32 {
     h.wrapping_mul(0x2c1b_3c6d) >> 8
 }
 
-/// The spinning globe against the stars, in Braille dots; Golgotha
-/// (Jerusalem, 31.8 N 35.2 E) pulses red when it is on the near side.
+/// The spinning Earth against the stars, the original opening's image: the
+/// Blue Marble texture on a sphere in half-block pixels (each its own
+/// colour), lit from the upper left, with a thin atmosphere rim; Golgotha
+/// (Jerusalem, 31.8 N 35.2 E) pulses red on the near side. Kept round for
+/// the terminal's real cell shape.
 fn draw_globe(buf: &mut Buffer, area: Rect, t: f32, bright: f32) {
     let (w, h) = (area.width as usize, area.height as usize);
-    let (dw, dh) = (w * 2, h * 4);
-    // Braille dots are square on screen (2 per column, 4 per row of a 1:2 cell)
-    let r = (dh as f32 * 0.42).min(dw as f32 * 0.45);
-    let (cx, cy) = (dw as f32 / 2.0, dh as f32 / 2.0 - dh as f32 * 0.04);
-    let spin = t * 0.35 - 0.9;
+    let (pw, ph) = (w, h * 2);
+    // a half-block pixel is one column wide and half a cell tall
+    let px_aspect = cell_aspect() / 2.0;
+    let r = (ph as f32 * 0.42 * px_aspect).min(pw as f32 * 0.45);
+    let (rx, ry) = (r, r / px_aspect);
+    let (cx, cy) = (pw as f32 / 2.0, ph as f32 / 2.0 - ph as f32 * 0.03);
+    let spin = t * 0.3 - 1.2;
     let pulse = ((t * 4.0).sin() * 0.5 + 0.5) * 0.7 + 0.3;
     let (glat, glon) = (31.8f32.to_radians(), 35.2f32.to_radians());
-    let mut bits = vec![0u8; w * h];
-    let mut color = vec![Color::Black; w * h];
-    let set = |bits: &mut [u8], color: &mut [Color], dx: usize, dy: usize, c: Color| {
-        let i = (dy / 4) * w + dx / 2;
-        let bit = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]][dx % 2][dy % 4];
-        bits[i] |= bit;
-        color[i] = c;
-    };
-    let scale = |c: (f32, f32, f32), k: f32| Color::Rgb((c.0 * k) as u8, (c.1 * k) as u8, (c.2 * k) as u8);
-    for dy in 0..dh {
-        for dx in 0..dw {
-            let x = (dx as f32 - cx) / r;
-            let y = (dy as f32 - cy) / r;
-            let d2 = x * x + y * y;
-            if d2 > 1.0 {
-                // stars, twinkling
-                let s = hash(dx as u32, dy as u32);
-                if s % 173 == 0 && ((t * 2.0 + (s % 7) as f32).sin() > -0.2) {
-                    set(&mut bits, &mut color, dx, dy, scale((200.0, 200.0, 190.0), bright));
-                }
-                continue;
-            }
-            let z = (1.0 - d2).sqrt();
-            let lat = (-y).asin();
-            let lon = x.atan2(z) + spin;
-            let light = (0.35 + 0.65 * (z * 0.8 - x * 0.4).max(0.0)) * bright;
-            let (la, lo) = (lat.to_degrees(), ((lon.to_degrees() + 540.0) % 360.0) - 180.0);
-            let grid = (la % 30.0).abs() < 0.9 || (lo % 30.0).abs() < 1.2 / lat.cos().max(0.2);
-            // Golgotha
-            let (gl, gn) = (glat, glon);
-            let dist = (lat.sin() * gl.sin() + lat.cos() * gl.cos() * (lon - gn).cos()).clamp(-1.0, 1.0).acos();
-            if dist < 0.035 + 0.02 * pulse {
-                set(&mut bits, &mut color, dx, dy, Color::Rgb((255.0 * pulse.max(bright)) as u8, (60.0 * bright) as u8, (40.0 * bright) as u8));
-            } else if land(la, lo) {
-                if (dx + dy) % 2 == 0 || light > 0.5 {
-                    set(&mut bits, &mut color, dx, dy, scale((80.0, 220.0, 120.0), light));
-                }
-            } else if grid {
-                set(&mut bits, &mut color, dx, dy, scale((40.0, 110.0, 70.0), light));
-            }
+    let pixel = |x: usize, y: usize| -> Option<Color> {
+        let nx = (x as f32 + 0.5 - cx) / rx;
+        let ny = (y as f32 + 0.5 - cy) / ry;
+        let d2 = nx * nx + ny * ny;
+        if d2 > 1.0 {
+            // atmosphere rim
+            let d = d2.sqrt();
+            return (d < 1.035).then(|| {
+                let k = (1.0 - (d - 1.0) / 0.035) * 0.6 * bright;
+                Color::Rgb((70.0 * k) as u8, (130.0 * k) as u8, (220.0 * k) as u8)
+            });
         }
-    }
+        let z = (1.0 - d2).sqrt();
+        let lat = (-ny).asin();
+        let lon = nx.atan2(z) + spin;
+        let dist = (lat.sin() * glat.sin() + lat.cos() * glat.cos() * (lon - glon).cos()).clamp(-1.0, 1.0).acos();
+        if dist < 0.03 + 0.015 * pulse {
+            return Some(Color::Rgb((255.0 * pulse.max(bright)) as u8, (50.0 * bright) as u8, (40.0 * bright) as u8));
+        }
+        let (r_, g_, b_) = sample_earth(lat, lon);
+        let light = (0.12 + 0.95 * (z * 0.75 - nx * 0.45 - ny * 0.25).max(0.0)).min(1.0) * bright;
+        Some(Color::Rgb((r_ * light) as u8, (g_ * light) as u8, (b_ * light) as u8))
+    };
     for row in 0..h {
         for col in 0..w {
-            let i = row * w + col;
-            if bits[i] == 0 {
-                continue;
-            }
-            if let Some(cell) = buf.cell_mut((area.x + col as u16, area.y + row as u16)) {
-                cell.set_char(char::from_u32(0x2800 + bits[i] as u32).unwrap()).set_fg(color[i]).set_bg(Color::Black);
+            let (top, bottom) = (pixel(col, row * 2), pixel(col, row * 2 + 1));
+            let Some(cell) = buf.cell_mut((area.x + col as u16, area.y + row as u16)) else { continue };
+            match (top, bottom) {
+                (None, None) => {
+                    // stars, twinkling
+                    let s = hash(col as u32, row as u32);
+                    if s % 41 == 0 && (t * 1.5 + (s % 11) as f32).sin() > -0.3 {
+                        let k = (150.0 + (s % 100) as f32) * bright;
+                        cell.set_char(if s % 3 == 0 { '+' } else { '·' }).set_fg(Color::Rgb(k as u8, k as u8, (k * 0.95) as u8)).set_bg(Color::Black);
+                    }
+                }
+                (t_, b_) => {
+                    cell.set_char('▀').set_fg(t_.unwrap_or(Color::Black)).set_bg(b_.unwrap_or(Color::Black));
+                }
             }
         }
     }

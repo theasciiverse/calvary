@@ -85,6 +85,7 @@ pub struct Input {
     pub build_cursor: usize,
     /// D-pad up/down presses for menus (+1 = up); the game ignores them.
     pub menu_moves: i32,
+    center_edge: bool,
     /// Ctrl+C: leave the program, not just the battle.
     pub exit_app: bool,
     /// Esc: closes the help window if it is open, otherwise quits.
@@ -124,6 +125,7 @@ impl Input {
             build_cursor: 0,
             menu_moves: 0,
             exit_app: false,
+            center_edge: false,
             escape: false,
             toggle_help: false,
             toggle_view: false,
@@ -187,6 +189,7 @@ impl Input {
             KeyCode::Char('t') | KeyCode::Char('T') => self.toggle_lock = true,
             KeyCode::F(9) => self.next_track = true,
             KeyCode::F(8) => self.toggle_sound = true,
+            KeyCode::Char('c') | KeyCode::Char('C') if !k.modifiers.contains(KeyModifiers::CONTROL) => self.center_edge = true,
             KeyCode::Char(c @ ('u' | 'U' | ',' | '.' | 'g' | 'G' | 'x' | 'X' | 'r' | 'R' | 'z' | 'Z')) => self.unit_key = Some(c.to_ascii_lowercase()),
             KeyCode::Char(c @ '1'..='9') => self.build = Some(c as usize - '1' as usize),
             KeyCode::Char('0') => self.build = Some(9),
@@ -249,6 +252,7 @@ impl Input {
                         match b {
                             Button::West => self.pad_rocket = true,
                             Button::RightThumb => self.toggle_lock = true,
+                            Button::LeftThumb => self.center_edge = true,
                             Button::RightTrigger => self.zoom_step += 1,
                             Button::LeftTrigger => self.zoom_step -= 1,
                             Button::South => self.build = Some(self.build_cursor),
@@ -306,6 +310,7 @@ impl Input {
             fire_main: main || self.pad_main || std::mem::take(&mut self.main_edge),
             fire_chain: chain || self.pad_chain,
             fire_missile: std::mem::take(&mut self.missile_edge) || std::mem::take(&mut self.pad_rocket),
+            center: std::mem::take(&mut self.center_edge),
         }
     }
 }

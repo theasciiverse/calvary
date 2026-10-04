@@ -337,7 +337,11 @@ impl Game {
             self.world.sound("fire/supertank_fires_rocket_22khz.mp3", None, 0.8);
             self.fire(ShotKind::Missile, self.tank.rocket_weapon, 9.0, 30.0, 0.0);
         }
-        if c.turret == 0.0 && c.aim.is_none() {
+        if c.center && self.lock {
+            // straight ahead means not tracking anything
+            self.toggle_lock();
+        }
+        if c.turret == 0.0 && c.aim.is_none() && !self.tank.centering {
             self.track_target();
         }
         self.world.place_player_tank(self.tank.x, self.tank.y, self.tank.heading);

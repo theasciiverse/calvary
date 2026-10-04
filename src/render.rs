@@ -449,9 +449,9 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     let line3 = match &g.pad {
         Some((name, _)) => Line::from(vec![
             Span::styled(format!(" {name} "), Style::default().fg(Color::Black).bg(GREEN)),
-            label("  L stick drive  R stick aim (click lock)  RT gun  LT mg  X rocket  LB/RB zoom  D-pad+A build  B route  Y map"),
+            label("  L stick drive (click centre)  R stick aim (click lock)  RT gun  LT mg  X rocket  LB/RB zoom  D-pad+A build  B route  Y map"),
         ]),
-        None => Line::from(label(" W/S gear  A/D turn  Q/E turret  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  T lock  F1/H help  ESC quit")),
+        None => Line::from(label(" W/S gear  A/D turn  Q/E turret  C centre  SPACE gun  F mg  ENTER missile  TAB map  +/- zoom  J route  T lock  F1/H help  ESC quit")),
     };
     f.render_widget(Paragraph::new(vec![line1, Line::from(build), line3]).style(Style::default().bg(Color::Black)), area);
 
@@ -571,6 +571,7 @@ const HELP: &[(&str, &str)] = &[
     ("S / Down", "shift down a gear; below N is reverse"),
     ("A D / Left Right", "turn the hull (hold)"),
     ("Q E", "turn the turret (hold)"),
+    ("C", "turret back to straight ahead"),
     ("Space", "main gun (120mm, later acid, then napalm)"),
     ("F", "machine gun (hold)"),
     ("Enter", "heavy rocket (later vortex, then nuke); you carry two"),
@@ -586,7 +587,7 @@ const HELP: &[(&str, &str)] = &[
     ("G X R Z", "rally on me, hold, back to route, clear selection"),
     ("", ""),
     ("", "GAMEPAD"),
-    ("Sticks", "left drives (analog), right aims; click right for lock"),
+    ("Sticks", "left drives, right aims; click left to centre, right to lock"),
     ("RT LT X", "main gun, machine gun, rocket"),
     ("LB RB", "zoom out / in"),
     ("D-pad", "left/right pick a unit, A builds; up rally, down hold"),
