@@ -16,6 +16,39 @@ const START_MONEY: i32 = 10000;
 pub const START_LIVES: u32 = 3;
 const BANK_CRATE: i32 = 2000;
 const CRATE_CAPACITY: i32 = 10;
+
+/// `formation_joe` from the original `objs/ai_joe.cpp`: 6x6 layouts whose
+/// digits are unit types (0 supertank, 1 peon tank, 2 electric car, 3 rocket
+/// tank, 4 helicopter, 5 jet, 6 engineer, 7 trike). Units follow paths here,
+/// so only the build order of each layout matters.
+const FORMATIONS: [(&str, &str); 13] = [
+    ("stock", "            121212      1 63 1  33  "),
+    ("electric brigade", "222222                              "),
+    ("hole puncher", "  11   1221 123321                  "),
+    ("armored convoy", "12221 23632                         "),
+    ("gene's checker", "            1 1 1  1 1 17 7 7  7 7 7"),
+    ("peon V", "  1    161  1   1                   "),
+    ("heli hell", "  4    4 4                          "),
+    ("rockets R us", "111111 3663  3333                   "),
+    ("small band", "22    66                            "),
+    ("yet another small band", "22    36                            "),
+    ("yet another small band", "33    66                            "),
+    ("long shot", "6                                   "),
+    ("ouch!", "2222  3333                          "),
+];
+
+fn formation_unit(c: char) -> Option<&'static str> {
+    Some(match c {
+        '1' => "peon_tank",
+        '2' => "electric_car",
+        '3' => "rocket_tank",
+        '4' => "helicopter",
+        '5' => "jet",
+        '6' => "engineer",
+        '7' => "trike",
+        _ => return None,
+    })
+}
 const BANK_INTERVAL: f32 = 500.0 / ORIGINAL_HZ;
 const DEPLOY_INTERVAL: f32 = 10.0 / ORIGINAL_HZ;
 const NODE_REACHED: f32 = 0.35;
@@ -120,6 +153,8 @@ pub struct Entity {
     pub crates: i32,
     /// Planes: the bank they serve.
     pub bank: Option<usize>,
+    /// Computer units waiting at the garage for the rest of their convoy.
+    pub held: bool,
     home: (f32, f32),
 }
 
@@ -222,6 +257,9 @@ pub struct World {
     deploy_timer: [f32; 2],
     bank_timer: f32,
     ai_timer: f32,
+    /// Formation being built (index into FORMATIONS) and the next unit in it.
+    ai_form: Option<usize>,
+    ai_place: usize,
     time: f32,
     rng: u64,
 }
@@ -286,6 +324,7 @@ impl World {
                 flash: 0.0,
                 crates: 0,
                 bank: None,
+                held: false,
                 home: (o.x, o.y),
             });
         }
@@ -306,7 +345,9 @@ impl World {
             queues: [VecDeque::new(), VecDeque::new()],
             deploy_timer: [0.0; 2],
             bank_timer: BANK_INTERVAL,
-            ai_timer: 8.0,
+            ai_timer: 5.0,
+            ai_form: None,
+            ai_place: 0,
             time: 0.0,
             rng: 0x2545_F491_4F6C_DD1D,
         };
@@ -512,34 +553,78 @@ impl World {
         }
     }
 
-    /// The computer buys a unit every few seconds when it can afford one.
+    /// The computer player, after the original `ai_joe`: pick one of its
+    /// formations at random, build the formation's units one by one (15 ticks
+    /// apart, retrying after 20 when the money is short), hold them at the
+    /// garage until the formation is complete, release them together as a
+    /// convoy, then wait 100 to 600 ticks before the next. A lost supertank is
+    /// rebuilt at the HQ when the money allows.
     fn computer_player(&mut self, dt: f32) {
         self.ai_timer -= dt;
         if self.ai_timer > 0.0 {
             return;
         }
-        self.ai_timer = 5.0 + self.rand() * 6.0;
-        let weights = [
-            ("peon_tank", 5.0),
-            ("electric_car", 2.0),
-            ("rocket_tank", 2.0),
-            ("trike", 1.5),
-            ("engineer", 1.0),
-            ("tank_buster", 1.0),
-            ("cobra_tank", 0.5),
-            ("helicopter", 0.8),
-            ("jet", 0.5),
-            ("bomber", 0.4),
-        ];
-        let total: f32 = weights.iter().map(|w| w.1).sum();
-        let mut pick = self.rand() * total;
-        for (kind, w) in weights {
-            pick -= w;
-            if pick <= 0.0 {
-                self.order(Team::Enemy, kind);
-                break;
-            }
+        let tick = 1.0 / ORIGINAL_HZ;
+        if self.find(Class::EnemyTank, Team::Enemy).is_none() && self.resurrect_enemy_tank() {
+            self.ai_timer = 20.0 * tick;
+            return;
         }
+        let Some(form) = self.ai_form else {
+            let f = (self.rand() * FORMATIONS.len() as f32) as usize % FORMATIONS.len();
+            log::info!("computer: formation {}", FORMATIONS[f].0);
+            self.ai_form = Some(f);
+            self.ai_place = 0;
+            self.ai_timer = tick;
+            return;
+        };
+        let units: Vec<&'static str> = FORMATIONS[form].1.chars().filter_map(formation_unit).collect();
+        if let Some(&kind) = units.get(self.ai_place) {
+            if self.find(factory_for(kind), Team::Enemy).is_none() {
+                // its factory is gone: skip rather than wait forever
+                self.ai_place += 1;
+            } else if self.order(Team::Enemy, kind) {
+                self.ai_place += 1;
+                self.ai_timer = 15.0 * tick;
+            } else {
+                self.ai_timer = 20.0 * tick;
+            }
+            return;
+        }
+        // formation complete once its units have left the factory queue
+        if self.queues[Team::Enemy.index()].is_empty() {
+            let mut released = 0;
+            for e in &mut self.entities {
+                if e.held && e.team == Team::Enemy {
+                    e.held = false;
+                    released += 1;
+                }
+            }
+            log::info!("computer: convoy of {released} released ({})", FORMATIONS[form].0);
+            self.ai_form = None;
+            self.ai_timer = (100.0 + self.rand() * 500.0) * tick;
+        } else {
+            self.ai_timer = 5.0 * tick;
+        }
+    }
+
+    fn resurrect_enemy_tank(&mut self) -> bool {
+        let cost = balance::unit("stank").map_or(10000, |s| s.cost);
+        let Some(hq) = self.find(Class::Hq, Team::Enemy) else { return false };
+        let Some(tank) = self.entities.iter().position(|e| e.class == Class::EnemyTank) else { return false };
+        if self.money[Team::Enemy.index()] < cost {
+            return false;
+        }
+        self.money[Team::Enemy.index()] -= cost;
+        let (x, y) = (self.entities[hq].x + 2.0, self.entities[hq].y);
+        let e = &mut self.entities[tank];
+        e.alive = true;
+        e.hp = e.max_hp;
+        e.x = x;
+        e.y = y;
+        e.home = (x, y);
+        e.target = None;
+        self.say("Enemy supertank rebuilt");
+        true
     }
 
     fn deploy(&mut self, dt: f32) {
@@ -574,9 +659,14 @@ impl World {
                 flash: 0.0,
                 crates: 0,
                 bank: None,
+                held: false,
                 home: (gx, gy),
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
+            if team == Team::Enemy {
+                let last = self.entities.len() - 1;
+                self.entities[last].held = true;
+            }
             if team == Team::Player {
                 self.say(format!("Vehicle advancing: {kind}"));
             }
@@ -665,6 +755,7 @@ impl World {
             }
         }
         match class {
+            Class::Vehicle if self.entities[i].held => {}
             Class::Vehicle => self.follow_path(i, dt),
             Class::EnemyTank => {
                 let (hx, hy) = self.entities[i].home;

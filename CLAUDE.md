@@ -209,12 +209,18 @@ so all 134 egypt2 tiles resolve. Objects start with serialized Lisp variables
    route at the junction nearest the supertank, the strategy map draws the
    path network (chosen branches bright) and icons for every structure and
    unit. Still open: mouse clicks on path nodes, unit select/unlink/stop.
-5. **AI.** The computer now buys a weighted random unit every 5-11 s and
-   picks junction branches by rotation; port `ai_joe` (build logic and
-   formations) next, then tune. Balance probe:
+5. **AI (ported, 2026-10-04).** The computer follows the original
+   `ai_joe`: it picks one of the 13 `formation_joe` layouts at random
+   ("stock", "hole puncher", "heli hell", "rockets R us", ...), builds its
+   units one by one (15 ticks apart, retrying after 20 when money is short,
+   skipping a unit whose factory is gone), holds them at the garage until
+   the formation is complete, releases them together as a convoy, then
+   waits 100 to 600 ticks; it rebuilds its supertank at the HQ when it can
+   pay the 10000. Junction branches are chosen by rotation. Balance probe:
    `cargo test --release battle_report -- --ignored --nocapture` plays 12
-   minutes of a scripted player against the computer (the computer wins
-   around 7 minutes when the player has no supertank in the fight).
+   minutes of a scripted player (a unit every 6 s, no supertank) against
+   it; with the ported AI that ends in a stalemate in the middle of the
+   map, which the human's supertank is there to break.
 6. **Air (done, 2026-10-04).** The airbase builds helicopter (9), jet (0)
    and bomber (B); they fly the airbase's own route (on `test`, 43 nodes
    from airbase to enemy airbase: the original's pink paths) straight over
