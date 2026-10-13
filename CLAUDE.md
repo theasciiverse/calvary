@@ -54,7 +54,7 @@ basis for Calvary's own writing rather than copying their text verbatim.
 
 ## Sources (checked 2026-10-04)
 
-All under `asciiverse/references/Golgotha/` (note: `references/`,
+All under `../../references/Golgotha/` (note: `references/`,
 not the `reference/` the top-level Asciiverse CLAUDE.md mentions):
 
 - `golgotha-src.tar.gz`, `golgotha-textures.tar.gz`, `golgotha-music.tar.gz`,
