@@ -565,6 +565,12 @@ if not already done.)
 
 ## Status
 
+**Not at launch (David, 2026-10-27):** Calvary is held back from the
+Asciiverse launch until at least the campaign's first act is built. Today it
+has one complete battle (`test`, the Greek coast) but none of the story, so
+its store page would have to sell a story the player can't find. Write the
+store page and README once Act 1 plays.
+
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,
 the ported `ai_joe`, sound, keyboard + mouse + gamepad controls, the
