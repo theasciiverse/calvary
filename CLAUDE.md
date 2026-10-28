@@ -535,19 +535,6 @@ and a walker could ignore the slope limit that stops wheeled units, so it
 climbs where tanks cannot. Hovering craft reuse the aircraft path: a
 sprite with a ground shadow, flying low along routes.
 
-## The catalog position
-
-Calvary fills the C&C-speed action-RTS slot. The Asciiverse RTS titles
-cover different registers:
-
-- **Antibiosis**: background hum, biological simulation, set and watch
-- **Curse of War**: high-level strategic planning, fast and abstract
-- **Civitas**: civilisation builder, turn-based, the long game
-- **Calvary**: action-RTS, direct tank control, battlefield tempo
-
-Calvary is also Panzer's sibling: pure tank arcade (Panzer) versus tank
-arcade plus RTS command layer (Calvary).
-
 ## Dave Taylor and Jonathan Clark
 
 Their public domain release was a generous act. Worth finding them and
