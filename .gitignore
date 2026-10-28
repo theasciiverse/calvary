@@ -2,3 +2,4 @@
 *.log
 # raw F12 recordings; the chosen ones are copied to data/films/
 /films/
+.claude/
