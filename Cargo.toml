@@ -1,6 +1,6 @@
 [package]
 name = "calvary"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2021"
 description = "Asciiverse action-RTS built from Crack dot Com's public-domain Golgotha (1998), Rust + Ratatui"
 
