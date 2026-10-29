@@ -169,6 +169,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Hold out for five minutes. Keep the HQ standing.",
     },
+    Mission {
+        act: 1,
+        number: 9,
+        title: "The King's Highway",
+        map: include_str!("../maps/kings-highway.cmap"),
+        briefing: &[
+            "Commander. Six trucks south, the whole column's stores. The King's",
+            "Highway runs past Kerak, and the Europeans hold the castle; the desert",
+            "road east is longer, and the Americans are already on it. Both cross",
+            "Wadi Mujib. The road west goes to Jerusalem, sir. It is blocked, and",
+            "Calloway's notebook says the same thing every time it names the city:",
+            "not yet. Four trucks must reach the post at the south end.",
+        ],
+        objective: "Bring four of the six trucks to the south post. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -478,7 +493,8 @@ mod tests {
     /// and every 20 s the next of the map's other units; with `SUPERTANK=1`
     /// the enemy towers and armour are cleared every minute from 2:00 and
     /// the supertank parks on the map's site to hold, and supply trucks wait
-    /// at home until 2:00, standing in for the supertank's work. `RUST_LOG=info` shows the battle's log.
+    /// at home until 2:00, standing in for the supertank's work
+    /// (`CLEAR_EVERY=30`: clear every 30 s instead, a closer escort). `RUST_LOG=info` shows the battle's log.
     #[test]
     #[ignore]
     fn mission_report() {
@@ -487,6 +503,7 @@ mod tests {
         let (level, _, _) = map(&MISSIONS[n - 1]).unwrap();
         let mut w = World::from_level(&level);
         let supertank = std::env::var("SUPERTANK").is_ok();
+        let every: usize = std::env::var("CLEAR_EVERY").ok().and_then(|m| m.parse().ok()).unwrap_or(60);
         let units: Vec<&'static str> = crate::world::BUILDABLE.iter().copied().filter(|k| *k != "bridger" && w.offers(Team::Player, k)).collect();
         for s in 0..900 {
             if s % 60 == 5 {
@@ -503,7 +520,7 @@ mod tests {
             if supertank && s == 121 {
                 w.command(&trucks, crate::world::Command::Resume);
             }
-            if supertank && s >= 120 && s % 60 == 0 {
+            if supertank && s >= 120 && s % every == 0 {
                 for e in w.entities.iter_mut().filter(|e| e.team.hostile(Team::Player) && matches!(e.class, Class::Tower | Class::Vehicle)) {
                     e.alive = false;
                 }

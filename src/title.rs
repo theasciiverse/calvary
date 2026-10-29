@@ -59,6 +59,8 @@ const PLACES: &[(&str, &str, f32, f32)] = &[
     ("babylon", "Babylon, Iraq", 32.54, 44.42),
     ("nineveh", "Nineveh, Iraq", 36.36, 43.15),
     ("palmyra", "Palmyra, Syria", 34.55, 38.27),
+    // Kerak, on the King's Highway
+    ("highway", "The King's Highway, Jordan", 31.18, 35.70),
     ("sinai", "Sinai", 29.50, 33.80),
     ("suez", "The Suez Canal", 30.58, 32.27),
     ("giza", "Giza, Egypt", 29.98, 31.13),
