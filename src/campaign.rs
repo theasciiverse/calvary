@@ -395,6 +395,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Own four banks: ours and three more, taken by engineers. Keep the HQ standing.",
     },
+    Mission {
+        act: 2,
+        number: 24,
+        title: "Chartres",
+        map: include_str!("../maps/chartres.cmap"),
+        briefing: &[
+            "Commander, Reid. Chartres. The cathedral keeps the Veil, and the Order",
+            "wants it as it wanted the Shroud. This time we got here first, sir: we",
+            "hold the town on the hill. They are coming from the east, and the",
+            "Europeans from over the Eure, and I do not think either knows the other",
+            "is coming. Six minutes and the convoy from Paris reaches us. Keep the",
+            "Veil in this town until then.",
+        ],
+        objective: "Hold out for six minutes. Neither the Order nor the Europeans may carry the Veil home.",
+    },
 ];
 
 /// The mission's map, parsed.

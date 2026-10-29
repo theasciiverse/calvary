@@ -240,6 +240,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Vehicle | Class::EnemyTank => (e.radius() * 0.9, 0.55, 0.0, pal.body, pal.turret),
             Class::Prop if k == "giant_skull" => (0.9, 0.8, 0.0, (196, 186, 162), sprites::BONE),
             Class::Prop if k.starts_with("giant_") => (0.12, 1.9, 0.0, (196, 186, 162), sprites::BONE),
+            Class::Prop if k == "cathedral" => (3.5, 2.6, 0.0, (190, 182, 162), (104, 146, 126)),
             Class::Prop if k == "cornice" => (1.6, 0.5, 0.8, (196, 208, 222), (246, 249, 252)),
             Class::Prop if k.contains("wall") => (0.6, 0.7, 0.0, (150, 106, 84), (172, 124, 98)),
             Class::Prop if k.contains("palm") || k.contains("tree") => (0.3, 1.6, 0.0, (52, 120, 56), (80, 160, 70)),

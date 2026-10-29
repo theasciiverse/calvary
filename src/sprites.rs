@@ -590,6 +590,31 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         paint_bones(layer, k, cx, cy, th);
         return;
     }
+    if k == "cathedral" {
+        // a cathedral seen from above (Calvary's own, after Chartres): the
+        // nave west to east along its heading, the transept across, the
+        // apse rounded at the east end, the two spires at the west front;
+        // the roof the green of old copper
+        let (hx, hy) = (th.cos(), th.sin());
+        layer.paint(cx, cy, 5.5, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let (a, c) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+            let spire = (a + 4.3).hypot(c - 1.1).min((a + 4.3).hypot(c + 1.1));
+            if spire < 0.75 {
+                return Some((if spire < 0.3 { (70, 96, 84) } else { (190, 182, 162) }, true));
+            }
+            let nave = (-4.5..=3.0).contains(&a) && c.abs() <= 1.2;
+            let transept = (0.2..=1.9).contains(&a) && c.abs() <= 3.0;
+            let apse = (a - 3.0).hypot(c) <= 1.4;
+            if !(nave || transept || apse) {
+                return None;
+            }
+            let ridge = if transept && !nave { (a - 1.05).abs() < 0.2 } else { c.abs() < 0.18 };
+            let edge = (nave && c.abs() > 0.95) || (transept && !nave && c.abs() > 2.75);
+            Some((if ridge { (150, 182, 160) } else if edge { (172, 164, 146) } else { (104, 146, 126) }, false))
+        });
+        return;
+    }
     if k == "cornice" {
         // a snow cornice (Calvary's own): a heavy white lip of snow across
         // the slope, its shadowed underside on the downhill side
