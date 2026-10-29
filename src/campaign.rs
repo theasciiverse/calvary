@@ -45,6 +45,7 @@ pub const ACTS: &[Act] = &[
         transmission: &["We went in because they told us an American was dead.", "She was. They lied about who killed her."],
     },
     Act { name: "Act II: The Desertion", transmission: &["After Nineveh we had no flag.", "We had a notebook and a sergeant who could read it."] },
+    Act { name: "Act III: The European War", transmission: &["Europe was not fighting America.", "Europe was fighting on schedule."] },
 ];
 
 pub const MISSIONS: &[Mission] = &[
@@ -258,6 +259,21 @@ pub const MISSIONS: &[Mission] = &[
             "Two ships, and we sail.",
         ],
         objective: "Take two of the three ships with engineers on their quay pads. Keep the HQ standing.",
+    },
+    Mission {
+        act: 2,
+        number: 15,
+        title: "Piraeus",
+        map: include_str!("../maps/piraeus.cmap"),
+        briefing: &[
+            "Commander, Reid. Piraeus. The ships put us ashore west of the river",
+            "mouth, and the Europeans have a whole base across it: garage, airbase,",
+            "banks up in the hills by the lake. Calloway's notebook lists Athens",
+            "next, and every one of her sites so far has had a battle on top of it.",
+            "This is a real one, sir: both sides building, both sides with planes.",
+            "Take their HQ and the road inland is ours.",
+        ],
+        objective: "Destroy the European HQ across the river. Keep ours standing.",
     },
 ];
 

@@ -2,6 +2,10 @@ name = "piraeus"
 width = 100
 height = 150
 music = "Greece.mp3"
+win = ["no mainbasepad 2"]
+lose = ["no mainbasepad 1"]
+build = ["peon_tank", "electric_car", "rocket_tank", "trike", "engineer", "helicopter", "jet"]
+money = [10000, 20000, 0]
 legend = """
 ! 1 greecestreetcorner
 $ 1 grassdirtmostlygrasscorner
