@@ -12,7 +12,7 @@ use crate::balance::{self, ORIGINAL_HZ};
 use crate::level::Level;
 use std::collections::{HashMap, VecDeque};
 
-const START_MONEY: i32 = 10000;
+pub const START_MONEY: i32 = 10000;
 pub const START_LIVES: u32 = 3;
 const BANK_CRATE: i32 = 2000;
 const CRATE_CAPACITY: i32 = 10;
@@ -93,12 +93,16 @@ pub enum Team {
     /// A second hostile army (player 5 in a `.cmap`; the original levels
     /// use players 3 and 4 for scenery), at war with both the others.
     Rival,
+    /// The Watchers' Order (player 6): black-banded, at war with everyone.
+    Watchers,
     Neutral,
     Scenery,
 }
 
 /// The sides the computer plays.
-pub const COMPUTER_SIDES: [Team; 2] = [Team::Enemy, Team::Rival];
+pub const COMPUTER_SIDES: [Team; 3] = [Team::Enemy, Team::Rival, Team::Watchers];
+/// Every army.
+pub const ARMIES: [Team; 4] = [Team::Player, Team::Enemy, Team::Rival, Team::Watchers];
 
 impl Team {
     pub fn from_player(p: u8) -> Team {
@@ -106,6 +110,7 @@ impl Team {
             1 => Team::Player,
             2 => Team::Enemy,
             5 => Team::Rival,
+            6 => Team::Watchers,
             0 => Team::Neutral,
             _ => Team::Scenery,
         }
@@ -113,7 +118,7 @@ impl Team {
 
     /// A side with an army: units, factories, money.
     pub fn fights(self) -> bool {
-        matches!(self, Team::Player | Team::Enemy | Team::Rival)
+        matches!(self, Team::Player | Team::Enemy | Team::Rival | Team::Watchers)
     }
 
     /// Every army is at war with every other.
@@ -125,6 +130,7 @@ impl Team {
         match self {
             Team::Player => 0,
             Team::Rival => 2,
+            Team::Watchers => 3,
             _ => 1,
         }
     }
@@ -275,6 +281,8 @@ pub struct PathNode {
     pub links_e: Vec<usize>,
     /// The rival army's links.
     pub links_r: Vec<usize>,
+    /// The Watchers' links.
+    pub links_w: Vec<usize>,
     /// A gap a bridger can span (the original's `bridgeable_spot`).
     pub bridge_spot: bool,
     /// The bridge laid here (an entity), while it stands.
@@ -288,6 +296,7 @@ impl PathNode {
         match team {
             Team::Enemy => &self.links_e,
             Team::Rival => &self.links_r,
+            Team::Watchers => &self.links_w,
             _ => &self.links_a,
         }
     }
@@ -347,7 +356,7 @@ pub struct World {
     pub blasts: Vec<Blast>,
     /// Sounds for the audio layer, drained by the main loop.
     pub sounds: Vec<Sfx>,
-    pub money: [i32; 3],
+    pub money: [i32; 4],
     pub lives: u32,
     pub player_tank: Option<usize>,
     pub messages: VecDeque<(f32, String)>,
@@ -375,13 +384,13 @@ pub struct World {
     /// dealt by the player's supertank).
     burns: Vec<(usize, f32, u32, bool)>,
     burn_clock: f32,
-    queues: [VecDeque<&'static str>; 3],
-    deploy_timer: [f32; 3],
+    queues: [VecDeque<&'static str>; 4],
+    deploy_timer: [f32; 4],
     bank_timer: f32,
-    ai_timer: [f32; 3],
+    ai_timer: [f32; 4],
     /// Formation being built (index into FORMATIONS) and the next unit in it.
-    ai_form: [Option<usize>; 3],
-    ai_place: [usize; 3],
+    ai_form: [Option<usize>; 4],
+    ai_place: [usize; 4],
     time: f32,
     rng: u64,
 }
@@ -393,7 +402,7 @@ impl World {
         for (i, o) in level.objects.iter().enumerate() {
             if o.kind == "path_object" {
                 node_of.insert(i, nodes.len());
-                nodes.push(PathNode { x: o.x, y: o.y, links_a: Vec::new(), links_e: Vec::new(), links_r: Vec::new(), bridge_spot: o.bridge, bridge: None, dir: 0.0 });
+                nodes.push(PathNode { x: o.x, y: o.y, links_a: Vec::new(), links_e: Vec::new(), links_r: Vec::new(), links_w: Vec::new(), bridge_spot: o.bridge, bridge: None, dir: 0.0 });
             }
         }
         for (i, o) in level.objects.iter().enumerate() {
@@ -401,13 +410,14 @@ impl World {
                 nodes[n].links_a = o.links_a.iter().filter_map(|l| node_of.get(l).copied()).collect();
                 nodes[n].links_e = o.links_e.iter().filter_map(|l| node_of.get(l).copied()).collect();
                 nodes[n].links_r = o.links_r.iter().filter_map(|l| node_of.get(l).copied()).collect();
+                nodes[n].links_w = o.links_w.iter().filter_map(|l| node_of.get(l).copied()).collect();
             }
         }
         // the route's direction through each node: toward its next node, or
         // away from the node that leads to it
         for n in 0..nodes.len() {
-            let from = (0..nodes.len()).find(|&m| nodes[m].links_a.contains(&n) || nodes[m].links_e.contains(&n) || nodes[m].links_r.contains(&n));
-            let to = nodes[n].links_a.first().or(nodes[n].links_e.first()).or(nodes[n].links_r.first()).copied();
+            let from = (0..nodes.len()).find(|&m| nodes[m].links_a.contains(&n) || nodes[m].links_e.contains(&n) || nodes[m].links_r.contains(&n) || nodes[m].links_w.contains(&n));
+            let to = nodes[n].links_a.first().or(nodes[n].links_e.first()).or(nodes[n].links_r.first()).or(nodes[n].links_w.first()).copied();
             let (ax, ay, bx, by) = match (from, to) {
                 (_, Some(t)) => (nodes[n].x, nodes[n].y, nodes[t].x, nodes[t].y),
                 (Some(f), None) => (nodes[f].x, nodes[f].y, nodes[n].x, nodes[n].y),
@@ -472,7 +482,7 @@ impl World {
             bolts: Vec::new(),
             blasts: Vec::new(),
             sounds: Vec::new(),
-            money: level.money.unwrap_or([START_MONEY; 3]),
+            money: level.money.unwrap_or([START_MONEY; 4]),
             lives: START_LIVES,
             player_tank,
             messages: VecDeque::new(),
@@ -488,12 +498,12 @@ impl World {
             points: 0,
             burns: Vec::new(),
             burn_clock: 0.0,
-            queues: [VecDeque::new(), VecDeque::new(), VecDeque::new()],
-            deploy_timer: [0.0; 3],
+            queues: [VecDeque::new(), VecDeque::new(), VecDeque::new(), VecDeque::new()],
+            deploy_timer: [0.0; 4],
             bank_timer: BANK_INTERVAL,
-            ai_timer: [5.0; 3],
-            ai_form: [None; 3],
-            ai_place: [0; 3],
+            ai_timer: [5.0; 4],
+            ai_form: [None; 4],
+            ai_place: [0; 4],
             time: 0.0,
             rng: 0x2545_F491_4F6C_DD1D,
         };
@@ -717,6 +727,20 @@ impl World {
         self.check_rules();
     }
 
+    /// Seconds since the battle began.
+    pub fn elapsed(&self) -> f32 {
+        self.time
+    }
+
+    /// Seconds still to hold out under a `time` win condition, if the map
+    /// has one.
+    pub fn time_left(&self) -> Option<f32> {
+        self.rules.win.iter().find_map(|c| match c {
+            crate::rules::Cond::Time(secs) => Some((secs - self.time).max(0.0)),
+            _ => None,
+        })
+    }
+
     /// Seconds a `hold` condition has been held so far.
     pub fn held_for(&self, c: &crate::rules::Cond) -> f32 {
         self.hold_time.get(&c.text()).copied().unwrap_or(0.0)
@@ -760,7 +784,7 @@ impl World {
             };
             let other = if holder == Team::Player { Team::Enemy } else { Team::Player };
             let ours = on_site(holder);
-            let theirs = [Team::Player, Team::Enemy, Team::Rival].into_iter().any(|t| t.hostile(holder) && on_site(t));
+            let theirs = ARMIES.into_iter().any(|t| t.hostile(holder) && on_site(t));
             let side = match (ours, theirs) {
                 (true, false) => Some(holder),
                 (false, true) => Some(other),
@@ -957,7 +981,7 @@ impl World {
     }
 
     fn deploy(&mut self, dt: f32) {
-        for team in [Team::Player, Team::Enemy, Team::Rival] {
+        for team in ARMIES {
             let t = team.index();
             self.deploy_timer[t] = (self.deploy_timer[t] - dt).max(0.0);
             if self.deploy_timer[t] > 0.0 || self.queues[t].is_empty() {
@@ -1462,7 +1486,7 @@ impl World {
             (Class::Hq, Team::Enemy) => self.say("Enemy base destroyed!"),
             (Class::Hq, Team::Player) => self.say("Our base has been destroyed."),
             (Class::EnemyTank, _) => self.say("Enemy supertank destroyed!"),
-            (_, Team::Enemy | Team::Rival) if class != Class::Vehicle => self.say(format!("Destroyed enemy {}", kind.replace('_', " "))),
+            (_, Team::Enemy | Team::Rival | Team::Watchers) if class != Class::Vehicle => self.say(format!("Destroyed enemy {}", kind.replace('_', " "))),
             (_, Team::Player) if class != Class::Vehicle => self.say(format!("Lost our {}", kind.replace('_', " "))),
             _ => {}
         }
@@ -1564,7 +1588,7 @@ mod tests {
     #[test]
     fn ordered_units_drive_to_the_enemy() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 3];
+        w.ai_timer = [f32::MAX; 4];
         assert!(w.order(Team::Player, "peon_tank"));
         assert_eq!(w.money[0], START_MONEY - 300);
         let start = {
@@ -1603,7 +1627,7 @@ mod rules {
     #[test]
     fn move_then_hold_and_resume() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 3];
+        w.ai_timer = [f32::MAX; 4];
         w.order(Team::Player, "peon_tank");
         w.step(1.0 / 30.0);
         let u = w.entities.iter().rposition(|e| e.kind == "peon_tank" && e.team == Team::Player).unwrap();
@@ -1628,7 +1652,7 @@ mod rules {
     #[test]
     fn attack_order_chases_and_hits_its_target() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 3];
+        w.ai_timer = [f32::MAX; 4];
         let foe = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
         // a peon tank placed 8 cells from the tower, out of its 3-cell gun range
         w.order(Team::Player, "peon_tank");
@@ -1647,7 +1671,7 @@ mod rules {
     #[test]
     fn orders_for_a_lost_factory_are_refunded() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 3];
+        w.ai_timer = [f32::MAX; 4];
         assert!(w.order(Team::Player, "peon_tank"));
         assert!(w.order(Team::Player, "peon_tank"));
         w.step(1.0 / 30.0); // first one deploys
@@ -1729,6 +1753,10 @@ mod rules {
         assert!(Team::Rival.hostile(Team::Enemy) && Team::Rival.hostile(Team::Player) && Team::Enemy.hostile(Team::Rival));
         assert!(!Team::Rival.hostile(Team::Rival) && !Team::Rival.hostile(Team::Neutral));
         assert_eq!(Team::from_player(5), Team::Rival);
+        assert_eq!(Team::from_player(6), Team::Watchers);
+        for t in [Team::Player, Team::Enemy, Team::Rival] {
+            assert!(Team::Watchers.hostile(t) && t.hostile(Team::Watchers));
+        }
         assert_eq!(Team::from_player(3), Team::Scenery, "the original levels' scenery stays scenery");
         let mut w = river_map();
         for (team, x) in [(Team::Enemy, 4.0), (Team::Rival, 7.0)] {
@@ -1816,7 +1844,7 @@ mod rules {
     #[test]
     fn helicopters_fly_the_air_route() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 3];
+        w.ai_timer = [f32::MAX; 4];
         assert!(w.order(Team::Player, "helicopter"));
         w.step(1.0 / 30.0);
         let h = w.entities.iter().rposition(|e| e.kind == "helicopter" && e.team == Team::Player).unwrap();
@@ -1832,7 +1860,7 @@ mod rules {
     #[test]
     fn money_planes_fly_crates_home() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 3];
+        w.ai_timer = [f32::MAX; 4];
         let planes = w.entities.iter().filter(|e| e.class == Class::Plane && e.team == Team::Player).count();
         assert!(planes > 0, "the level places money planes at the banks");
         for _ in 0..30 * 49 {
@@ -1848,7 +1876,7 @@ mod rules {
     #[test]
     fn acid_burns_over_forty_ticks() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 3];
+        w.ai_timer = [f32::MAX; 4];
         let tower = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
         let (x, y, hp) = (w.entities[tower].x, w.entities[tower].y, w.entities[tower].hp);
         w.damage_by("acid", x, y, Some(tower), Team::Player, true);

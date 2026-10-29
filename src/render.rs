@@ -267,6 +267,7 @@ fn team_color(team: Team) -> Color {
         Team::Player => AMBER,
         Team::Enemy => Color::Rgb(235, 70, 55),
         Team::Rival => Color::Rgb(110, 160, 245),
+        Team::Watchers => Color::Rgb(200, 190, 160),
         _ => Color::Rgb(205, 205, 200),
     }
 }
@@ -337,7 +338,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
     let w = &g.world;
     // the enemies' own roads, where ours do not run, in their colour
     for (i, n) in w.nodes.iter().enumerate() {
-        for (links, team) in [(&n.links_e, Team::Enemy), (&n.links_r, Team::Rival)] {
+        for (links, team) in [(&n.links_e, Team::Enemy), (&n.links_r, Team::Rival), (&n.links_w, Team::Watchers)] {
             for &l in links {
                 let m = &w.nodes[l];
                 if n.links_a.contains(&l) || m.links_a.contains(&i) {
@@ -494,6 +495,10 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
             None => Span::raw(""),
         },
     ]);
+    if let Some(left) = w.time_left() {
+        let s = left.ceil() as u32;
+        line1.spans.push(Span::styled(format!("  HOLD OUT {}:{:02}", s / 60, s % 60), Style::default().fg(AMBER).add_modifier(Modifier::BOLD)));
+    }
     for (team, _, _, _, secs, held) in w.sites() {
         let (who, color) = if team == Team::Player { ("HOLD", AMBER) } else { ("ENEMY HOLD", team_color(Team::Enemy)) };
         let text = if held >= secs { format!("  {who} done") } else { format!("  {who} {:.0}/{secs:.0}s", held.floor()) };

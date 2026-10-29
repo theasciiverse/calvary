@@ -92,7 +92,7 @@ const OBJECT_KINDS: [&str; 31] = [
     "greclighthouse",
 ];
 
-const OWNERS: [(u8, &str); 5] = [(1, "player"), (2, "enemy"), (5, "rival"), (0, "neutral"), (4, "scenery")];
+const OWNERS: [(u8, &str); 6] = [(1, "player"), (2, "enemy"), (5, "rival"), (6, "watchers"), (0, "neutral"), (4, "scenery")];
 
 /// Whose roads the path tool draws (L cycles): ours, which the Europeans
 /// (player 2) also drive the other way, as on every map so far; the rival
@@ -102,8 +102,9 @@ enum Road {
     Ours,
     Rival,
     Enemy,
+    Watchers,
 }
-const ROADS: [(Road, &str); 3] = [(Road::Ours, "ours, enemy back"), (Road::Rival, "rival"), (Road::Enemy, "enemy")];
+const ROADS: [(Road, &str); 4] = [(Road::Ours, "ours, enemy back"), (Road::Rival, "rival"), (Road::Enemy, "enemy"), (Road::Watchers, "watchers")];
 
 /// The map's settings the I prompt edits, in order.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -346,6 +347,7 @@ impl Editor {
                     links_a: vec![],
                     links_e: vec![],
                     links_r: vec![],
+                    links_w: vec![],
                     bridge: false,
                 });
                 self.message = format!("placed {kind} ({})", OWNERS.iter().find(|o| o.0 == player).map_or("scenery", |o| o.1));
@@ -371,6 +373,7 @@ impl Editor {
                             links_a: vec![],
                             links_e: vec![],
                             links_r: vec![],
+                            links_w: vec![],
                             bridge: false,
                         });
                         self.level.objects.len() - 1
@@ -390,6 +393,7 @@ impl Editor {
                             push(&mut self.level.objects[node].links_e, prev);
                         }
                         Road::Rival => push(&mut self.level.objects[prev].links_r, node),
+                        Road::Watchers => push(&mut self.level.objects[prev].links_w, node),
                         Road::Enemy => push(&mut self.level.objects[prev].links_e, node),
                     }
                 }
@@ -504,7 +508,7 @@ fn field_help(f: Field) -> &'static str {
     match f {
         Field::Win | Field::Lose => "conditions split by ;  e.g. no mainbasepad 2; hold 1 50 40 4 90   (empty: the default)",
         Field::Build => "units split by ,  e.g. peon_tank, bridger   (empty: everything)",
-        Field::Money => "players 1 2 5  e.g. 10000 5000 5000   (empty: 10000 each)",
+        Field::Money => "players 1 2 5 [6]  e.g. 10000 5000 5000   (empty: 10000 each)",
         Field::Music => "a track, e.g. Al_Basrah.mp3   (empty: none)",
     }
 }
@@ -525,7 +529,10 @@ impl Editor {
             Field::Win => conds(&self.level.rules.win),
             Field::Lose => conds(&self.level.rules.lose),
             Field::Build => self.level.build.as_ref().map_or(String::new(), |b| b.join(", ")),
-            Field::Money => self.level.money.map_or(String::new(), |m| format!("{} {} {}", m[0], m[1], m[2])),
+            Field::Money => self.level.money.map_or(String::new(), |m| {
+                let s = format!("{} {} {}", m[0], m[1], m[2]);
+                if m[3] == crate::world::START_MONEY { s } else { format!("{s} {}", m[3]) }
+            }),
             Field::Music => self.music.clone().unwrap_or_default(),
         }
     }
@@ -558,8 +565,9 @@ impl Editor {
                 let n: Vec<i32> = text.split_whitespace().map(|w| w.parse().map_err(|_| format!("{w:?} is not a number"))).collect::<Result<_, _>>()?;
                 self.level.money = match n.as_slice() {
                     [] => None,
-                    [a, b, c] => Some([*a, *b, *c]),
-                    _ => return Err("three amounts, for players 1, 2 and 5".into()),
+                    [a, b, c] => Some([*a, *b, *c, crate::world::START_MONEY]),
+                    [a, b, c, d] => Some([*a, *b, *c, *d]),
+                    _ => return Err("three amounts, for players 1, 2 and 5, or four, and 6".into()),
                 };
             }
             Field::Music => {
@@ -621,7 +629,7 @@ impl Editor {
 fn remove_object(level: &mut Level, i: usize) {
     level.objects.remove(i);
     for o in &mut level.objects {
-        for links in [&mut o.links_a, &mut o.links_e, &mut o.links_r] {
+        for links in [&mut o.links_a, &mut o.links_e, &mut o.links_r, &mut o.links_w] {
             links.retain(|&l| l != i);
             for l in links.iter_mut() {
                 if *l > i {
@@ -787,7 +795,7 @@ fn draw_overlay(f: &mut ratatui::Frame, area: Rect, ed: &Editor) {
     // (enemy links that only run ours backwards are not drawn again)
     for (i, o) in ed.level.objects.iter().enumerate().filter(|(_, o)| o.kind == "path_object") {
         let enemy_own = o.links_e.iter().filter(|&&l| !ed.level.objects[l].links_a.contains(&i));
-        let roads = o.links_a.iter().map(|&l| (l, Color::Rgb(235, 235, 225))).chain(enemy_own.map(|&l| (l, Color::Rgb(235, 70, 55)))).chain(o.links_r.iter().map(|&l| (l, Color::Rgb(110, 160, 245))));
+        let roads = o.links_a.iter().map(|&l| (l, Color::Rgb(235, 235, 225))).chain(enemy_own.map(|&l| (l, Color::Rgb(235, 70, 55)))).chain(o.links_r.iter().map(|&l| (l, Color::Rgb(110, 160, 245)))).chain(o.links_w.iter().map(|&l| (l, Color::Rgb(200, 190, 160))));
         for (l, color) in roads.collect::<Vec<_>>() {
             let m = &ed.level.objects[l];
             let steps = ((m.x - o.x).hypot(m.y - o.y) * 2.0).ceil().max(1.0) as usize;
@@ -820,7 +828,7 @@ mod tests {
     fn erase_renumbers_path_links() {
         let mut level = Editor::blank(10, 10, "grassfull");
         for x in 0..3 {
-            level.objects.push(ObjectRec { kind: "path_object".into(), x: x as f32, y: 1.0, z: 0.0, theta: 0.0, health: 100, player: 1, links_a: vec![], links_e: vec![], links_r: vec![], bridge: false });
+            level.objects.push(ObjectRec { kind: "path_object".into(), x: x as f32, y: 1.0, z: 0.0, theta: 0.0, health: 100, player: 1, links_a: vec![], links_e: vec![], links_r: vec![], links_w: vec![], bridge: false });
         }
         level.objects[0].links_a = vec![1, 2];
         level.objects[2].links_e = vec![1, 0];
@@ -883,7 +891,7 @@ mod tests {
         assert_eq!(ed.field_text(Field::Win), "hold 1 5 5 3 60; no mainbasepad 2");
         assert_eq!(back.rules.win.len(), 2);
         assert_eq!(back.build, Some(vec!["peon_tank".to_string(), "bridger".to_string()]));
-        assert_eq!(back.money, Some([9000, 4000, 3000]));
+        assert_eq!(back.money, Some([9000, 4000, 3000, crate::world::START_MONEY]));
         assert_eq!(music.as_deref(), Some("Greece.mp3"));
         assert_eq!(back.objects[0].links_r, vec![1]);
     }

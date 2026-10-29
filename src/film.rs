@@ -45,7 +45,7 @@ const CLASSES: [(Class, &str); 12] = [
     (Class::Pad, "pad"),
     (Class::Prop, "prop"),
 ];
-const TEAMS: [(Team, &str); 5] = [(Team::Player, "p"), (Team::Enemy, "e"), (Team::Rival, "r"), (Team::Neutral, "n"), (Team::Scenery, "s")];
+const TEAMS: [(Team, &str); 6] = [(Team::Player, "p"), (Team::Enemy, "e"), (Team::Rival, "r"), (Team::Watchers, "w"), (Team::Neutral, "n"), (Team::Scenery, "s")];
 
 fn q(v: f32) -> String {
     let r = (v * 100.0).round() / 100.0;
