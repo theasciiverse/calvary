@@ -305,6 +305,41 @@ impl Entity {
         matches!(self.kind.as_str(), "car" | "engineer" | "moneyplane" | "repairer" | "bomb_truck")
     }
 
+    /// The original's `AERIAL` flag (otherwise `GROUND`): what flies.
+    pub fn airborne(&self) -> bool {
+        self.class == Class::Plane || (self.class == Class::Vehicle && flies(&self.kind))
+    }
+
+    /// The original's `HIT_GROUND` and `HIT_AERIAL`, as each object sets
+    /// them (`objs/*.cpp`): what its weapon can be turned on. Jets only
+    /// fight aircraft; cobras, electric cars, bombers and the big guns
+    /// only the ground. The peon tank's `HIT_AERIAL` is Grawehr's (the 1998
+    /// `peontank.cc` has `HIT_GROUND` alone). Kinds without either flag
+    /// (engineers, bomb trucks, bridgers, supply trucks, money planes) go
+    /// by their own rules.
+    fn hits(&self) -> Option<(bool, bool)> {
+        Some(match self.kind.as_str() {
+            "stank" | "peon_tank" | "rocket_tank" | "tank_buster" | "helicopter" | "turret" | "popup_turret" | "tower_missile" | "tower_electric" | "gunport" => (true, true),
+            "jet" => (false, true),
+            "electric_car" | "cobra_tank" | "trike" | "bomber" | "supergun" | "verybiggun" | "base_launcher" | "repairer" => (true, false),
+            _ => return None,
+        })
+    }
+
+    /// `g1_map_piece_class::can_attack` (`objs/map_piece.cpp`): another
+    /// side's target whose `GROUND`/`AERIAL` matches one of our `HIT_`
+    /// flags. The base launcher keeps to supertanks (its own `can_attack`
+    /// in `objs/base_launcher.cpp`).
+    pub fn can_attack(&self, t: &Entity) -> bool {
+        if !(t.is_target() && self.team.hostile(t.team)) {
+            return false;
+        }
+        if self.kind == "base_launcher" {
+            return matches!(t.class, Class::PlayerTank | Class::EnemyTank);
+        }
+        self.hits().is_none_or(|(ground, air)| if t.airborne() { air } else { ground })
+    }
+
     pub fn is_target(&self) -> bool {
         self.alive && !matches!(self.class, Class::Prop | Class::Pad | Class::Relic)
     }
@@ -1142,7 +1177,7 @@ impl World {
         self.entities
             .iter()
             .enumerate()
-            .filter(|(_, e)| e.is_target() && me.team.hostile(e.team) && (e.dangerous() || me.special_targets()))
+            .filter(|(_, e)| me.can_attack(e) && (e.dangerous() || me.special_targets()))
             .map(|(j, e)| (j, (e.x - me.x).hypot(e.y - me.y) - e.radius()))
             .filter(|&(_, d)| d <= range)
             .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -1171,7 +1206,9 @@ impl World {
         // an attack order overrides target choice until that enemy is gone
         let mut order = self.entities[i].order;
         if let Order::Attack(t) = order {
-            if !(self.entities[t].is_target() && team.hostile(self.entities[t].team)) {
+            // gone, or out of our weapon's reach (a jet sent at a tank): the
+            // original drops the target (`find_target`)
+            if !self.entities[i].can_attack(&self.entities[t]) {
                 order = Order::Hold;
                 self.entities[i].order = order;
             }
@@ -1179,7 +1216,7 @@ impl World {
         // keep or pick a target; units under orders only take on what is
         // already within weapon range instead of what they can see
         let reach = if matches!(order, Order::Route) { detect } else { wrange };
-        let keep = self.entities[i].target.filter(|&t| self.entities[t].is_target() && self.dist(i, t) - self.entities[t].radius() <= reach);
+        let keep = self.entities[i].target.filter(|&t| self.entities[i].can_attack(&self.entities[t]) && self.dist(i, t) - self.entities[t].radius() <= reach);
         let target = match order {
             Order::Attack(t) => Some(t),
             _ => keep.or_else(|| self.nearest_hostile(i, reach)),
@@ -2016,6 +2053,29 @@ mod rules {
         // the supertank's cost (10000) is above the first threshold (1000)
         assert_eq!(w.points, 10000);
         assert_eq!(w.upgrade_level(), 1);
+    }
+
+    #[test]
+    fn weapons_hit_the_ground_or_the_air_as_their_flags_say() {
+        let unit = |kind: &str, team| Entity::shown(kind, Class::Vehicle, team, 100.0);
+        let tank = unit("peon_tank", Team::Enemy);
+        let heli = unit("helicopter", Team::Enemy);
+        let supertank = Entity::shown("stank", Class::PlayerTank, Team::Player, 100.0);
+        // jets fight aircraft only; cobras, electric cars and bombers the ground only
+        assert!(unit("jet", Team::Player).can_attack(&heli) && !unit("jet", Team::Player).can_attack(&tank));
+        for kind in ["cobra_tank", "electric_car", "bomber"] {
+            assert!(unit(kind, Team::Player).can_attack(&tank) && !unit(kind, Team::Player).can_attack(&heli), "{kind}");
+        }
+        for kind in ["rocket_tank", "tank_buster", "helicopter", "peon_tank"] {
+            assert!(unit(kind, Team::Player).can_attack(&tank) && unit(kind, Team::Player).can_attack(&heli), "{kind}");
+        }
+        let turret = Entity::shown("turret", Class::Tower, Team::Player, 200.0);
+        assert!(turret.can_attack(&heli) && turret.can_attack(&Entity::shown("moneyplane", Class::Plane, Team::Enemy, 50.0)));
+        // the base launcher keeps to supertanks
+        let launcher = Entity::shown("base_launcher", Class::Tower, Team::Enemy, 1000.0);
+        assert!(launcher.can_attack(&supertank) && !launcher.can_attack(&unit("peon_tank", Team::Player)));
+        // and nothing turns on its own side
+        assert!(!unit("jet", Team::Enemy).can_attack(&heli));
     }
 
     #[test]

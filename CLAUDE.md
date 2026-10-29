@@ -416,11 +416,21 @@ object rotation, a tile-transition helper for coastlines.
    `objs/bomber.cpp`: they bomb a target only while it is ahead, never
    stop, drop for 20 ticks more once over it, then let it go; bombs fall
    from under the plane. Aircraft at the end of their route go round
-   again. Open: which weapons may hit aircraft. The original decides it
-   by flags (`can_attack`: the target's `GROUND`/`AERIAL` against the
-   attacker's `HIT_GROUND`/`HIT_AERIAL`; turrets, electric towers, tank
-   busters and the cobra have `HIT_AERIAL`, checked); the rest of the
-   units' flags are not read yet, so everything can still hit aircraft.
+   again. Which weapons may hit aircraft follows the original's flags
+   (done 2026-10-29; `g1_map_piece_class::can_attack`, the target's
+   `GROUND`/`AERIAL` against the attacker's `HIT_GROUND`/`HIT_AERIAL`,
+   as each `objs/*.cpp` sets them): both for supertanks, peon and rocket
+   tanks, tank busters, helicopters, turrets and towers; the air only for
+   jets; the ground only for cobras, electric cars, trikes, bombers,
+   superguns and launchers. An attack order on something the unit cannot
+   hit is dropped, as `find_target` drops it. The peon tank's
+   `HIT_AERIAL` is Grawehr's (the 1998 `peontank.cc` has only
+   `HIT_GROUND`); kept, as the fork's `balance.scm` is ours. The base
+   launcher fires only at supertanks (its own `can_attack`). Not ported:
+   the original's superguns and launchers lack `TARGETABLE` (no unit
+   could attack them), which would leave the campaign's supergun
+   objectives to the supertank alone; and area blasts still reach
+   aircraft over them.
 7. **Sound (done, 2026-10-04).** The 15 original tracks (`data/music`)
    and the original sfx set (`data/sfx`, 102 files) are bundled and the
    ones in use are compiled into the binary (`src/audio.rs`), decoded by
@@ -751,7 +761,9 @@ results are without the supertank, then with the stand-in:
   squadron of their jets and bombers is in the air at the start (ai_joe's
   formations never build jets, so the strike is placed). Win: `own
   takeover_pad 1 2`. Lost at about 3; won at about 7 (after the bomber
-  and targeting fixes, with two more aircraft in the strike).
+  and targeting fixes, with two more aircraft in the strike; since the
+  air flags the bombers go for the supertank too, so the stand-in has to
+  start at the first minute, `CLEAR_FROM=60`).
 
 Act III, **The European War** (2026-10-29), Greece to Vienna. Probe
 results (after the targeting fix: the stand-in also sends idle units
