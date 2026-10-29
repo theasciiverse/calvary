@@ -120,6 +120,22 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy or take every electric tower round the pit. Keep the HQ standing.",
     },
+    Mission {
+        act: 0,
+        number: 6,
+        title: "The Euphrates line",
+        map: include_str!("../maps/euphrates.cmap"),
+        briefing: &[
+            "Commander, Reid. Six trucks for the forward post on the Euphrates,",
+            "and the bones from Babylon are in two of them. Command has changed",
+            "the route twice since dusk, so choose for yourself, sir: J switches",
+            "the junction nearest you, and the crossovers let you change your mind.",
+            "Both roads are watched. Select the trucks and X holds them while you",
+            "clear the way; R sends them on. Four must get through. Lose three and",
+            "it is over.",
+        ],
+        objective: "Bring four of the six supply trucks to the forward post. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -428,8 +444,8 @@ mod tests {
     /// scripted player orders a bridger a minute where the map offers them,
     /// and every 20 s the next of the map's other units; with `SUPERTANK=1`
     /// the enemy towers and armour are cleared every minute from 2:00 and
-    /// the supertank parks on the map's site to hold, standing in for the
-    /// supertank's work. `RUST_LOG=info` shows the battle's log.
+    /// the supertank parks on the map's site to hold, and supply trucks wait
+    /// at home until 2:00, standing in for the supertank's work. `RUST_LOG=info` shows the battle's log.
     #[test]
     #[ignore]
     fn mission_report() {
@@ -445,6 +461,14 @@ mod tests {
             }
             if s % 20 == 0 && !units.is_empty() {
                 w.order(Team::Player, units[(s / 20) % units.len()]);
+            }
+            // the supply trucks wait at home until the road is cleared
+            let trucks: Vec<usize> = (0..w.entities.len()).filter(|&i| w.entities[i].kind == "car" && w.entities[i].team == Team::Player).collect();
+            if supertank && s == 0 {
+                w.command(&trucks, crate::world::Command::Hold);
+            }
+            if supertank && s == 121 {
+                w.command(&trucks, crate::world::Command::Resume);
             }
             if supertank && s >= 120 && s % 60 == 0 {
                 for e in w.entities.iter_mut().filter(|e| e.team == Team::Enemy && matches!(e.class, Class::Tower | Class::Vehicle)) {

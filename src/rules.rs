@@ -38,6 +38,11 @@ pub enum Cond {
     /// `own KIND P`: player P has a KIND standing (one taken by engineers,
     /// say: `own takeover_pad 1`).
     Own(String, u8),
+    /// `reach P KIND X Y R N`: N of player P's KIND stand within R of
+    /// (X, Y) (a convoy brought home: `reach 1 car 104 48 5 4`).
+    Reach { player: u8, kind: String, x: f32, y: f32, r: f32, n: usize },
+    /// `lost P KIND N`: N of player P's KIND have been destroyed.
+    Lost { player: u8, kind: String, n: usize },
     /// `hold P X Y R SECS`: player P has held the ground within R of
     /// (X, Y) for SECS seconds.
     Hold { player: u8, x: f32, y: f32, r: f32, secs: f32 },
@@ -63,11 +68,17 @@ impl Cond {
             ["no_units", p] => Ok(Cond::NoUnits(player(p)?)),
             ["no", kind, p] => Ok(Cond::No(kind.to_string(), player(p)?)),
             ["own", kind, p] => Ok(Cond::Own(kind.to_string(), player(p)?)),
+            ["reach", p, kind, x, y, r, n] => {
+                let num = |w: &str| w.parse::<f32>().map_err(|_| format!("condition {text:?}: bad number {w:?}"));
+                let n = n.parse().map_err(|_| format!("condition {text:?}: bad count {n:?}"))?;
+                Ok(Cond::Reach { player: player(p)?, kind: kind.to_string(), x: num(x)?, y: num(y)?, r: num(r)?, n })
+            }
+            ["lost", p, kind, n] => Ok(Cond::Lost { player: player(p)?, kind: kind.to_string(), n: n.parse().map_err(|_| format!("condition {text:?}: bad count {n:?}"))? }),
             ["hold", p, x, y, r, secs] => {
                 let num = |w: &str| w.parse::<f32>().map_err(|_| format!("condition {text:?}: bad number {w:?}"));
                 Ok(Cond::Hold { player: player(p)?, x: num(x)?, y: num(y)?, r: num(r)?, secs: num(secs)? })
             }
-            _ => Err(format!("condition {text:?}: want `no_units PLAYER`, `no KIND PLAYER`, `own KIND PLAYER` or `hold PLAYER X Y RADIUS SECONDS`")),
+            _ => Err(format!("condition {text:?}: want `no_units PLAYER`, `no KIND PLAYER`, `own KIND PLAYER`, `hold PLAYER X Y RADIUS SECONDS`, `reach PLAYER KIND X Y RADIUS COUNT` or `lost PLAYER KIND COUNT`")),
         }
     }
 
@@ -77,6 +88,8 @@ impl Cond {
             Cond::No(kind, p) => format!("no {kind} {p}"),
             Cond::Own(kind, p) => format!("own {kind} {p}"),
             Cond::Hold { player, x, y, r, secs } => format!("hold {player} {x} {y} {r} {secs}"),
+            Cond::Reach { player, kind, x, y, r, n } => format!("reach {player} {kind} {x} {y} {r} {n}"),
+            Cond::Lost { player, kind, n } => format!("lost {player} {kind} {n}"),
         }
     }
 
@@ -96,6 +109,14 @@ impl Cond {
                 w.entities.iter().any(|e| e.alive && e.team == team && e.kind == *kind)
             }
             Cond::Hold { secs, .. } => w.held_for(self) >= *secs,
+            Cond::Reach { player, kind, x, y, r, n } => {
+                let team = Team::from_player(*player);
+                w.entities.iter().filter(|e| e.alive && e.team == team && e.kind == *kind && (e.x - x).hypot(e.y - y) <= *r).count() >= *n
+            }
+            Cond::Lost { player, kind, n } => {
+                let team = Team::from_player(*player);
+                w.entities.iter().filter(|e| !e.alive && e.team == team && e.kind == *kind).count() >= *n
+            }
         }
     }
 
@@ -107,6 +128,7 @@ impl Cond {
             "takeover_pad" => "takeover pad".to_string(),
             "tower_electric" => "electric tower".to_string(),
             "tower_missile" => "missile tower".to_string(),
+            "car" => "supply truck".to_string(),
             k => k.replace('_', " "),
         };
         match self {
@@ -116,6 +138,10 @@ impl Cond {
             Cond::Own(kind, _) => format!("The enemy has taken the {}.", name(kind)),
             Cond::Hold { player: 1, .. } => "We held the site.".into(),
             Cond::Hold { .. } => "The enemy held the site.".into(),
+            Cond::Reach { player: 1, kind, n, .. } => format!("{n} {}s got through.", name(kind)),
+            Cond::Reach { kind, n, .. } => format!("{n} enemy {}s got through.", name(kind)),
+            Cond::Lost { player: 1, kind, n } => format!("We lost {n} {}s: too few can get through.", name(kind)),
+            Cond::Lost { kind, n, .. } => format!("The enemy lost {n} {}s.", name(kind)),
             Cond::No(kind, 2) if kind != "mainbasepad" => format!("Every enemy {} is destroyed.", name(kind)),
             Cond::No(kind, 1) if kind != "mainbasepad" => format!("We have lost every {}.", name(kind)),
             Cond::No(kind, p) => {
@@ -154,6 +180,8 @@ mod tests {
         assert!(Cond::parse("no mainbasepad x").is_err());
         assert!(Cond::parse("hold 60").is_err());
         assert_eq!(Cond::parse("own takeover_pad 1").unwrap().text(), "own takeover_pad 1");
+        assert_eq!(Cond::parse("reach 1 car 104 48 5 4").unwrap().text(), "reach 1 car 104 48 5 4");
+        assert_eq!(Cond::parse("lost 1 car 3").unwrap().text(), "lost 1 car 3");
         assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap(), Cond::Hold { player: 1, x: 55.5, y: 42.0, r: 4.0, secs: 90.0 });
         assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap().text(), "hold 1 55.5 42 4 90");
         assert!(Rules::parse(&[], &[]).unwrap().is_default());

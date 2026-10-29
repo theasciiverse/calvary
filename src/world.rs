@@ -1165,6 +1165,10 @@ impl World {
 
     fn follow_path(&mut self, i: usize, dt: f32) {
         let team = self.entities[i].team;
+        if self.entities[i].next_node.is_none() && self.entities[i].kind == "car" {
+            // supply trucks stop where their route ends
+            return;
+        }
         let Some(node) = self.entities[i].next_node else {
             // end of the line: go for the nearest enemy structure
             let me = &self.entities[i];

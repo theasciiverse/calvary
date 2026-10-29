@@ -225,6 +225,14 @@ takeover_pad 1`. Takeover pads (`takeover_pad`, after
 puts up a turret for its new side, and nobody can take it while that
 turret stands. (The original also handed the pad's linked buildings,
 `takeover_objects`, to the new side; our maps have no such links yet.)
+`reach P KIND X Y R N` holds when N of P's KIND stand within R of a point,
+and `lost P KIND N` once N of them have been destroyed: a convoy is
+`win = ["reach 1 car 100.5 46.5 5 4"]`, `lose = ["lost 1 car 3"]`. Supply
+trucks are the original table's `car` row (100 health, no weapon), drawn
+as a cab with a canvas load; they stop where their route ends, and like
+any unit they can be selected, held (X) and sent on (R). (The original's
+own `objs/convoy.cpp` only groups units to move together; there is no
+escort objective in it.)
 A `.cmap`'s music must be one of the bundled tracks, or the map does not
 load (a misspelt track used to play nothing).
 `build = ["peon_tank", "bridger"]` limits what the factories offer on that
@@ -385,8 +393,8 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner and missions 1 to 5, Al Basrah, Shatt al-Arab, Ur,
-   Nakhayb and Babylon. Three missions reuse the
+   the campaign runner and missions 1 to 6, Al Basrah, Shatt al-Arab, Ur,
+   Nakhayb, Babylon and the Euphrates line. Three missions reuse the
    existing maps; the rest are new `.cmap` maps.
 9. **Follow mode (done) and first person (next)** (see Rendering).
 
@@ -628,6 +636,19 @@ Calvary's own scenery (the original has no such models): `giant_skull`,
 drawn by `sprites::paint_bones`, tall bone billboards in the follow
 view; brick and ruined walls draw as oriented wall segments.
 
+Mission 6, **The Euphrates line** (`maps/euphrates.cmap`, 110x96, from
+`tools/gen_euphrates.py`, seed 2003): the river along the north, our
+camp in the west with six supply trucks lined up on the road, the
+forward post (two of our turrets) in the east. Two roads east, the river
+road and the desert road, with a crossover between them in the middle
+(four junctions in all); three enemy guns over each road, one over the
+crossover, and two raiding parties already out on the roads, driving
+west into the convoy; the enemy base in the south-east feeds the desert
+road. Builds: peon tanks, electric cars, rocket tanks, trikes. Win:
+`reach 1 car 100.5 46.5 5 4`; lose: three trucks, or our HQ. In the probe
+an unescorted convoy loses three trucks before 2:00; held at home until
+the road is cleared (`SUPERTANK=1`), it gets through at about 4 minutes.
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -695,10 +716,9 @@ has one complete battle (`test`, the Greek coast) and the first campaign
 mission, so its store page would still have to sell a story the player can
 barely start. Write the store page and README once Act 1 plays.
 
-Act I, what is left (2026-10-29): missions 6 and 7 (the Euphrates line,
-Nineveh), each a new map; a convoy-defence condition; a second hostile
-army for Nineveh (`Team` has one enemy today). Missions 1 to 5 are built
-but not yet played through by a person.
+Act I, what is left (2026-10-29): mission 7, Nineveh, which needs a
+second hostile army (`Team` has one enemy today). Missions 1 to 6 are
+built but not yet played through by a person.
 
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,

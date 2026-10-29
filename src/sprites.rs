@@ -180,6 +180,7 @@ pub fn look(kind: &str) -> Look {
         "engineer" => l(0.38, 0.26, 0.1, 0.0, 0.0),
         "bomb_truck" => l(0.5, 0.3, 0.08, 0.0, 0.0),
         "bridger" => l(0.55, 0.3, 0.08, 0.0, 0.0),
+        "car" => l(0.55, 0.28, 0.06, 0.0, 0.0),
         _ => l(0.45, 0.32, 0.12, 0.2, 0.7),
     }
 }
@@ -244,6 +245,9 @@ pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
             if e.kind == "bridger" {
                 // the folded deck it carries
                 paint_deck(layer, e.x, e.y, e.heading, 0.42, 0.22, e.flash > 0.0);
+            }
+            if e.kind == "car" {
+                paint_cargo(layer, e.x, e.y, e.heading, e.flash > 0.0);
             }
         }
         Class::Bridge => paint_deck(layer, e.x, e.y, e.heading, BRIDGE_HALF_LEN, BRIDGE_HALF_WID, e.flash > 0.0),
@@ -502,6 +506,20 @@ pub fn paint_site(layer: &mut PixelLayer, cx: f32, cy: f32, r: f32, held: f32, t
     });
 }
 
+/// A supply truck's canvas-covered load, behind its cab.
+fn paint_cargo(layer: &mut PixelLayer, cx: f32, cy: f32, dir: f32, hit: bool) {
+    let (hx, hy) = (dir.cos(), dir.sin());
+    layer.paint(cx, cy, 0.6, |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        let (l, w) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+        if !(-0.5..=0.15).contains(&l) || w.abs() > 0.24 {
+            return None;
+        }
+        let c = if ((l + 0.5) / 0.16).fract() < 0.2 { (88, 92, 60) } else { (118, 124, 82) };
+        Some((if hit { mix(c, (255, 255, 255), 0.6) } else { c }, false))
+    });
+}
+
 /// A gap waiting for a bridger: a blinking dashed outline of the deck.
 pub fn paint_gap(layer: &mut PixelLayer, cx: f32, cy: f32, dir: f32, time: f32) {
     if (time * 2.0).fract() > 0.7 {
@@ -619,7 +637,7 @@ fn paint_bones(layer: &mut PixelLayer, kind: &str, cx: f32, cy: f32, th: f32) {
             let eye = ((l + 0.2).hypot(w.abs() - 0.42)) <= 0.22;
             let nose = (-0.75..=-0.5).contains(&l) && w.abs() <= 0.08;
             let teeth = (-1.0..=-0.9).contains(&l) && (w * 8.0).fract().abs() < 0.5;
-            Some((if eye || nose { (40, 34, 30) } else if teeth { shadow } else if w > 0.3 { shadow } else { BONE }, false))
+            Some((if eye || nose { (40, 34, 30) } else if teeth || w > 0.3 { shadow } else { BONE }, false))
         }),
         "giant_spine" => layer.paint(cx, cy, 2.6, |x, y| {
             let (l, w) = frame(x, y);

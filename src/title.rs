@@ -53,6 +53,8 @@ const PLACES: &[(&str, &str, f32, f32)] = &[
     // Qurna, where the Tigris and Euphrates meet to form the Shatt al-Arab
     ("shatt", "Shatt al-Arab, Iraq", 31.00, 47.43),
     ("ur", "Ur, Iraq", 30.96, 46.10),
+    // Nasiriyah, on the Euphrates
+    ("euphrates", "The Euphrates, Iraq", 31.04, 46.26),
     ("nakhayb", "Nakhayb, Iraq", 32.04, 42.27),
     ("babylon", "Babylon, Iraq", 32.54, 44.42),
     ("nineveh", "Nineveh, Iraq", 36.36, 43.15),
