@@ -380,6 +380,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Get four of the six supply trucks out through the Schollenen gorge. Lose three and it fails.",
     },
+    Mission {
+        act: 2,
+        number: 23,
+        title: "Zurich",
+        map: include_str!("../maps/zurich.cmap"),
+        briefing: &[
+            "Commander, Reid. Zurich, and we are broke, sir. The column has run on",
+            "what we took since Basrah, and the north will cost more than that. The",
+            "valley is full of banks, and nobody is minding them: five of them along",
+            "the roads round the lake. Get engineers into them before the Europeans",
+            "in the south of the valley do. Four banks of our own and we can pay",
+            "for whatever comes after. And sir: a bank they take, we can shoot.",
+        ],
+        objective: "Own four banks: ours and three more, taken by engineers. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.

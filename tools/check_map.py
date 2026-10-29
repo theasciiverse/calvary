@@ -7,9 +7,17 @@ The first point is the start; each other is reported reachable or not."""
 import re, sys
 
 text = open(sys.argv[1]).read()
-legend = {l.split()[0]: int(l.split()[1]) for l in re.search(r"legend = '''\n(.*?)'''", text, re.S).group(1).strip().split("\n")}
-tiles = re.search(r"tiles = '''\n(.*?)'''", text, re.S).group(1).strip("\n").split("\n")
-objs = re.search(r"objects = '''\n(.*?)'''", text, re.S).group(1).strip("\n").split("\n")
+
+
+def block(name):
+    """One of the map's multi-line strings, in either kind of triple quotes
+    (the game's --export writes double ones)."""
+    return re.search(name + r" = ('''|\"\"\")\n(.*?)\1", text, re.S).group(2)
+
+
+legend = {l.split()[0]: int(l.split()[1]) for l in block("legend").strip().split("\n")}
+tiles = block("tiles").strip("\n").split("\n")
+objs = block("objects").strip("\n").split("\n")
 H, W = len(tiles), len(tiles[0])
 blocked = lambda x, y: legend[tiles[y][x]] & 4
 pts = [tuple(int(float(v)) for v in p.split(",")) for p in sys.argv[2:]]
