@@ -84,6 +84,26 @@ pub const NIGHT_SIGHT: f32 = 9.0;
 /// detection range (`find_target`), our buildings this far past their walls.
 const STANK_SIGHT: f32 = 7.0;
 const BUILDING_SIGHT: f32 = 4.0;
+/// The Nephilim (Calvary's own): giants that lie under the ground until
+/// anything with tracks or wheels comes this close, or they are hurt, and
+/// wake whoever lies near them as they rise. Awake, they walk at this pace
+/// over anything at all and stamp on everything of every army, the Order's
+/// own excepted, that stands in reach.
+pub const NEPHILIM_HEALTH: f32 = 3000.0;
+const NEPHILIM_WAKE: f32 = 7.0;
+const NEPHILIM_CHAIN: f32 = 9.0;
+const NEPHILIM_SPEED: f32 = 0.5;
+const NEPHILIM_SIGHT: f32 = 24.0;
+const STOMP_REACH: f32 = 1.2;
+const STOMP_RADIUS: f32 = 1.5;
+const STOMP_DAMAGE: f32 = 220.0;
+const STOMP_DELAY: f32 = 1.6;
+/// Reindeer (Calvary's own scenery, for Lapland) graze near where they
+/// were put and run from anything that drives or blows up this close.
+const HERD_FRIGHT: f32 = 5.0;
+const HERD_RUN: f32 = 1.8;
+const HERD_GRAZE: f32 = 0.12;
+const HERD_RANGE: f32 = 6.0;
 /// Sea ice (an `*icepatch*` tile): the damage a cell takes before it breaks
 /// into open water. A supergun shell opens a hole at once, a few rockets or
 /// bombs crack through, tank guns hardly mark it. Nothing in the original
@@ -263,6 +283,8 @@ pub struct Entity {
     pub carrier: Option<usize>,
     /// Bombers: seconds of bombs still to drop after passing over a target.
     pub bombing: f32,
+    /// A Nephilim still lying under the ground, not yet woken.
+    pub asleep: bool,
 }
 
 impl Entity {
@@ -291,6 +313,7 @@ impl Entity {
             home: (0.0, 0.0),
             carrier: None,
             bombing: 0.0,
+            asleep: false,
         }
     }
 
@@ -339,9 +362,9 @@ impl Entity {
     /// by their own rules.
     fn hits(&self) -> Option<(bool, bool)> {
         Some(match self.kind.as_str() {
-            "stank" | "peon_tank" | "rocket_tank" | "tank_buster" | "helicopter" | "turret" | "popup_turret" | "tower_missile" | "tower_electric" | "gunport" => (true, true),
+            "stank" | "peon_tank" | "rocket_tank" | "tank_buster" | "helicopter" | "turret" | "popup_turret" | "tower_missile" | "tower_electric" | "gunport" | "battleship" => (true, true),
             "jet" => (false, true),
-            "electric_car" | "cobra_tank" | "trike" | "bomber" | "supergun" | "verybiggun" | "base_launcher" | "repairer" => (true, false),
+            "electric_car" | "cobra_tank" | "trike" | "bomber" | "supergun" | "verybiggun" | "base_launcher" | "repairer" | "nephilim" => (true, false),
             _ => return None,
         })
     }
@@ -361,11 +384,12 @@ impl Entity {
     }
 
     pub fn is_target(&self) -> bool {
-        self.alive && !matches!(self.class, Class::Prop | Class::Pad | Class::Relic)
+        self.alive && !self.asleep && !matches!(self.class, Class::Prop | Class::Pad | Class::Relic)
     }
 
     fn stats(&self) -> Option<&'static balance::UnitStats> {
-        balance::unit(&self.kind)
+        // the battleship model has no row of its own: it fights as a gun port
+        balance::unit(if self.kind == "battleship" { "gunport" } else { &self.kind })
     }
 
     fn weapon(&self) -> Option<&'static str> {
@@ -596,7 +620,11 @@ impl World {
                 "bank" => Class::Bank,
                 "takeover_pad" => Class::Pad,
                 "relic" => Class::Relic,
-                "tower_electric" | "tower_missile" | "turret" | "popup_turret" | "verybiggun" | "supergun" | "gunport" | "base_launcher" => Class::Tower,
+                "tower_electric" | "tower_missile" | "turret" | "popup_turret" | "verybiggun" | "supergun" | "gunport" | "base_launcher" | "battleship" => Class::Tower,
+                // the original's carrier model, unused in its levels: an
+                // airbase at sea
+                "aircraftcarrier" => Class::Airbase,
+                "nephilim" if team.fights() => Class::Vehicle,
                 "stank" if team == Team::Player => {
                     if player_tank.is_some() {
                         continue;
@@ -608,7 +636,12 @@ impl World {
                 k if balance::unit(k).is_some() && team.fights() => Class::Vehicle,
                 _ => Class::Prop,
             };
-            let max_hp = if o.health > 0 { o.health as f32 } else { balance::unit(&o.kind).map_or(100.0, |s| s.health as f32) };
+            let max_hp = match o.kind.as_str() {
+                _ if o.health > 0 => o.health as f32,
+                "nephilim" => NEPHILIM_HEALTH,
+                "battleship" => balance::unit("gunport").map_or(500.0, |s| s.health as f32),
+                k => balance::unit(k).map_or(100.0, |s| s.health as f32),
+            };
             entities.push(Entity {
                 kind: o.kind.clone(),
                 class,
@@ -636,6 +669,7 @@ impl World {
                 home: (o.x, o.y),
                 carrier: None,
                 bombing: 0.0,
+                asleep: o.kind == "nephilim",
             });
         }
         let mut w = World {
@@ -890,6 +924,7 @@ impl World {
             }
         }
         self.step_lava(dt);
+        self.step_herds(dt);
         self.step_fog(dt);
         self.step_avalanches(dt);
         self.step_relics();
@@ -1197,6 +1232,7 @@ impl World {
                 home: (gx, gy),
                 carrier: None,
                 bombing: 0.0,
+                asleep: false,
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
             if team != Team::Player {
@@ -1237,6 +1273,10 @@ impl World {
         match class {
             Class::Tower | Class::Vehicle | Class::EnemyTank => {}
             _ => return,
+        }
+        if self.entities[i].kind == "nephilim" {
+            self.nephilim(i, dt);
+            return;
         }
         let stats = self.entities[i].stats();
         let detect = match class {
@@ -1392,6 +1432,9 @@ impl World {
 
     fn speed_of(&self, i: usize) -> f32 {
         let e = &self.entities[i];
+        if e.kind == "nephilim" {
+            return NEPHILIM_SPEED;
+        }
         let s = if e.class == Class::EnemyTank { balance::unit("stank").map_or(0.3, |s| s.speed) * 0.6 } else { e.stats().map_or(0.08, |s| s.speed) };
         s * ORIGINAL_HZ
     }
@@ -1677,6 +1720,128 @@ impl World {
 
     /// Lava burns what drives into it, and volcanoes throw bombs onto their
     /// cones (Calvary's own; see `LAVA_DPS`).
+    /// A Nephilim: asleep until stirred; awake, after the nearest thing of
+    /// any other army, on foot over anything, stamping when in reach.
+    fn nephilim(&mut self, i: usize, dt: f32) {
+        let (x, y) = (self.entities[i].x, self.entities[i].y);
+        if self.entities[i].asleep {
+            let stirred = self.entities[i].hp < self.entities[i].max_hp
+                || self.entities.iter().any(|o| {
+                    o.alive && o.team.fights() && o.kind != "nephilim" && matches!(o.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank) && !o.airborne() && (o.x - x).hypot(o.y - y) <= NEPHILIM_WAKE
+                });
+            if stirred {
+                self.wake(i);
+            }
+            return;
+        }
+        let me = &self.entities[i];
+        let target = self
+            .entities
+            .iter()
+            .enumerate()
+            .filter(|(_, o)| me.can_attack(o))
+            .map(|(j, o)| (j, (o.x - x).hypot(o.y - y) - o.radius()))
+            .filter(|&(_, d)| d <= NEPHILIM_SIGHT)
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        let Some((t, d)) = target else { return };
+        let (tx, ty) = (self.entities[t].x, self.entities[t].y);
+        if d > STOMP_REACH {
+            self.drive_towards(i, tx, ty, dt);
+            return;
+        }
+        self.entities[i].heading = (ty - y).atan2(tx - x);
+        if self.entities[i].cooldown > 0.0 {
+            return;
+        }
+        self.entities[i].cooldown = STOMP_DELAY;
+        // the foot comes down between the giant and what it stamps on
+        let (fx, fy) = (x + (tx - x) * 0.7, y + (ty - y) * 0.7);
+        let team = self.entities[i].team;
+        let hit: Vec<usize> = (0..self.entities.len())
+            .filter(|&j| {
+                let o = &self.entities[j];
+                j == t || (o.is_target() && team.hostile(o.team) && !o.airborne() && (o.x - fx).hypot(o.y - fy) <= STOMP_RADIUS + o.radius())
+            })
+            .collect();
+        for j in hit {
+            self.hurt_by(j, STOMP_DAMAGE, false);
+        }
+        self.crack_ice(fx, fy, STOMP_RADIUS, STOMP_DAMAGE);
+        self.blasts.push(Blast { x: fx, y: fy, power: 1.4, snow: true });
+        self.sound("explosion/generic.mp3", Some((fx, fy)), 1.0);
+    }
+
+    /// A Nephilim rises, and stirs those lying near it.
+    fn wake(&mut self, i: usize) {
+        let mut rising = vec![i];
+        let mut woke = 0;
+        while let Some(n) = rising.pop() {
+            if !self.entities[n].asleep {
+                continue;
+            }
+            self.entities[n].asleep = false;
+            self.entities[n].cooldown = STOMP_DELAY;
+            woke += 1;
+            let (x, y) = (self.entities[n].x, self.entities[n].y);
+            self.blasts.push(Blast { x, y, power: 2.2, snow: true });
+            rising.extend((0..self.entities.len()).filter(|&m| {
+                let o = &self.entities[m];
+                o.alive && o.asleep && (o.x - x).hypot(o.y - y) <= NEPHILIM_CHAIN
+            }));
+        }
+        let (x, y) = (self.entities[i].x, self.entities[i].y);
+        log::info!("{woke} Nephilim woke at ({x:.1},{y:.1})");
+        self.sound("explosion/generic.mp3", Some((x, y)), 1.0);
+        self.say(if woke > 1 { "The Nephilim are waking!" } else { "A Nephilim is waking!" });
+    }
+
+    /// Reindeer graze near where they were put and bolt from anything that
+    /// drives up or blows up near them.
+    fn step_herds(&mut self, dt: f32) {
+        let blasts: Vec<(f32, f32)> = self.blasts.iter().map(|b| (b.x, b.y)).collect();
+        for j in 0..self.entities.len() {
+            let e = &self.entities[j];
+            if !e.alive || e.kind != "reindeer" {
+                continue;
+            }
+            let (x, y) = (e.x, e.y);
+            let threat = self
+                .entities
+                .iter()
+                .filter(|o| o.alive && matches!(o.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank) && !o.airborne() && !o.asleep)
+                .map(|o| (o.x, o.y))
+                .chain(blasts.iter().copied())
+                .filter(|&(ox, oy)| (ox - x).hypot(oy - y) <= HERD_FRIGHT)
+                .min_by(|a, b| (a.0 - x).hypot(a.1 - y).total_cmp(&(b.0 - x).hypot(b.1 - y)));
+            let (want, speed) = match threat {
+                Some((ox, oy)) => ((y - oy).atan2(x - ox), HERD_RUN),
+                None => {
+                    let (hx, hy) = self.entities[j].home;
+                    let wander = (self.rand() - 0.5) * 2.0;
+                    if (hx - x).hypot(hy - y) > HERD_RANGE {
+                        ((hy - y).atan2(hx - x), HERD_GRAZE * 2.0)
+                    } else {
+                        (self.entities[j].heading + wander * dt * 2.0, if self.rand() < 0.6 { HERD_GRAZE } else { 0.0 })
+                    }
+                }
+            };
+            let e = &self.entities[j];
+            let turn = (want - e.heading + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+            let heading = e.heading + turn.clamp(-6.0 * dt, 6.0 * dt);
+            let (nx, ny) = (x + heading.cos() * speed * dt, y + heading.sin() * speed * dt);
+            let free = self.ground_free(nx, ny);
+            let e = &mut self.entities[j];
+            if free {
+                (e.x, e.y) = (nx, ny);
+                e.odometer += speed * dt;
+                e.heading = heading;
+            } else {
+                // a bank, the water or a wall: turn aside
+                e.heading = heading + 1.2;
+            }
+        }
+    }
+
     /// Lift the fog round everything of ours and our allies', as often as
     /// five times a second.
     fn step_fog(&mut self, dt: f32) {
@@ -1749,7 +1914,8 @@ impl World {
                 self.blocked[i] = true;
                 for j in 0..self.entities.len() {
                     let e = &self.entities[j];
-                    let ground = matches!(e.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank) && !flies(&e.kind);
+                    // giants wade
+                    let ground = matches!(e.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank) && !flies(&e.kind) && e.kind != "nephilim";
                     if e.alive && ground && e.x.floor() as i32 == cx && e.y.floor() as i32 == cy && !self.on_bridge(e.x, e.y) {
                         let hp = self.entities[j].hp;
                         self.hurt_by(j, hp + 1.0, false);
@@ -2459,6 +2625,41 @@ mod rules {
         assert!(!w.ground_free(6.5, 15.5), "open water stops what drives");
         assert!(w.ice_hits.iter().any(|&(i, left)| i == 15 * 12 + 6 && left == 0.0), "the renderers hear of it");
         assert!(w.water_ahead(6.5, 18.2, 6.5, 10.0) && !w.water_ahead(6.5, 18.2, 6.5, 26.0));
+    }
+
+    #[test]
+    fn nephilim_wake_together_and_stamp_on_everyone() {
+        let mut w = ice_map("", "nephilim 6 6 10 0 0\nnephilim 6 9 6 0 0\nnephilim 6 1 1 0 0\nreindeer 4 3 20 0 100\n");
+        w.ai_timer = [f32::MAX; 5];
+        let giants: Vec<usize> = (0..w.entities.len()).filter(|&i| w.entities[i].kind == "nephilim").collect();
+        assert!(giants.iter().all(|&g| w.entities[g].asleep && !w.entities[g].is_target() && w.entities[g].max_hp == NEPHILIM_HEALTH));
+        w.step(1.0 / 30.0);
+        assert!(giants.iter().all(|&g| w.entities[g].asleep), "nothing near yet");
+        let mut e = Entity::shown("peon_tank", Class::Vehicle, Team::Enemy, 300.0);
+        (e.x, e.y, e.order) = (6.5, 16.5, Order::Hold);
+        w.entities.push(e);
+        let peon = w.entities.len() - 1;
+        w.step(1.0 / 30.0);
+        // the first wakes, and stirs the one within reach of it, not the far one
+        assert!(!w.entities[giants[0]].asleep && !w.entities[giants[1]].asleep && w.entities[giants[2]].asleep);
+        let deer = w.entities.iter().position(|e| e.kind == "reindeer").unwrap();
+        let start = (w.entities[deer].x, w.entities[deer].y);
+        for _ in 0..(12 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert!(!w.entities[peon].alive, "stamped on");
+        assert!(w.entities[giants[0]].alive, "and the giant does not drown in the ice it breaks");
+        assert!(w.ice.iter().any(|&s| s < 0.0), "a giant's foot goes through the ice");
+        let (x, y) = (w.entities[deer].x, w.entities[deer].y);
+        assert!((x - start.0).hypot(y - start.1) > 0.5, "the reindeer ran");
+    }
+
+    #[test]
+    fn a_carrier_is_an_airbase_and_a_battleship_a_gun() {
+        let w = ice_map("", "aircraftcarrier 1 3 25 0 4000\nbattleship 2 9 4 0 0\n");
+        assert!(w.offers(Team::Player, "helicopter") && !w.offers(Team::Enemy, "helicopter"));
+        let ship = w.entities.iter().find(|e| e.kind == "battleship").unwrap();
+        assert_eq!((ship.class, ship.weapon(), ship.max_hp), (Class::Tower, Some("b120mm"), 500.0));
     }
 
     #[test]

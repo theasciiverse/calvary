@@ -228,6 +228,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::PlayerTank => continue,
             _ if !alive => (e.radius() * 0.7, 0.25, 0.0, (70, 64, 58), (96, 88, 80)),
             Class::Hq => (1.5, 0.7, 0.0, pal.body, pal.front),
+            Class::Airbase if k == "aircraftcarrier" => (1.85, 0.6, 0.0, (88, 92, 100), (120, 124, 132)),
+            Class::Tower if k == "battleship" => (1.15, 0.7, 0.0, (98, 102, 110), (150, 154, 160)),
+            // under the ground, nothing to see
+            Class::Vehicle if e.asleep => continue,
+            Class::Vehicle if k == "nephilim" => (0.55, 2.5, 0.0, (134, 126, 118), (154, 146, 136)),
             Class::Garage | Class::Airbase => (1.1, 1.0, 0.0, pal.body, pal.front),
             Class::Bank => (1.0, 1.2, 0.0, (226, 220, 204), (236, 194, 58)),
             Class::Tower if k == "supergun" => (0.8, 1.1, 0.0, pal.body, pal.turret),
@@ -239,6 +244,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Vehicle if flies(k) => (0.5, 0.3, 3.0, pal.body, pal.front),
             Class::Vehicle | Class::EnemyTank => (e.radius() * 0.9, 0.55, 0.0, pal.body, pal.turret),
             Class::Prop if k == "giant_skull" => (0.9, 0.8, 0.0, (196, 186, 162), sprites::BONE),
+            Class::Prop if k == "reindeer" => (0.22, 0.4, 0.0, (112, 84, 58), (150, 120, 90)),
             Class::Prop if k.starts_with("giant_") => (0.12, 1.9, 0.0, (196, 186, 162), sprites::BONE),
             Class::Prop if k == "francecastle" => (1.45, 1.6, 0.0, (226, 222, 208), (92, 102, 120)),
             Class::Prop if k == "cathedral" => (3.5, 2.6, 0.0, (190, 182, 162), (104, 146, 126)),
@@ -254,7 +260,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Prop => (0.3, 0.35, 0.0, (150, 150, 140), (176, 176, 166)),
         };
         let (front, top) = if e.flash > 0.0 { (shade(front, 1.6), shade(top, 1.6)) } else { (front, top) };
-        if k.contains("palm") || k.contains("tree") {
+        if k == "nephilim" && alive {
+            // a giant: the body, and the pale skull on top
+            boxed(&mut f, e.x, e.y, 0.0, half, tall, front, top);
+            boxed(&mut f, e.x, e.y, tall, 0.3, 0.55, sprites::BONE, sprites::BONE);
+        } else if k.contains("palm") || k.contains("tree") {
             // trunk and crown
             boxed(&mut f, e.x, e.y, 0.0, 0.07, 1.0, (96, 70, 40), (96, 70, 40));
             boxed(&mut f, e.x, e.y, 0.9, 0.45, 0.6, front, top);

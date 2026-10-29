@@ -248,6 +248,7 @@ pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
     let pal = palette(e.team);
     match e.class {
         Class::Vehicle if crate::world::flies(&e.kind) => paint_aircraft(layer, e, pal, time),
+        Class::Vehicle if e.kind == "nephilim" => paint_nephilim(layer, e),
         Class::Vehicle | Class::EnemyTank => {
             let pose = Pose { x: e.x, y: e.y, heading: e.heading, aim: e.heading + e.turret, odometer: e.odometer, muzzle: 0.0, hit: e.flash };
             paint_vehicle(layer, look(&e.kind), pal, pose);
@@ -265,6 +266,7 @@ pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
         Class::Prop => paint_prop(layer, e),
         Class::Relic => paint_relic(layer, e, time),
         _ if !e.alive => paint_rubble(layer, e),
+        _ if matches!(e.kind.as_str(), "aircraftcarrier" | "battleship") => paint_warship(layer, e, pal),
         _ => paint_structure(layer, e, pal, time),
     }
 }
@@ -593,6 +595,10 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         paint_bones(layer, k, cx, cy, th);
         return;
     }
+    if k == "reindeer" {
+        paint_reindeer(layer, e);
+        return;
+    }
     if k == "francecastle" {
         // the original's `francecastle` (2.9 by 2.85 cells at its 0.1 model
         // scale): a Loire chateau in white stone under blue-grey slate, a
@@ -720,6 +726,102 @@ pub const RELIC_GLOW: Rgb = (255, 238, 170);
 /// A relic (Calvary's own): a small gilded casket. Lying on the ground it
 /// glows in a slow pulse so it can be found; carried, it rides on its
 /// carrier.
+/// The original's two warship models, unused in its levels, at its 0.1
+/// model scale: the carrier 3.7 cells by 1.4, a flat deck with the island
+/// to starboard, the battleship 2.3 by 1.15 with a turret fore and aft.
+/// Grey hulls; the side's colour on the deck markings.
+fn paint_warship(layer: &mut PixelLayer, e: &Entity, pal: Palette) {
+    let (cx, cy, th) = (e.x, e.y, e.heading);
+    let (hx, hy) = (th.cos(), th.sin());
+    let hit = e.flash > 0.0;
+    let lit = move |c: Rgb| if hit { mix(c, (255, 255, 255), 0.6) } else { c };
+    let carrier = e.kind == "aircraftcarrier";
+    let (hl, hw) = if carrier { (1.85, 0.7) } else { (1.15, 0.5) };
+    layer.paint(cx, cy, hl + 0.1, |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        let (l, w) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+        // a pointed bow ahead, a square stern
+        let beam = if l > hl * 0.55 { hw * (1.0 - (l - hl * 0.55) / (hl * 0.45)) } else { hw };
+        if l.abs() > hl || w.abs() > beam {
+            return None;
+        }
+        let c = if carrier {
+            if (0.15..0.5).contains(&w) && (-0.3..0.35).contains(&l) {
+                (120, 124, 132) // the island
+            } else if w.abs() < 0.05 && l > -1.5 {
+                pal.front // the centre line
+            } else if (l + 1.2).abs() < 0.06 && w.abs() < 0.35 {
+                (226, 226, 220)
+            } else {
+                (88, 92, 100)
+            }
+        } else {
+            let turret = (l - 0.55).hypot(w).min((l + 0.6).hypot(w));
+            if turret < 0.24 {
+                if turret < 0.08 { pal.front } else { (128, 132, 140) }
+            } else if (-0.2..0.25).contains(&l) && w.abs() < 0.28 {
+                (150, 154, 160) // the bridge
+            } else {
+                (98, 102, 110)
+            }
+        };
+        Some((lit(c), false))
+    });
+}
+
+/// A Nephilim from above (Calvary's own): a giant three times a man, its
+/// pale skull ahead, broad shoulders, arms swinging as it walks. Asleep, a
+/// shadow under the ground.
+fn paint_nephilim(layer: &mut PixelLayer, e: &Entity) {
+    let (cx, cy, th) = (e.x, e.y, e.heading);
+    let (hx, hy) = (th.cos(), th.sin());
+    let asleep = e.asleep;
+    let hit = e.flash > 0.0;
+    let swing = (e.odometer * 3.0).sin() * 0.35;
+    layer.paint(cx, cy, 1.4, |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        let (a, c) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+        let head = (a - 0.35).hypot(c);
+        let shoulders = (a / 0.42).powi(2) + (c / 0.95).powi(2);
+        let arm = |side: f32| {
+            let k = side * swing;
+            let (ax, ay) = (a - k, c - side * 0.95);
+            ax.abs() < 0.55 && ay.abs() < 0.18
+        };
+        if asleep {
+            // lying under the ice: a dark shape, head and shoulders
+            return (head < 0.36 || shoulders < 1.0 || arm(1.0) || arm(-1.0)).then_some(((70, 80, 90), false));
+        }
+        let col = if head < 0.32 {
+            if (head - 0.16).abs() < 0.04 { (176, 166, 144) } else { BONE }
+        } else if shoulders < 1.0 {
+            if c.abs() < 0.12 { (120, 112, 104) } else { (154, 146, 136) }
+        } else if arm(1.0) || arm(-1.0) {
+            (134, 126, 118)
+        } else {
+            return None;
+        };
+        Some((if hit { mix(col, (255, 255, 255), 0.6) } else { col }, false))
+    });
+}
+
+/// A reindeer from above (Calvary's own, for Lapland): a brown body, a pale
+/// rump, the antlers spread ahead.
+fn paint_reindeer(layer: &mut PixelLayer, e: &Entity) {
+    let (cx, cy, th) = (e.x, e.y, e.heading);
+    let (hx, hy) = (th.cos(), th.sin());
+    layer.paint(cx, cy, 0.4, |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        let (a, c) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+        if (a / 0.26).powi(2) + (c / 0.11).powi(2) <= 1.0 {
+            return Some((if a < -0.15 { (214, 204, 186) } else { (112, 84, 58) }, false));
+        }
+        // antlers, a thin fork either side of the head
+        let antler = (0.24..0.38).contains(&a) && (c.abs() - (a - 0.24) * 1.4).abs() < 0.04;
+        antler.then_some(((196, 180, 150), true))
+    });
+}
+
 fn paint_relic(layer: &mut PixelLayer, e: &Entity, time: f32) {
     let (cx, cy) = if e.carrier.is_some() { (e.x, e.y - 0.55) } else { (e.x, e.y) };
     let pulse = 0.5 + 0.5 * (time * 2.5).sin();

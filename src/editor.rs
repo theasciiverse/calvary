@@ -58,7 +58,7 @@ const TILE_SETS: [&str; 16] =
 
 /// What the place tool can put down: structures, the supertank start, money
 /// planes, and the commoner pieces of scenery from the original levels.
-const OBJECT_KINDS: [&str; 36] = [
+const OBJECT_KINDS: [&str; 40] = [
     "mainbasepad",
     "garage",
     "airbase",
@@ -94,10 +94,14 @@ const OBJECT_KINDS: [&str; 36] = [
     "cabin_small",
     "silobigfull2x2",
     "greeceship1",
+    "aircraftcarrier",
+    "battleship",
+    "nephilim",
+    "reindeer",
     "greclighthouse",
 ];
 
-const OWNERS: [(u8, &str); 6] = [(1, "player"), (2, "enemy"), (5, "rival"), (6, "watchers"), (0, "neutral"), (4, "scenery")];
+const OWNERS: [(u8, &str); 7] = [(1, "player"), (2, "enemy"), (5, "rival"), (6, "watchers"), (7, "allies"), (0, "neutral"), (4, "scenery")];
 
 /// Whose roads the path tool draws (L cycles): ours, which the Europeans
 /// (player 2) also drive the other way, as on every map so far; the rival
@@ -165,7 +169,8 @@ pub struct Editor {
 
 fn default_health(kind: &str) -> i16 {
     match kind {
-        "mainbasepad" | "garage" | "airbase" | "bank" => 4000,
+        "mainbasepad" | "garage" | "airbase" | "bank" | "aircraftcarrier" => 4000,
+        "nephilim" => crate::world::NEPHILIM_HEALTH as i16,
         "stank" => 1000,
         _ => crate::balance::unit(kind).map_or(100, |s| s.health.max(1) as i16),
     }
@@ -344,7 +349,7 @@ impl Editor {
                     || kind.starts_with("greecehouses")
                     || kind.starts_with("ruins")
                     || kind.starts_with("giant_")
-                    || kind == "brickwall"
+                    || kind == "brickwall" || kind == "reindeer"
                 {
                     4
                 } else {
