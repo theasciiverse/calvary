@@ -501,6 +501,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the Europeans' HQ on Katajanokka. Neither our HQ nor the Finns' may fall.",
     },
+    Mission {
+        act: 3,
+        number: 31,
+        title: "The Finnish lakes",
+        map: include_str!("../maps/lakes.cmap"),
+        briefing: &[
+            "Commander, Reid. Lake country, sir. Two chains of lakes from one side",
+            "of the map to the other, and the Europeans blew every bridge on the",
+            "three roads north as they went: six gaps, one cell of water each. The",
+            "bridgers are back on the list. A Finnish detachment is with us in the",
+            "south-east. Their HQ is past the second chain, and they will be",
+            "shooting at whatever we lay.",
+        ],
+        objective: "Bridge the narrows and destroy the Europeans' HQ in the north. Keep ours standing.",
+    },
 ];
 
 /// The mission's map, parsed.
