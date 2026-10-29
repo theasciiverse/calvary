@@ -184,6 +184,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bring four of the six trucks to the south post. Keep the HQ standing.",
     },
+    Mission {
+        act: 1,
+        number: 10,
+        title: "Sinai",
+        map: include_str!("../maps/sinai.cmap"),
+        briefing: &[
+            "Commander, Reid. We crossed the Gulf with what we could carry, and it",
+            "is not much: four thousand in the chest and no bank of our own. There",
+            "are three banks on the way west. Take them with engineers and the",
+            "money plane flies their crates home; that is all the supply we have.",
+            "The Europeans hold the Mitla Pass, guns on both ridges, and they have",
+            "rocket tanks out in the dunes. Their camp is on the far side.",
+        ],
+        objective: "Destroy the European HQ beyond the Mitla Pass. Keep ours standing.",
+    },
 ];
 
 /// The mission's map, parsed.
