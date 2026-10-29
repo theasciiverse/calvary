@@ -105,6 +105,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Take Calloway's camp: an engineer on the takeover pad. Keep the HQ standing.",
     },
+    Mission {
+        act: 0,
+        number: 5,
+        title: "Babylon",
+        map: include_str!("../maps/babylon.cmap"),
+        briefing: &[
+            "Commander. Her notebook names a second site, east of the old city of",
+            "Babylon, and they got there first. Sir, I have seen it from the ridge.",
+            "It is bones. A skull the size of a truck, ribs taller than our tanks,",
+            "lying in a pit in the open. They have ringed it with electric towers.",
+            "Bring those towers down, or send engineers to take them. Our garage",
+            "can build electric cars now: short reach, but they burn through armour.",
+        ],
+        objective: "Destroy or take every electric tower round the pit. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.

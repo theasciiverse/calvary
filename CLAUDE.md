@@ -385,8 +385,8 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner and missions 1 to 4, Al Basrah, Shatt al-Arab, Ur
-   and Nakhayb. Three missions reuse the
+   the campaign runner and missions 1 to 5, Al Basrah, Shatt al-Arab, Ur,
+   Nakhayb and Babylon. Three missions reuse the
    existing maps; the rest are new `.cmap` maps.
 9. **Follow mode (done) and first person (next)** (see Rendering).
 
@@ -613,6 +613,21 @@ the enemy's engineer takes the pad first and our units, passing through,
 knock its turret down for our next engineer: won at about 5 minutes
 even without the supertank (`MISSION=4`).
 
+Mission 5, **Babylon** (`maps/babylon.cmap`, 110x100, from
+`tools/gen_babylon.py`, seed 539): the Euphrates down the west side, the
+ruined city on its tell (a street grid of baked brick, walls along the
+old streets, the Processional Way north to the Ishtar Gate), and east of
+it the second site: a pit with the giants' bones in the open, ringed by
+four electric towers (600 health). Two roads: through the city, or
+straight through the pit and its ring. Builds: peon tanks, electric
+cars, rocket tanks, engineers. Win: `no tower_electric 2` (destroyed, or
+taken by engineers); lose: our HQ. Without the supertank the probe loses
+its HQ at about 7 minutes; with it, won at about 3. The bones are
+Calvary's own scenery (the original has no such models): `giant_skull`,
+`giant_spine`, `giant_ribs` (a pair across the spine) and `giant_rib`,
+drawn by `sprites::paint_bones`, tall bone billboards in the follow
+view; brick and ruined walls draw as oriented wall segments.
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -680,10 +695,10 @@ has one complete battle (`test`, the Greek coast) and the first campaign
 mission, so its store page would still have to sell a story the player can
 barely start. Write the store page and README once Act 1 plays.
 
-Act I, what is left (2026-10-29): missions 5 to 7 (Babylon, the
-Euphrates line, Nineveh), each a new map; a convoy-defence condition; a
-second hostile army for Nineveh (`Team` has one enemy today). Missions 1
-to 4 are built but not yet played through by a person.
+Act I, what is left (2026-10-29): missions 6 and 7 (the Euphrates line,
+Nineveh), each a new map; a convoy-defence condition; a second hostile
+army for Nineveh (`Team` has one enemy today). Missions 1 to 5 are built
+but not yet played through by a person.
 
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,

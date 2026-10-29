@@ -105,6 +105,8 @@ impl Cond {
         let name = |kind: &str| match kind {
             "mainbasepad" => "base".to_string(),
             "takeover_pad" => "takeover pad".to_string(),
+            "tower_electric" => "electric tower".to_string(),
+            "tower_missile" => "missile tower".to_string(),
             k => k.replace('_', " "),
         };
         match self {
@@ -114,6 +116,8 @@ impl Cond {
             Cond::Own(kind, _) => format!("The enemy has taken the {}.", name(kind)),
             Cond::Hold { player: 1, .. } => "We held the site.".into(),
             Cond::Hold { .. } => "The enemy held the site.".into(),
+            Cond::No(kind, 2) if kind != "mainbasepad" => format!("Every enemy {} is destroyed.", name(kind)),
+            Cond::No(kind, 1) if kind != "mainbasepad" => format!("We have lost every {}.", name(kind)),
             Cond::No(kind, p) => {
                 let s = format!("{} {} is destroyed.", side(*p), name(kind));
                 let mut c = s.chars();

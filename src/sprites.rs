@@ -533,6 +533,10 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
     let k = e.kind.as_str();
     let (cx, cy, th) = (e.x, e.y, e.heading);
     let has = |s: &str| k.contains(s);
+    if k.starts_with("giant_") {
+        paint_bones(layer, k, cx, cy, th);
+        return;
+    }
     if has("palm") || has("tree") {
         layer.paint(cx, cy, 0.45, |x, y| {
             let r = (x - cx).hypot(y - cy);
@@ -555,6 +559,8 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         (1.1, 0.38, (92, 98, 110), true)
     } else if has("greecehouses") {
         (0.5, 0.42, (204, 98, 72), false)
+    } else if has("wall") {
+        (0.9, 0.22, (172, 124, 98), true)
     } else if has("tent") {
         (0.7, 0.5, (224, 220, 206), true)
     } else if has("cabin") {
@@ -585,6 +591,59 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         let c = if w.abs() < hw * 0.18 { shade(color, 0.78) } else if w > 0.0 { shade(color, 0.9) } else { color };
         Some((c, false))
     });
+}
+
+/// Bone, as the original's own `youwin.jpg` skull is coloured.
+pub const BONE: Rgb = (226, 216, 190);
+
+/// The giants' bones (Calvary's own scenery: the original has no such
+/// models): `giant_skull`, `giant_spine` (vertebrae in a row),
+/// `giant_ribs` (a pair across the spine) and `giant_rib` (one alone),
+/// several cells long, each along its heading, head first.
+fn paint_bones(layer: &mut PixelLayer, kind: &str, cx: f32, cy: f32, th: f32) {
+    let (hx, hy) = (th.cos(), th.sin());
+    let shadow = shade(BONE, 0.72);
+    let frame = |x: f32, y: f32| {
+        let (dx, dy) = (x - cx, y - cy);
+        (dx * hx + dy * hy, -dx * hy + dy * hx)
+    };
+    match kind {
+        "giant_skull" => layer.paint(cx, cy, 1.6, |x, y| {
+            let (l, w) = frame(x, y);
+            // cranium in front, a narrower jaw behind it, two eye sockets
+            let cranium = (l / 1.2).powi(2) + (w / 0.95).powi(2) <= 1.0;
+            let jaw = (-1.5..=-0.4).contains(&l) && w.abs() <= 0.55 - (-l - 0.4) * 0.15;
+            if !(cranium || jaw) {
+                return None;
+            }
+            let eye = ((l + 0.2).hypot(w.abs() - 0.42)) <= 0.22;
+            let nose = (-0.75..=-0.5).contains(&l) && w.abs() <= 0.08;
+            let teeth = (-1.0..=-0.9).contains(&l) && (w * 8.0).fract().abs() < 0.5;
+            Some((if eye || nose { (40, 34, 30) } else if teeth { shadow } else if w > 0.3 { shadow } else { BONE }, false))
+        }),
+        "giant_spine" => layer.paint(cx, cy, 2.6, |x, y| {
+            let (l, w) = frame(x, y);
+            if l.abs() > 2.5 || w.abs() > 0.32 {
+                return None;
+            }
+            // one vertebra every half cell, with a gap between
+            let k = ((l + 2.5) / 0.5).fract();
+            (k < 0.75).then_some((if w.abs() > 0.2 { shadow } else { BONE }, false))
+        }),
+        _ => layer.paint(cx, cy, 2.2, |x, y| {
+            // ribs sweep out from the spine and back toward the tail:
+            // `giant_ribs` is a pair across the spine (the heading runs
+            // along it, head first), `giant_rib` one of them alone
+            let (l, w) = frame(x, y);
+            let side = if kind == "giant_ribs" { w.abs() } else { w };
+            if !(0.3..=2.0).contains(&side) {
+                return None;
+            }
+            let curve = -0.9 * (side / 2.0).powi(2);
+            let d = l - curve;
+            (d.abs() <= 0.12).then_some((if d < -0.03 { shadow } else { BONE }, false))
+        }),
+    }
 }
 
 /// A thin health bar above anything that has taken damage.
