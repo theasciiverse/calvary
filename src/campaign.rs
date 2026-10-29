@@ -425,6 +425,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the Order's HQ inside the chateau walls. Keep ours standing.",
     },
+    Mission {
+        act: 2,
+        number: 26,
+        title: "Munich",
+        map: include_str!("../maps/munich.cmap"),
+        briefing: &[
+            "Commander, Reid. The papers in the chateau led here. The Order builds",
+            "its own armour, sir, in Munich: two factories at the Allach works and",
+            "one at the Moosach rail yard, north-west of the old town. There is a",
+            "line of new cobras in the works yard, and they will come for us the",
+            "moment they know we are here. Over the Isar, and shut the factories",
+            "down, all three.",
+        ],
+        objective: "Destroy the Order's three factories at Allach and Moosach. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.

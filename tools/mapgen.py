@@ -53,10 +53,11 @@ class Roads:
             if (p, q) not in self.links[team]:
                 self.links[team].append((p, q))
 
-    def ours(self, *names):
-        """Our road: we drive it forward, the enemy back along it."""
+    def ours(self, *names, them="E"):
+        """Our road: we drive it forward, the enemy (or `them`: "R", "W") back
+        along it."""
         self.link("A", *names)
-        self.link("E", *reversed(names))
+        self.link(them, *reversed(names))
 
     def dist(self, x, y):
         segs = [(*self.pos[p], *self.pos[q]) for t in self.links for p, q in self.links[t]]
