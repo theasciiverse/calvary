@@ -16,9 +16,12 @@ Al Basrah, mission 2, Shatt al-Arab, with the bridger, mission 3, Ur,
 with holding a site, mission 4, Nakhayb, with takeover pads, and
 mission 5, Babylon, with the first giant bones, mission 6, the
 Euphrates line, a convoy, and mission 7, Nineveh, against two armies:
-all of Act I; and all of Act II, missions 8 to 14, with holding out,
-the Watchers' Order and the first aircraft (2026-10-29).
-Three more missions reuse existing maps (marked **existing map**).
+all of Act I; all of Act II, missions 8 to 14, with holding out,
+the Watchers' Order and the first aircraft; and all of Act III,
+missions 15 to 27, with superguns, bombers, lava and a volcano, a night
+battle, relic races, avalanches and the Order's own chateau and
+factories (2026-10-29). Three missions use the original's own levels
+(marked **existing map**).
 
 ## The story
 
@@ -196,12 +199,12 @@ globe of the original's opening, and the stars.*
 
 - Three missions reuse the existing maps (12 Cairo, 15 Piraeus,
   23 Zurich); 37 need new maps, in the `.cmap` format with the map editor
-  (both built). Acts I and II, missions 1 to 14, are built.
+  (both built). Acts I to III, missions 1 to 27, are built.
 - The bridger (missions 2, 11, 31) is built: our maps mark bridgeable path
   nodes in the `.cmap` (`bridge`), so it needs no Lisp decoding; the
   original's own levels still carry theirs in undecoded Lisp variables.
-  Lava damage, avalanches, holy-site no-fire zones and the relic races are
-  new mechanics to design.
+  Lava damage, a volcano, night, avalanches and the relic races are built
+  (Act III); holy-site no-fire zones are not.
 - Briefings: Kruese's transmission fragments open each act, Reid's radio
   lines frame each mission; the original radio voice clips cover the
   battle barks.

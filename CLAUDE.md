@@ -166,8 +166,10 @@ into the level's object list. On `test`: 854 objects, 251 path nodes;
 player 1 is the human (team A), player 2 the computer (team E), player 0
 neutral (capturable banks and towers), 3 and 4 scenery. Team A's links
 from the player garage reach the enemy garage in 48 nodes.
-`snow` is a skirmish sketch (bases, a few placed units, 6 path nodes, no
-garages); `egypt2` holds scenery only (no bases, no paths).
+`snow` is a skirmish sketch: both bases with garages (and a European
+airbase and launchers), a few placed tanks, and only 6 path nodes, round
+the garages (an earlier note here said it had no garages; it has);
+`egypt2` holds scenery only (no bases, no paths).
 
 Format, as implemented in `src/level.rs`: signature
 `check_sum32("GOLG_SECTION_ID=3")` (the original passes length 17, so the
@@ -268,7 +270,8 @@ Arrows/WASD or the mouse move the cursor, Space or left click applies
 T tile set (used, grass, greece, sea, snow, watr, egypt, france, rome,
 crom, lava, marsh, castle, temple, rock, alien), F tile flags (ground,
 water, blocking), P owner (the place tool also has takeover pads,
-turrets, tents and reed huts), B makes the path node under the cursor a
+turrets, tents and reed huts, superguns, volcanoes, cornices, relics,
+the cathedral and the original's `francecastle`), B makes the path node under the cursor a
 bridge spot (shown as a blinking dashed deck, ╳ on the map), L whose
 roads the path tool draws (ours, which the enemy also drives back along;
 the rival's, `R:`; the enemy's own, forward; drawn white, blue and red),
@@ -348,8 +351,22 @@ object rotation, a tile-transition helper for coastlines.
    `scheme/start.scm`: b120mm/heavy rocket/kevlar, acid/vortex/reactive,
    napalm/nuke/titanium; ammo, reloads and armour hit points from
    `def_stank_weapons`). Single-target weapons with a tick count (acid,
-   napalm, electric beams) burn once per original tick. Still open:
-   units placed in `snow` that have no garage to come from.
+   napalm, electric beams) burn once per original tick.
+   Targeting (fixed 2026-10-29, after `g1_map_piece_class::find_target`
+   in `objs/map_piece.cpp`): units and towers take on by themselves only
+   what the original flags `DANGEROUS` (units, either supertank, towers,
+   superguns, launchers, aircraft, money planes); garages, airbases, HQs,
+   banks and laid bridges never are (`bases.cpp`, `bank.cpp`,
+   `bridger.cpp`). Only the `SPECIALTARGETS` kinds go for anything (car,
+   engineer, money plane, repairer, bomb truck). Buildings fall to the
+   supertank, bomb trucks, attack orders, and blasts aimed at what stands
+   beside them. (Before the fix one tank buster, whose 18 cells outrange
+   every tower, could siege a base alone.) Not ported: a unit attacking
+   something harmless turns on whoever shoots it (`damage` there).
+   Superguns (`objs/supergun.cpp`) lob their mortar on an arc, 30 to 45
+   degrees under gravity 0.05 a tick squared (`resource/constants.res`),
+   so it can be dodged; the table's speed 0 would make it instant. The
+   spot it will land on blinks with its blast radius.
    The bridger (done 2026-10-29), after `objs/bridger.cpp`: a path node can
    be a bridge spot (the original's `bridgeable_spot`, `bridge` in a
    `.cmap`); a bridger that reaches one with no bridge parks over it and
@@ -395,8 +412,15 @@ object rotation, a tile-transition helper for coastlines.
    and bomber (B); they fly the airbase's own route (on `test`, 43 nodes
    from airbase to enemy airbase: the original's pink paths) straight over
    terrain and fight like ground units. Sprites with ground shadows and a
-   spinning rotor. Money planes see Plan 3. Open: which ground weapons
-   may hit aircraft (everything can, for now).
+   spinning rotor. Money planes see Plan 3. Bombers fly runs as in
+   `objs/bomber.cpp`: they bomb a target only while it is ahead, never
+   stop, drop for 20 ticks more once over it, then let it go; bombs fall
+   from under the plane. Aircraft at the end of their route go round
+   again. Open: which weapons may hit aircraft. The original decides it
+   by flags (`can_attack`: the target's `GROUND`/`AERIAL` against the
+   attacker's `HIT_GROUND`/`HIT_AERIAL`; turrets, electric towers, tank
+   busters and the cobra have `HIT_AERIAL`, checked); the rest of the
+   units' flags are not read yet, so everything can still hit aircraft.
 7. **Sound (done, 2026-10-04).** The 15 original tracks (`data/music`)
    and the original sfx set (`data/sfx`, 102 files) are bundled and the
    ones in use are compiled into the binary (`src/audio.rs`), decoded by
@@ -414,10 +438,11 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner, Act I (missions 1 to 7, Iraq) and Act II
-   (missions 8 to 14, the Levant and Egypt). Cairo is the original's own
-   walled town; the rest are new `.cmap` maps, made by `tools/gen_*.py`
-   (Act II's on the shared `tools/mapgen.py`) and checked with
+   the campaign runner, Act I (missions 1 to 7, Iraq), Act II
+   (missions 8 to 14, the Levant and Egypt) and Act III (missions 15 to
+   27, Greece to Vienna). Cairo, Piraeus and Zurich are the original's
+   own levels; the rest are new `.cmap` maps, made by `tools/gen_*.py`
+   (from Act II on, on the shared `tools/mapgen.py`) and checked with
    `tools/check_map.py` (reachability over non-blocking ground, nothing
    placed on it).
 9. **Follow mode (done) and first person (next)** (see Rendering).
@@ -725,7 +750,74 @@ results are without the supertank, then with the stand-in:
   boarded from takeover pads; the Europeans hold the waterfront and a
   squadron of their jets and bombers is in the air at the start (ai_joe's
   formations never build jets, so the strike is placed). Win: `own
-  takeover_pad 1 2`. Lost at about 9; won at about 6.
+  takeover_pad 1 2`. Lost at about 3; won at about 7 (after the bomber
+  and targeting fixes, with two more aircraft in the strike).
+
+Act III, **The European War** (2026-10-29), Greece to Vienna. Probe
+results (after the targeting fix: the stand-in also sends idle units
+back to their roads, units near an enemy building at it, and the
+nearest unit by road for a loose relic, as a player would):
+
+- 15, **Piraeus**: the original `test` level (`maps/piraeus.cmap`, the
+  export, with its default rules written out), a build list without
+  busters, cobras and bombers, 20000 for the Europeans. Stalemate alone;
+  won at about 14 minutes.
+- 16, **Delphi** (`gen_delphi.py`): the sanctuary under the Phaedriades,
+  three European superguns on the heights. Win `no supergun 2` (taken or
+  destroyed). Lost at about 4; won at about 3 (14 with `SPARE=supergun`,
+  the army taking them).
+- 17, **The Ionian crossing** (`gen_ionian.py`): Lefkada on its causeway
+  (a garage and a supergun over the strait), the European HQ and
+  airbase on Kefalonia past Ithaca, reachable only by air: bombers. Win:
+  their airbase and the supergun. Lost at about 6; won at about 6.
+- 18, **Naples** (`gen_naples.py`): Vesuvius waking. Lava (a `lava*`
+  tile with the wave flag) burns ground units and the supertank, 10 a
+  second; a `volcano` object throws bombs onto its cone (60 over 1.5
+  cells, every side, landing ring shown). The original's tiles carry a
+  `damage` value (`tile.h`, set in its editor's tile dialog) that no code
+  applied and no tile set. Hold Herculaneum. Lost at about 4; won at 5.
+- 19, **Pompeii** (`gen_pompeii.py`): night (`night = true`: dark
+  ground lit round our own, enemy vehicles seen only within 9 cells of
+  something of ours; the editor shows it by day). The first relic race:
+  a `relic` object cannot be shot; the first ground unit or supertank of
+  any army to reach it carries it home by the roads (a `Home` order:
+  node to node by the shortest way over anyone's roads), and drops it
+  where it dies; route units within 8 cells go for one lying loose; a
+  supply truck carrying one keeps to its road. Bringing it home is a
+  `reach` condition. Lost at about 4; won at 5.
+- 20, **Rome** (`gen_rome.py`): the seven hills, the Tiber, the walls,
+  the Colosseum. Tank busters and cobras join our list. Hold the
+  Palatine (destroying the HQ was the first plan; one buster did it
+  alone before the targeting fix). Lost at 5; won at 5.
+- 21, **Turin** (`gen_turin.py`): the Order's truck drives the Shroud out
+  of the city to the Alpine road; kill it and bring the Shroud home.
+  Lost at 3; won at 7.
+- 22, **The Gotthard Pass** (`gen_gotthard.py`): six trucks north up the
+  Tremola, over the pass, through Andermatt and the Schollenen gorge.
+  Avalanches: a `cornice` object comes down when any side's shot lands
+  within 1.6 cells, and runs 12 cells along its heading, 2.2 wide, 250
+  to everything on the ground, in powder snow. Lost at 2; won at 5.
+- 23, **Zurich**: the original `snow` level with its own road tiles made
+  into paths (`gen_zurich.py`, through `--export snow`) and five neutral
+  banks beside them. Win: own four banks. The army can win it: about 10
+  minutes either way.
+- 24, **Chartres** (`gen_chartres.py`): the Veil in the cathedral (a
+  `cathedral` prop: cross plan, apse, two west spires, the green copper
+  roof), the Order from the east and the Europeans over the Eure. Hold
+  out six minutes. Lost at 3; won at 6.
+- 25, **The Loire** (`gen_loire.py`): the Order's chateau (the
+  original's `francecastle`, 2.9 by 2.85 cells measured from its `.gmod`)
+  inside a raised curtain wall of blocking castle tiles and a moat, a
+  supergun in the courtyard that outranges our busters. Destroy their HQ.
+  Lost at 3; won at 4.
+- 26, **Munich** (`gen_munich.py`): the Order's three factories at the
+  Allach works and the Moosach yard, at the original's garage health
+  (4000), each with its own guns, three superguns. Destroy them. The
+  army grinds it at about 11 minutes (busters shooting units at the
+  factory doors wreck the factories); with the stand-in, 7.
+- 27, **Vienna** (`gen_vienna.py`): the Holy Lance in the Hofburg's
+  treasury inside the Ring, under a European tower guard; the Order from
+  the west, the Europeans over the canal. Lost at 4; won at 4.
 
 ## Films (`src/film.rs`)
 
@@ -790,7 +882,7 @@ if not already done.)
 
 **Not at launch (David, 2026-10-27):** Calvary is held back from the
 Asciiverse launch until at least the campaign's first act is built. As of
-2026-10-29 Acts I and II (fourteen missions) are built, but not yet played through by
+2026-10-29 Acts I to III (27 missions) are built, but not yet played through by
 a person. README.md, LICENSE (MIT, as the other Asciiverse titles), the
 store page and manifest (`hub/catalog/calvary.md`, `.toml`; year 1998, the
 original's, so neither OLD! nor NEW!) and the 100x30 preview
@@ -799,7 +891,7 @@ with hub's `tools/castrec.py`) were written 2026-10-29, at David's
 request. Smallest playable size: 100x30 (at 80 columns the battle HUD
 loses the ammunition counts).
 
-Acts I and II are built (2026-10-29): missions 1 to 14, each with its
+Acts I to III are built (2026-10-29): missions 1 to 27, each with its
 own map, rules and briefing. None has been played through by a person
 yet; the balance comes from the mission probe only.
 

@@ -14,7 +14,9 @@ too large. The first act runs from the beachhead at Al Basrah to Nineveh,
 where Fisher refuses an order and both armies turn on him; the second
 takes the deserters through Palmyra, the King's Highway, Sinai and the
 Suez Canal to Cairo, Giza and the ships at Alexandria, and at Giza a
-third army comes up out of the ground.
+third army comes up out of the ground; the third crosses Europe from
+Piraeus to Vienna, racing that army, the Watchers' Order, for the relics
+it is collecting.
 
 ## Play
 
@@ -28,15 +30,18 @@ av play calvary
 Or from the source: `cargo run --release`. Needs a terminal of at least
 100x30 with truecolour and a font with the Braille block.
 
-- **Campaign:** Acts I and II, fourteen missions, each with a briefing
-  and its own objective: bridge the channels, hold a dig site, take a
-  camp with an engineer, bring down a ring of towers, get convoys
-  through, hold out as a rearguard, cross a desert on captured money,
-  board ships under a jet strike, fight two armies and then three.
-  Progress is saved.
+- **Campaign:** Acts I to III, 27 missions, each with a briefing and
+  its own objective: bridge the channels, hold a dig site, take a camp
+  with an engineer, bring down a ring of towers, get convoys through,
+  hold out as a rearguard, cross a desert on captured money, board ships
+  under a jet strike, take superguns off a mountain, bomb an island,
+  hold a dig under a waking volcano, race for relics at night, bring an
+  avalanche down on a convoy, storm a chateau, fight two armies and then
+  three. Progress is saved.
 - **Battles:** from the title menu, a full battle on the Greek coast (the
   original's own level), a skirmish in the Swiss valley, and the walled
-  town in Egypt to drive around in (in the campaign it is Cairo).
+  town in Egypt to drive around in (in the campaign they are Piraeus,
+  Zurich and Cairo).
 - **Three views:** top-down tactical (the default), the strategy map with
   the road network (Tab) and a follow view behind the supertank (M).
 
