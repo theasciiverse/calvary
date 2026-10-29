@@ -290,6 +290,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Take or destroy all three European superguns. Keep the HQ standing.",
     },
+    Mission {
+        act: 2,
+        number: 17,
+        title: "The Ionian crossing",
+        map: include_str!("../maps/ionian.cmap"),
+        briefing: &[
+            "Commander, Reid. The boats for Italy are waiting, but nothing crosses",
+            "while the Europeans own these islands. Lefkada first: there is a",
+            "causeway, and a supergun at the end of it watching the strait. Their HQ",
+            "and airbase are out on Kefalonia, past Ithaca, where no tank can follow.",
+            "The airbase can build bombers now, sir. Send them over the water, and",
+            "keep some guns at home: their helicopters will come the other way.",
+        ],
+        objective: "Destroy the airbase on Kefalonia and the supergun on Lefkada. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.

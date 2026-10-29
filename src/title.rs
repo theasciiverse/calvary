@@ -66,6 +66,7 @@ const PLACES: &[(&str, &str, f32, f32)] = &[
     ("giza", "Giza, Egypt", 29.98, 31.13),
     ("alexandria", "Alexandria, Egypt", 31.20, 29.92),
     ("delphi", "Delphi, Greece", 38.48, 22.50),
+    ("ionian", "The Ionian Islands", 38.45, 20.60),
     ("naples", "Naples, Italy", 40.85, 14.27),
     ("pompeii", "Pompeii, Italy", 40.75, 14.49),
     ("rome", "Rome, Italy", 41.90, 12.50),
