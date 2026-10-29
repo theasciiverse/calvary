@@ -211,7 +211,7 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     for pass in 0..4 {
         for e in &w.entities {
             let p = match e.class {
-                Class::Prop | Class::Bridge => 0,
+                Class::Prop | Class::Bridge | Class::Pad => 0,
                 Class::Vehicle if flies(&e.kind) => 3,
                 Class::Vehicle | Class::EnemyTank | Class::PlayerTank => 2,
                 Class::Plane => 3,
@@ -389,6 +389,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             Class::EnemyTank | Class::PlayerTank => '◆',
             Class::Plane => '+',
             Class::Bridge => '=',
+            Class::Pad => 'P',
             Class::Vehicle if flies(&e.kind) => '+',
             _ => '•',
         };

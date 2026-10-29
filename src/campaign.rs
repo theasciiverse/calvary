@@ -90,6 +90,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Hold Calloway's dig for 90 seconds. Keep the HQ standing.",
     },
+    Mission {
+        act: 0,
+        number: 4,
+        title: "Nakhayb",
+        map: include_str!("../maps/nakhayb.cmap"),
+        briefing: &[
+            "Commander, Reid. Nakhayb, out in the western desert. This was her camp:",
+            "Calloway worked here alone for two seasons, and she left in a hurry.",
+            "It sits where the two wadis meet. Get an engineer onto the pad in the",
+            "middle and the camp is ours, with a turret to keep it. Theirs will try",
+            "the same: if they get there first, knock their turret down and go again.",
+            "The mesas are sheer, sir. Stay in the wadis.",
+        ],
+        objective: "Take Calloway's camp: an engineer on the takeover pad. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -399,10 +414,11 @@ mod tests {
     /// and every 20 s the next of the map's other units; with `SUPERTANK=1`
     /// the enemy towers and armour are cleared every minute from 2:00 and
     /// the supertank parks on the map's site to hold, standing in for the
-    /// supertank's work.
+    /// supertank's work. `RUST_LOG=info` shows the battle's log.
     #[test]
     #[ignore]
     fn mission_report() {
+        let _ = env_logger::builder().is_test(true).try_init();
         let n: usize = std::env::var("MISSION").ok().and_then(|m| m.parse().ok()).unwrap_or(2);
         let (level, _, _) = map(&MISSIONS[n - 1]).unwrap();
         let mut w = World::from_level(&level);

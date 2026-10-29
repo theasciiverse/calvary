@@ -54,11 +54,13 @@ const TILE_SETS: [&str; 16] =
 
 /// What the place tool can put down: structures, the supertank start, money
 /// planes, and the commoner pieces of scenery from the original levels.
-const OBJECT_KINDS: [&str; 22] = [
+const OBJECT_KINDS: [&str; 26] = [
     "mainbasepad",
     "garage",
     "airbase",
     "bank",
+    "takeover_pad",
+    "turret",
     "moneyplane",
     "tower_electric",
     "tower_missile",
@@ -74,6 +76,8 @@ const OBJECT_KINDS: [&str; 22] = [
     "ruinsruin",
     "onelargecrate",
     "armycratebig",
+    "bigwhitetent",
+    "cabin_small",
     "silobigfull2x2",
     "greeceship1",
     "greclighthouse",
@@ -276,7 +280,7 @@ impl Editor {
                     return;
                 }
                 let kind = OBJECT_KINDS[self.object_pick];
-                let player = if matches!(kind, "palmtree1" | "onelargecrate" | "armycratebig" | "silobigfull2x2" | "greeceship1" | "greclighthouse")
+                let player = if matches!(kind, "palmtree1" | "onelargecrate" | "armycratebig" | "silobigfull2x2" | "greeceship1" | "greclighthouse" | "bigwhitetent" | "cabin_small")
                     || kind.starts_with("greecehouses")
                     || kind.starts_with("ruins")
                 {

@@ -219,6 +219,14 @@ has none, pauses while both or neither are there, and goes back to zero
 while only the other side is; once run out it stays. Sites show as a ring
 of posts that fills clockwise (a dotted ring on the map) and as `HOLD
 34/90s` in the HUD, with radio lines when the site changes hands.
+`own KIND P` wins (or loses) when P has a KIND standing, e.g. `own
+takeover_pad 1`. Takeover pads (`takeover_pad`, after
+`objs/takeover_pad.cpp`) cannot be shot; an engineer takes one, and it
+puts up a turret for its new side, and nobody can take it while that
+turret stands. (The original also handed the pad's linked buildings,
+`takeover_objects`, to the new side; our maps have no such links yet.)
+A `.cmap`'s music must be one of the bundled tracks, or the map does not
+load (a misspelt track used to play nothing).
 `build = ["peon_tank", "bridger"]` limits what the factories offer on that
 map (the original kept a `can_build` list on each garage), for both sides;
 the HUD lists only what is on offer, or "no factory: supertank only". A
@@ -236,7 +244,8 @@ Arrows/WASD or the mouse move the cursor, Space or left click applies
 (hold the button to keep painting), `[` `]` brush, `,` `.` tile or object,
 T tile set (used, grass, greece, sea, snow, watr, egypt, france, rome,
 crom, lava, marsh, castle, temple, rock, alien), F tile flags (ground,
-water, blocking), P owner, B makes the path node under the cursor a
+water, blocking), P owner (the place tool also has takeover pads,
+turrets, tents and reed huts), B makes the path node under the cursor a
 bridge spot (shown as a blinking dashed deck, ╳ on the map), U undo, Tab map view, +/- zoom, F2 save, Esc
 quit (twice when unsaved). Open ideas: test-play from inside the editor,
 object rotation, a tile-transition helper for coastlines.
@@ -376,8 +385,8 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner and missions 1 to 3, Al Basrah, Shatt al-Arab and
-   Ur. Three missions reuse the
+   the campaign runner and missions 1 to 4, Al Basrah, Shatt al-Arab, Ur
+   and Nakhayb. Three missions reuse the
    existing maps; the rest are new `.cmap` maps.
 9. **Follow mode (done) and first person (next)** (see Rendering).
 
@@ -591,6 +600,19 @@ lose: our HQ. The probe (`MISSION=3 SUPERTANK=1`) wins at about 4
 minutes; without the supertank the enemy reaches 15 to 20 units and the
 dig is never held.
 
+Mission 4, **Nakhayb** (`maps/nakhayb.cmap`, 100x100, from
+`tools/gen_nakhayb.py`, seed 4204): the western desert, two wadis between
+sheer mesas (cliff cells carry the blocking flag, the map's rim too, and
+no mesa cell touches open ground even corner to corner, checked with a
+flood fill), meeting in the basin of Calloway's abandoned camp: tents,
+crates, palms at the spring, and a neutral takeover pad. Our base south,
+theirs north, a bank and plane each; a turret halfway up each wadi and a
+missile tower 5 cells from the pad. Builds: peon tanks, trikes, rocket
+tanks, engineers. Win: `own takeover_pad 1`; lose: our HQ. In the probe
+the enemy's engineer takes the pad first and our units, passing through,
+knock its turret down for our next engineer: won at about 5 minutes
+even without the supertank (`MISSION=4`).
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -658,11 +680,10 @@ has one complete battle (`test`, the Greek coast) and the first campaign
 mission, so its store page would still have to sell a story the player can
 barely start. Write the store page and README once Act 1 plays.
 
-Act I, what is left (2026-10-29): missions 4 to 7 (Nakhayb, Babylon, the
-Euphrates line, Nineveh), each a new map; capture and convoy-defence
-conditions; a second hostile army for Nineveh (`Team` has one enemy
-today). Missions 1 to 3 are built but not yet played through by a
-person.
+Act I, what is left (2026-10-29): missions 5 to 7 (Babylon, the
+Euphrates line, Nineveh), each a new map; a convoy-defence condition; a
+second hostile army for Nineveh (`Team` has one enemy today). Missions 1
+to 4 are built but not yet played through by a person.
 
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,

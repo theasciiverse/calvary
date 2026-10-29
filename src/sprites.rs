@@ -321,6 +321,22 @@ fn paint_structure(layer: &mut PixelLayer, e: &Entity, pal: Palette, time: f32) 
             };
             Some((lit(c), false))
         }),
+        Class::Pad => layer.paint(cx, cy, 1.0, |x, y| {
+            // a pale pad with a dark rim and a ring in its side's colour
+            let (dx, dy) = ((x - cx).abs(), (y - cy).abs());
+            if dx > 0.95 || dy > 0.95 {
+                return None;
+            }
+            let r = (x - cx).hypot(y - cy);
+            let c = if dx > 0.8 || dy > 0.8 {
+                (54, 52, 48)
+            } else if (0.38..=0.62).contains(&r) {
+                pal.body
+            } else {
+                (196, 192, 180)
+            };
+            Some((lit(c), false))
+        }),
         _ => {
             // towers and other gun emplacements
             let aim = e.heading + e.turret;
@@ -539,6 +555,10 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         (1.1, 0.38, (92, 98, 110), true)
     } else if has("greecehouses") {
         (0.5, 0.42, (204, 98, 72), false)
+    } else if has("tent") {
+        (0.7, 0.5, (224, 220, 206), true)
+    } else if has("cabin") {
+        (0.45, 0.35, (186, 160, 110), true)
     } else if has("house") || has("build") || has("warehouse") || has("silo") || has("lighthouse") || has("pump") || has("toilet") {
         (0.45, 0.45, (222, 212, 192), false)
     } else if has("ruins") {

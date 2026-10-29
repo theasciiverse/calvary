@@ -1,7 +1,7 @@
 name = "ur"
 width = 110
 height = 100
-music = "Nakhayb.mp3"
+music = "Nakhayb_Iraq.mp3"
 win = ["hold 1 56.0 52.0 4.0 90"]
 lose = ["no mainbasepad 1"]
 build = ["peon_tank", "engineer", "rocket_tank"]

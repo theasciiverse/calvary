@@ -35,6 +35,9 @@ pub enum Cond {
     NoUnits(u8),
     /// `no KIND P`: player P has no KIND left (`get_object_of_player` is nil).
     No(String, u8),
+    /// `own KIND P`: player P has a KIND standing (one taken by engineers,
+    /// say: `own takeover_pad 1`).
+    Own(String, u8),
     /// `hold P X Y R SECS`: player P has held the ground within R of
     /// (X, Y) for SECS seconds.
     Hold { player: u8, x: f32, y: f32, r: f32, secs: f32 },
@@ -59,11 +62,12 @@ impl Cond {
         match words.as_slice() {
             ["no_units", p] => Ok(Cond::NoUnits(player(p)?)),
             ["no", kind, p] => Ok(Cond::No(kind.to_string(), player(p)?)),
+            ["own", kind, p] => Ok(Cond::Own(kind.to_string(), player(p)?)),
             ["hold", p, x, y, r, secs] => {
                 let num = |w: &str| w.parse::<f32>().map_err(|_| format!("condition {text:?}: bad number {w:?}"));
                 Ok(Cond::Hold { player: player(p)?, x: num(x)?, y: num(y)?, r: num(r)?, secs: num(secs)? })
             }
-            _ => Err(format!("condition {text:?}: want `no_units PLAYER`, `no KIND PLAYER` or `hold PLAYER X Y RADIUS SECONDS`")),
+            _ => Err(format!("condition {text:?}: want `no_units PLAYER`, `no KIND PLAYER`, `own KIND PLAYER` or `hold PLAYER X Y RADIUS SECONDS`")),
         }
     }
 
@@ -71,6 +75,7 @@ impl Cond {
         match self {
             Cond::NoUnits(p) => format!("no_units {p}"),
             Cond::No(kind, p) => format!("no {kind} {p}"),
+            Cond::Own(kind, p) => format!("own {kind} {p}"),
             Cond::Hold { player, x, y, r, secs } => format!("hold {player} {x} {y} {r} {secs}"),
         }
     }
@@ -86,6 +91,10 @@ impl Cond {
                 let owned = owned(*p);
                 !w.entities.iter().any(|e| owned(e) && e.kind == *kind)
             }
+            Cond::Own(kind, p) => {
+                let team = Team::from_player(*p);
+                w.entities.iter().any(|e| e.alive && e.team == team && e.kind == *kind)
+            }
             Cond::Hold { secs, .. } => w.held_for(self) >= *secs,
         }
     }
@@ -95,11 +104,14 @@ impl Cond {
         let side = |p: u8| if p == 1 { "our" } else { "the enemy's" };
         let name = |kind: &str| match kind {
             "mainbasepad" => "base".to_string(),
+            "takeover_pad" => "takeover pad".to_string(),
             k => k.replace('_', " "),
         };
         match self {
             Cond::NoUnits(1) => "Nothing of ours is left on the field.".into(),
             Cond::NoUnits(_) => "Every enemy unit and tower is destroyed.".into(),
+            Cond::Own(kind, 1) => format!("We have taken the {}.", name(kind)),
+            Cond::Own(kind, _) => format!("The enemy has taken the {}.", name(kind)),
             Cond::Hold { player: 1, .. } => "We held the site.".into(),
             Cond::Hold { .. } => "The enemy held the site.".into(),
             Cond::No(kind, p) => {
@@ -137,6 +149,7 @@ mod tests {
         assert!(Cond::parse("no_units").is_err());
         assert!(Cond::parse("no mainbasepad x").is_err());
         assert!(Cond::parse("hold 60").is_err());
+        assert_eq!(Cond::parse("own takeover_pad 1").unwrap().text(), "own takeover_pad 1");
         assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap(), Cond::Hold { player: 1, x: 55.5, y: 42.0, r: 4.0, secs: 90.0 });
         assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap().text(), "hold 1 55.5 42 4 90");
         assert!(Rules::parse(&[], &[]).unwrap().is_default());

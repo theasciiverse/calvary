@@ -201,7 +201,7 @@ legend = "\n".join(f"{c} {f} {n}" for c, f, n in LEGEND)
 out = f"""name = "ur"
 width = {W}
 height = {H}
-music = "Nakhayb.mp3"
+music = "Nakhayb_Iraq.mp3"
 win = ["hold 1 {DIG[0]} {DIG[1]} {DIG_R} 90"]
 lose = ["no mainbasepad 1"]
 build = ["peon_tank", "engineer", "rocket_tank"]

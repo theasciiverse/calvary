@@ -202,6 +202,9 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
         return Err(format!("objects: link to line {bad}, but there are {count} lines"));
     }
 
+    if let Some(m) = f.music.as_deref().filter(|m| !crate::audio::MUSIC.iter().any(|(n, _)| n == m)) {
+        return Err(format!("music: {m:?} is not one of the bundled tracks"));
+    }
     let rules = crate::rules::Rules::parse(&f.win, &f.lose)?;
     if let Some(bad) = f.build.iter().flatten().find(|k| crate::balance::unit(k).is_none()) {
         return Err(format!("build: {bad:?} is not a unit"));
@@ -260,5 +263,6 @@ mod tests {
         assert!(back.objects[0].bridge);
         assert_eq!(back.build, Some(vec!["bridger".to_string()]));
         assert!(parse(&ok.replace("height = 1\n", "height = 1\nbuild = ['tractor']\n")).unwrap_err().contains("tractor"));
+        assert!(parse(&ok.replace("height = 1\n", "height = 1\nmusic = 'Nakhayb.mp3'\n")).unwrap_err().contains("Nakhayb.mp3"));
     }
 }

@@ -134,6 +134,10 @@ pub enum Class {
     /// A bridger that has parked over a gap: a bridge deck anything can
     /// drive over, until it is shot away.
     Bridge,
+    /// The original's takeover pad: an engineer takes it, and it puts up a
+    /// turret for its new side; nobody can take it while that turret stands.
+    /// It cannot be shot itself.
+    Pad,
     Prop,
 }
 
@@ -226,12 +230,13 @@ impl Entity {
             Class::Vehicle => 0.5,
             Class::Plane => 0.45,
             Class::Bridge => 0.5,
+            Class::Pad => 1.0,
             Class::Prop => 0.5,
         }
     }
 
     pub fn is_target(&self) -> bool {
-        self.alive && self.class != Class::Prop
+        self.alive && !matches!(self.class, Class::Prop | Class::Pad)
     }
 
     fn stats(&self) -> Option<&'static balance::UnitStats> {
@@ -403,6 +408,7 @@ impl World {
                 "garage" => Class::Garage,
                 "airbase" => Class::Airbase,
                 "bank" => Class::Bank,
+                "takeover_pad" => Class::Pad,
                 "tower_electric" | "tower_missile" | "turret" | "popup_turret" | "verybiggun" | "supergun" | "gunport" | "base_launcher" => Class::Tower,
                 "stank" if team == Team::Player => {
                     if player_tank.is_some() {
@@ -1185,10 +1191,25 @@ impl World {
         }
     }
 
+    /// The live turret standing on takeover pad `pad`, if any.
+    pub fn pad_turret(&self, pad: usize) -> Option<usize> {
+        let p = &self.entities[pad];
+        (0..self.entities.len()).find(|&t| {
+            let e = &self.entities[t];
+            e.alive && e.class == Class::Tower && (e.x - p.x).hypot(e.y - p.y) < 0.6
+        })
+    }
+
     fn try_capture(&mut self, i: usize) -> bool {
         let me = self.entities[i].clone();
-        let spot = self.entities.iter().position(|e| {
-            e.alive && matches!(e.class, Class::Bank | Class::Tower) && e.team != me.team && e.team != Team::Scenery && (e.x - me.x).hypot(e.y - me.y) <= CAPTURE_RANGE + e.radius()
+        let spot = (0..self.entities.len()).find(|&s| {
+            let e = &self.entities[s];
+            e.alive
+                && matches!(e.class, Class::Bank | Class::Tower | Class::Pad)
+                && e.team != me.team
+                && e.team != Team::Scenery
+                && (e.x - me.x).hypot(e.y - me.y) <= CAPTURE_RANGE + e.radius()
+                && !(e.class == Class::Pad && self.pad_turret(s).is_some())
         });
         let Some(s) = spot else { return false };
         let kind = self.entities[s].kind.clone();
@@ -1205,6 +1226,14 @@ impl World {
         self.entities[s].team = me.team;
         self.entities[s].target = None;
         self.entities[i].alive = false;
+        if class == Class::Pad {
+            // the pad's turret, for its new side (`objs/takeover_pad.cpp`)
+            let (x, y) = (self.entities[s].x, self.entities[s].y);
+            let hp = balance::unit("turret").map_or(200.0, |u| u.health as f32);
+            let mut t = Entity::shown("turret", Class::Tower, me.team, hp);
+            (t.x, t.y, t.home) = (x, y, (x, y));
+            self.entities.push(t);
+        }
         let who = if me.team == Team::Player { "We captured" } else { "Enemy captured" };
         self.say(format!("{who} a {}", kind.replace('_', " ")));
         true
@@ -1660,6 +1689,45 @@ mod rules {
         tick(&mut w, 1.5);
         assert_eq!(w.outcome, Outcome::Won);
         assert_eq!(w.verdict, "We held the site.");
+    }
+
+    #[test]
+    fn engineers_take_pads_and_pads_raise_turrets() {
+        let mut w = river_map_with("win = ['own takeover_pad 1']\n");
+        let mut pad = Entity::shown("takeover_pad", Class::Pad, Team::Neutral, 100.0);
+        (pad.x, pad.y) = (3.0, 22.0);
+        w.entities.push(pad);
+        let pad = w.entities.len() - 1;
+        let engineer = |w: &mut World, team: Team| {
+            let mut e = Entity::shown("engineer", Class::Vehicle, team, 30.0);
+            (e.x, e.y, e.order) = (3.0, 23.5, Order::Hold);
+            w.entities.push(e);
+            w.entities.len() - 1
+        };
+        // the rules are read at the start: a fresh world sees the pad
+        w.rules = crate::rules::Rules::parse(&["own takeover_pad 1".into()], &[]).unwrap();
+        assert!(!w.entities[pad].is_target(), "a pad cannot be shot");
+        let ours = engineer(&mut w, Team::Player);
+        w.step(1.0 / 30.0);
+        assert!(!w.entities[ours].alive && w.entities[pad].team == Team::Player);
+        let turret = w.pad_turret(pad).expect("a turret goes up on the pad");
+        assert_eq!(w.entities[turret].team, Team::Player);
+        assert_eq!(w.outcome, Outcome::Won);
+        assert_eq!(w.verdict, "We have taken the takeover pad.");
+        // while the turret stands nobody takes the pad; once it falls they can
+        w.outcome = Outcome::Playing;
+        w.rules = crate::rules::Rules { win: vec![], lose: vec![] };
+        let theirs = engineer(&mut w, Team::Enemy);
+        w.entities[theirs].kind = "engineer".into();
+        w.entities[turret].hp = 1e9;
+        w.step(1.0 / 30.0);
+        assert_eq!(w.entities[pad].team, Team::Player);
+        w.entities[turret].alive = false;
+        w.entities[theirs].alive = true;
+        (w.entities[theirs].x, w.entities[theirs].y) = (3.0, 23.5);
+        w.step(1.0 / 30.0);
+        assert_eq!(w.entities[pad].team, Team::Enemy);
+        assert_eq!(w.entities[w.pad_turret(pad).unwrap()].team, Team::Enemy);
     }
 
     #[test]
