@@ -2201,14 +2201,16 @@ impl World {
         }
     }
 
+    /// Whether the strategy map shows `e`: on ground not yet seen nothing
+    /// shows but our own and our allies' (the original's radar draws nothing
+    /// on a fogged cell; its 3D views show everything).
+    pub fn on_radar(&self, e: &Entity) -> bool {
+        self.seen(e) && (e.team.friendly() || !self.fogged(e.x, e.y))
+    }
+
     /// Whether the player can see `e`: always, except an enemy vehicle at
     /// night with nothing of ours near it.
     pub fn seen(&self, e: &Entity) -> bool {
-        // in the fog nothing shows but our own (the original's radar draws
-        // nothing on a fogged cell)
-        if !e.team.friendly() && self.fogged(e.x, e.y) {
-            return false;
-        }
         if !self.night || !e.team.hostile(Team::Player) || !matches!(e.class, Class::Vehicle | Class::EnemyTank | Class::Plane) {
             return true;
         }
@@ -2674,7 +2676,6 @@ mod rules {
             "name = 'relic'\nwidth = 30\nheight = 30\nnight = true\nwin = ['reach 1 relic 5 25 3 1']\nlegend = {q}\ng 0 grassfull\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
         );
         let mut w = World::from_level(&crate::cmap::parse(&text).unwrap().0);
-        w.lift_fog(); // the night alone, here
         let relic = w.entities.iter().position(|e| e.class == Class::Relic).unwrap();
         assert!(!w.entities[relic].is_target(), "a relic cannot be shot");
         let unit = |w: &mut World, team: Team, x: f32, y: f32| {
@@ -2949,14 +2950,14 @@ mod rules {
         assert!(!w.fogged(6.5, 27.5), "round our HQ");
         assert!(!w.fogged(6.5, 22.0), "round the allies' tank");
         assert!(w.fogged(6.5, 2.5) && w.fogged(6.5, 14.5));
-        assert!(!w.seen(&w.entities[theirs]) && w.seen(&w.entities[allied]));
+        assert!(!w.on_radar(&w.entities[theirs]) && w.on_radar(&w.entities[allied]));
         // the allies are ours to see and not to shoot
         assert!(!w.entities[allied].can_attack(&Entity::shown("peon_tank", Class::Vehicle, Team::Player, 1.0)));
         assert!(w.entities[allied].can_attack(&w.entities[theirs]));
         w.entities[allied].y = 17.0;
         w.fog_clock = 0.0;
         w.step(1.0 / 30.0);
-        assert!(!w.fogged(6.5, 14.5) && w.seen(&w.entities[theirs]), "seen once something of ours comes near");
+        assert!(!w.fogged(6.5, 14.5) && w.on_radar(&w.entities[theirs]), "seen once something of ours comes near");
     }
 
     #[test]

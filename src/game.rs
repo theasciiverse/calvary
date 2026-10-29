@@ -270,7 +270,7 @@ impl Game {
     }
 
     /// Lock on: the nearest live enemy within gun range (14 cells) that the
-    /// player can see (not in the fog, nor lost in the dark); the
+    /// player can see (not lost in the dark); the
     /// swing the turret at it at the turret's own speed.
     fn track_target(&mut self) {
         if !self.lock {

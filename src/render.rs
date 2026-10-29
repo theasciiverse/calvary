@@ -151,9 +151,6 @@ fn draw_terrain(c: &mut DotCanvas, t: &Terrain, time: f32, contour: f32) {
         for dx in 0..w * 2 {
             let (x, y) = c.dot_to_map(dx, dy);
             let Some(cell) = t.cell_at(x, y) else { continue };
-            if t.fogged(x, y) {
-                continue;
-            }
             let band = |x: f32, y: f32| (t.height(x, y) / contour).floor() as i32;
             let b = band(x, y);
             if b != band(x + c.dot_w, y) || b != band(x, y + c.dot_h) {
@@ -406,7 +403,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             if t.cell_at(x, y_top).is_none() && t.cell_at(x, y_bot).is_none() {
                 cell.set_char(' ').set_bg(Color::Black);
             } else {
-                cell.set_char('▀').set_fg(rgb(t.shaded(x, y_top))).set_bg(rgb(t.shaded(x, y_bot)));
+                cell.set_char('▀').set_fg(rgb(t.radar(x, y_top))).set_bg(rgb(t.radar(x, y_bot)));
             }
         }
     }
@@ -498,7 +495,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
-    for e in w.entities.iter().filter(|e| e.alive && e.class != Class::Prop && w.seen(e)) {
+    for e in w.entities.iter().filter(|e| e.alive && e.class != Class::Prop && w.on_radar(e)) {
         let glyph = match e.class {
             Class::Hq => 'H',
             Class::Garage => 'G',

@@ -161,7 +161,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             let sy = horizon + (cz - ground) * focal / z;
             if sy < lowest {
                 let mut c = g.terrain.shaded(x, y);
-                if cell.water && !g.terrain.fogged(x, y) {
+                if cell.water {
                     // a glint on the water, fixed to the ground
                     let hsh = ((x * 4.0) as i32).wrapping_mul(73856093) ^ ((y * 4.0) as i32).wrapping_mul(19349663) ^ ((g.time * 3.0) as i32);
                     if hsh.rem_euclid(29) == 0 {

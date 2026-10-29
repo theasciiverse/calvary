@@ -11,8 +11,8 @@ landmark models (Jerusalem walls, temple and dig site, the Giza pyramids, a
 French castle, cathedral beams, Swiss skiers).
 
 Status: draft for discussion. Built: the campaign runner (briefings,
-result screens, saved progress, per-map win and lose rules, fog of war
-on every map as in the original), mission 1,
+result screens, saved progress, per-map win and lose rules, the original's
+fog of war on the strategy map), mission 1,
 Al Basrah, mission 2, Shatt al-Arab, with the bridger, mission 3, Ur,
 with holding a site, mission 4, Nakhayb, with takeover pads, and
 mission 5, Babylon, with the first giant bones, mission 6, the

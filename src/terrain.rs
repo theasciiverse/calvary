@@ -203,12 +203,19 @@ impl Terrain {
         ((self.height(x + e, y) - self.height(x - e, y)) / (2.0 * e), (self.height(x, y + e) - self.height(x, y - e)) / (2.0 * e))
     }
 
+    /// The radar's colour at a map position: the ground, or black where we
+    /// have not been (the fog is the radar's alone, as in the original).
+    pub fn radar(&self, x: f32, y: f32) -> Rgb {
+        if self.fogged(x, y) {
+            FOG
+        } else {
+            self.shaded(x, y)
+        }
+    }
+
     /// Terrain colour at a map position, hill shaded with light from the north west.
     pub fn shaded(&self, x: f32, y: f32) -> Rgb {
         let Some(cell) = self.cell_at(x, y) else { return (0, 0, 0) };
-        if self.fogged(x, y) {
-            return FOG;
-        }
         let (dx, dy) = self.slope(x, y);
         let light = (0.85 - (dx + dy) * 0.35).clamp(0.45, 1.25);
         let s = |c: u8| (c as f32 * light).clamp(0.0, 255.0) as u8;

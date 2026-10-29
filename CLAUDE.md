@@ -246,21 +246,23 @@ a blue band) is at war with every army but ours, runs its own copy of
 `ai_joe` and drives our roads (`A:` links), so it needs no link letter
 of its own; `money` takes a fifth amount for it. Its HQ can be a lose
 condition (`no mainbasepad 7`).
-Every battle is fought in fog of war, as the original kept it on every
-level (each `map_cell` starts `FOGGED`, and in the game the flag is only
-ever cleared, `golg__map_cell.cpp`): every cell unseen until something of ours
+Every battle has fog of war, as the original kept it on every level
+(each `map_cell` starts `FOGGED`, and in the game the flag is only ever
+cleared, `golg__map_cell.cpp`), and like the original's it is the
+radar's alone: no renderer of its reads the flag, only the radar
+(`golg__map_view.cpp`), so here only the strategy map is fogged and the
+top-down and follow views show everything. Every cell unseen until something of ours
 or our allies' has been near it, the supertank clearing 7 cells round
 itself (`g1_unfog_radius` in `objs/stank.cpp`), units and towers their
 detection range (`find_target`), our buildings 4 cells past their walls;
-seen ground stays seen. Fogged ground is drawn near black, as on the
-original's radar, and nothing but our own and our allies' shows on it,
-roads and junctions on the map view included; the turret lock and
-attack orders take only what can be seen. It is the original's shroud,
-not a fog that closes again behind you. It changes only what the player
-sees: no unit, tower or computer side looks at it, so the probe plays
-the same with it (until 2026-10-29 it was a per-map `fog = true`, on
-Lapland and Svalbard only). The editor, films and the credits finale
-show the whole map (`World::lift_fog`); F5 from the editor plays fogged.
+seen ground stays seen. On the strategy map fogged ground is drawn near
+black, as on the original's radar, and nothing but our own and our
+allies' shows on it, roads and junctions included (`World::on_radar`).
+It is the original's shroud, not a fog that closes again behind you,
+and no unit, tower or computer side looks at it, so the probe plays the
+same with it (until 2026-10-29 it was a per-map `fog = true` that hid
+the ground in every view, on Lapland and Svalbard only). The editor
+shows the whole map (`World::lift_fog`); F5 from it plays fogged.
 Sea ice (any `*icepatch*` tile, ground until broken) takes 600 damage a
 cell from every hit within the blast (`ICE_STRENGTH`): a supergun shell
 opens a hole, a few rockets or bombs crack through, tank guns hardly mark
