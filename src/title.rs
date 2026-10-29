@@ -172,16 +172,26 @@ enum Page {
     Credits,
 }
 
-/// Run the opening (unless `skip_intro`) and the title menu.
-pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input, skip_intro: bool) -> io::Result<Choice> {
-    audio.play_music("Splash_Screen_Opus.mp3");
+/// Where the title starts: the opening, the menu, or (after the campaign's
+/// epilogue) the credits.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Start {
+    Opening,
+    Title,
+    Credits,
+}
+
+/// Run the opening (unless skipped) and the title menu.
+pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input, from: Start) -> io::Result<Choice> {
     let skipped = || Instant::now() - Duration::from_secs_f32(GLOBE_END);
-    let mut start = if skip_intro { skipped() } else { Instant::now() };
+    let mut start = if from == Start::Opening { Instant::now() } else { skipped() };
     let items = menu();
     let mut pick = 0usize;
     // the campaign entry offers the furthest mission reached
     let mut mission = campaign::reached() - 1;
-    let mut page = Page::Main;
+    let mut page = if from == Start::Credits { Page::Credits } else { Page::Main };
+    // the end of the road in the campaign
+    audio.play_music(if from == Start::Credits { "Jerusalem_Israel.mp3" } else { "Splash_Screen_Opus.mp3" });
     // globe orientation (spin = longitude facing us, tilt = latitude), eased
     // toward the selected entry's place once the title is up
     let mut view = (0.0f32, 0.0f32);

@@ -622,6 +622,36 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Hold the Old City for seven minutes. Do not fire on the holy places: three hits and it is lost.",
     },
+    Mission {
+        act: 4,
+        number: 39,
+        title: "The dig",
+        map: include_str!("../maps/dig.cmap"),
+        briefing: &[
+            "Commander, Reid. Her trench, sir. Calloway cut it down into the hill",
+            "under Golgotha in '47, and it goes down in a zigzag to a chamber at",
+            "the bottom. The Order brought the walls in on it in five places.",
+            "Engineers clear rubble; nothing else will, not even our tank. Their",
+            "guns are in the side cuts all the way down. Get the supertank to the",
+            "bottom. She went down there alone. We will not.",
+        ],
+        objective: "Clear the trench with engineers and get the supertank down to the chamber. Keep the HQ standing.",
+    },
+    Mission {
+        act: 4,
+        number: 40,
+        title: "Beneath the place of the skull",
+        map: include_str!("../maps/skull.cmap"),
+        briefing: &[
+            "Commander, this is Reid. Under her chamber the rock opens up, and it is",
+            "not rock down there any more. There is a hall at the end of the caves,",
+            "and in the hall the thing the forty sites were locking shut. Calloway",
+            "called it the keyhole. While it stands they keep coming up out of it.",
+            "The Order is all round it, what is left of them. It is dark, sir. Stay",
+            "close to the lights, and close it.",
+        ],
+        objective: "Destroy the keyhole in the great hall. Keep the HQ at the entrance standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -814,6 +844,69 @@ fn draw_briefing(f: &mut Frame, m: &Mission, act: &Act, opens_act: bool, place: 
     }
 }
 
+/// The press conference the original's Act 1 Scene 1 opened on, answered
+/// at last.
+const EPILOGUE_QUESTION: &str = "What really happened at the Golgotha site, Lieutenant?";
+const EPILOGUE: &[&str] = &[
+    "She was right. Dr. Calloway was right about all of it.",
+    "Forty locks, and one keyhole, and people who wanted it open,",
+    "and a war fought on top of the locks until they gave.",
+    "We closed it. Commander Fisher, Sergeant Charles, the Finns,",
+    "and a great many people who are not here to say so.",
+    "It was never about Iraq, or Europe, or America.",
+    "It was about whether we would keep fighting long enough.",
+    "We stopped.",
+];
+
+/// After the last mission: Kruese answers the press, over the globe turning
+/// with Golgotha marked, to the splash theme; then the credits.
+pub fn epilogue(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input) -> io::Result<()> {
+    audio.play_music("Splash_Screen_Opus.mp3");
+    let start = Instant::now();
+    let mut typed_all = false;
+    let total: usize = EPILOGUE_QUESTION.chars().count() + quoted(EPILOGUE).iter().map(|l| l.chars().count()).sum::<usize>();
+    loop {
+        let t = start.elapsed().as_secs_f32();
+        let typed = if typed_all { usize::MAX } else { (t * 30.0) as usize };
+        terminal.draw(|f| draw_epilogue(f, t, typed))?;
+        match read_choice(input, Duration::from_millis(33))? {
+            Some(true) if !typed_all && typed < total => typed_all = true,
+            Some(_) => return Ok(()),
+            None => {}
+        }
+    }
+}
+
+fn draw_epilogue(f: &mut Frame, t: f32, typed: usize) {
+    let words = quoted(EPILOGUE);
+        let area = f.area();
+        f.render_widget(Block::default().style(Style::default().bg(Color::Black)), area);
+        let view = ((title::GOLGOTHA.2 - t * 2.0).to_radians(), (title::GOLGOTHA.1 * 0.8).to_radians());
+        title::draw_globe(f.buffer_mut(), area, area.height, t, 0.4, view, Some((title::GOLGOTHA.1, title::GOLGOTHA.2)));
+        let mut left = typed;
+        let mut type_out = |text: &str| -> String {
+            let n = text.chars().count().min(left);
+            left -= n;
+            text.chars().take(n).collect()
+        };
+        let question = [EPILOGUE_QUESTION.to_string()];
+        let asked = [type_out(EPILOGUE_QUESTION)];
+        let answer: Vec<String> = words.iter().map(|l| type_out(l)).collect();
+        let rows = 2 + 2 + 2 + words.len() as u16 + 4;
+        let mut y = area.y + area.height.saturating_sub(rows + 1).max(1);
+        let bold = |c: Color| Style::default().fg(c).add_modifier(Modifier::BOLD);
+        centred(f, area, y, vec![Span::styled("EPILOGUE: THE GOLGOTHA TRANSMISSION", bold(AMBER))]);
+        y += 2;
+        y += block(f, area, y, &question, &asked, Style::default().fg(GREEN));
+        centred(f, area, y, vec![Span::styled("a reporter", Style::default().fg(DIM))]);
+        y += 2;
+        y += block(f, area, y, &words, &answer, Style::default().fg(BONE).add_modifier(Modifier::ITALIC));
+        centred(f, area, y, vec![Span::styled("Lt. Elaine Kruese", Style::default().fg(DIM))]);
+        if left > 0 {
+            centred(f, area, y + 2, vec![Span::styled("Enter: the credits", Style::default().fg(DIM))]);
+        }
+}
+
 static YOU_WIN: &[u8] = include_bytes!("../data/youwin.ppm");
 static YOU_LOSE: &[u8] = include_bytes!("../data/youlose.ppm");
 
@@ -827,10 +920,7 @@ pub fn result(terminal: &mut DefaultTerminal, input: &mut Input, index: usize, w
     let last = index + 1 == MISSIONS.len();
     let next = match (won, last) {
         (true, false) => format!("Enter: on to mission {}, {}", MISSIONS[index + 1].number, MISSIONS[index + 1].title),
-        (true, true) => {
-            let act = ACTS[MISSIONS[index].act].name.split(':').next().unwrap_or("The act");
-            format!("{act} is over. What comes next is not built yet. Enter or Esc: back to the title")
-        }
+        (true, true) => "The keyhole is closed. Enter: the epilogue".to_string(),
         (false, _) => format!("Enter: try {} again    Esc: back to the title", MISSIONS[index].title),
     };
     let start = Instant::now();
@@ -849,7 +939,7 @@ pub fn result(terminal: &mut DefaultTerminal, input: &mut Input, index: usize, w
         })?;
         // a second's grace, so a key still held from the battle does not skip it
         match read_choice(input, Duration::from_millis(33))? {
-            Some(go) if t > 1.0 => return Ok(if go && !(won && last) { Pick::Go } else { Pick::Back }),
+            Some(go) if t > 1.0 => return Ok(if go || (won && last) { Pick::Go } else { Pick::Back }),
             _ => {}
         }
     }
@@ -859,6 +949,17 @@ pub fn result(terminal: &mut DefaultTerminal, input: &mut Input, index: usize, w
 mod tests {
     use super::*;
     use crate::world::{Class, Outcome, Team, World};
+
+    /// The epilogue draws whole at the smallest playable size and larger.
+    #[test]
+    fn epilogue_draws() {
+        for (w, h) in [(100u16, 30u16), (160, 45)] {
+            let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(w, h)).unwrap();
+            term.draw(|f| draw_epilogue(f, 60.0, usize::MAX)).unwrap();
+            let text: String = term.backend().buffer().content().iter().map(|c| c.symbol()).collect();
+            assert!(text.contains("We stopped.") && text.contains("Golgotha site") && text.contains("Enter: the credits"), "{w}x{h}");
+        }
+    }
 
     /// Every mission's map loads, has our HQ and supertank start, and its
     /// rules all apply (none already true before the battle).
@@ -976,6 +1077,17 @@ mod tests {
                 }
                 if let (Some(t), Some(site)) = (w.player_tank, w.sites().first().copied()) {
                     (w.entities[t].x, w.entities[t].y) = (site.1, site.2);
+                }
+                // a map won by getting the supertank somewhere: it drives
+                // there once no rubble stands in the way
+                let goal = level.rules.win.iter().find_map(|c| match c {
+                    crate::rules::Cond::Reach { player: 1, kind, x, y, .. } if kind == "stank" => Some((*x, *y)),
+                    _ => None,
+                });
+                if let (Some(t), Some((gx, gy))) = (w.player_tank, goal) {
+                    if !w.entities.iter().any(|e| e.alive && e.kind == "rubble") {
+                        (w.entities[t].x, w.entities[t].y) = (gx, gy);
+                    }
                 }
                 // and, as a player would, sends idle units back to the road,
                 // then units near an enemy building at it: units leave

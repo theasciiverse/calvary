@@ -247,7 +247,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Prop if k == "giant_skull" => (0.9, 0.8, 0.0, (196, 186, 162), sprites::BONE),
             Class::Prop if k == "jerustemple1" => (0.5, 1.0, 0.0, (176, 154, 116), (198, 176, 136)),
             Class::Prop if k == "templebigfull3x4" => (1.8, 0.45, 0.0, (176, 160, 128), (212, 200, 172)),
-            Class::Prop if k == "rubble" => (0.9, 0.5, 0.0, (120, 104, 86), (150, 132, 108)),
+            Class::Prop if k == "rubble" => (1.6, 0.6, 0.0, (120, 104, 86), (150, 132, 108)),
             Class::Prop if k.starts_with("jeruswall") => (1.0, 1.5, 0.0, (170, 146, 108), (196, 172, 130)),
             Class::Prop if k == "reindeer" => (0.22, 0.4, 0.0, (112, 84, 58), (150, 120, 90)),
             Class::Prop if k.starts_with("giant_") => (0.12, 1.9, 0.0, (196, 186, 162), sprites::BONE),

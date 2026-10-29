@@ -158,11 +158,14 @@ fn main() -> io::Result<()> {
         run(&mut terminal, &mut audio, &mut input, start, map, at, Mode::Battle).map(|_| ())
     } else {
         let mut first = !args.iter().any(|a| a == "--no-intro");
+        let mut credits = false;
         loop {
-            let choice = title::run(&mut terminal, &mut audio, &mut input, !first);
+            let from = if credits { title::Start::Credits } else if first { title::Start::Opening } else { title::Start::Title };
+            let choice = title::run(&mut terminal, &mut audio, &mut input, from);
             first = false;
+            credits = false;
             let r = match choice {
-                Ok(title::Choice::Campaign(i)) => play_campaign(&mut terminal, &mut audio, &mut input, i),
+                Ok(title::Choice::Campaign(i)) => play_campaign(&mut terminal, &mut audio, &mut input, i).map(|done| credits = done),
                 Ok(title::Choice::Level(i)) => run(&mut terminal, &mut audio, &mut input, i, None, None, Mode::Battle).map(|_| ()),
                 Ok(title::Choice::Map(path)) => match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| cmap::parse(&t)) {
                     Ok(m) => run(&mut terminal, &mut audio, &mut input, 0, Some(m), None, Mode::Battle).map(|_| ()),
@@ -187,11 +190,12 @@ fn main() -> io::Result<()> {
 }
 
 /// The campaign from mission `index`: briefing, battle, the result screen,
-/// then the next mission or another try, until the player backs out.
-fn play_campaign(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, input: &mut Input, mut index: usize) -> io::Result<()> {
+/// then the next mission or another try, until the player backs out. After
+/// the last mission is won, the epilogue; `Ok(true)` then, for the credits.
+fn play_campaign(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, input: &mut Input, mut index: usize) -> io::Result<bool> {
     loop {
         if campaign::briefing(terminal, audio, input, index)? == campaign::Pick::Back || input.exit_app {
-            return Ok(());
+            return Ok(false);
         }
         loop {
             let m = &campaign::MISSIONS[index];
@@ -202,7 +206,7 @@ fn play_campaign(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, input
             input.escape = false;
             if outcome == world::Outcome::Playing || input.exit_app {
                 // left mid-battle
-                return Ok(());
+                return Ok(false);
             }
             let won = outcome == world::Outcome::Won;
             if won {
@@ -210,7 +214,11 @@ fn play_campaign(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, input
             }
             audio.play_music(if won { "Splash_Screen_Opus.mp3" } else { "Norway_Nephelim_Battle.mp3" });
             if campaign::result(terminal, input, index, won, &verdict)? == campaign::Pick::Back || input.exit_app {
-                return Ok(());
+                return Ok(false);
+            }
+            if won && index + 1 == campaign::MISSIONS.len() {
+                campaign::epilogue(terminal, audio, input)?;
+                return Ok(!input.exit_app);
             }
             if won {
                 index += 1;

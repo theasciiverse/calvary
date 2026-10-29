@@ -347,7 +347,7 @@ impl Entity {
             Class::Pad => 1.0,
             Class::Relic => 0.4,
             Class::Prop => match self.kind.as_str() {
-                "rubble" => 1.0,
+                "rubble" => 1.8,
                 "templebigfull3x4" => 1.9,
                 "jerustemple1" => 0.6,
                 "cathedral" => 3.0,

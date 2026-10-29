@@ -882,10 +882,10 @@ fn paint_jerusalem(layer: &mut PixelLayer, e: &Entity, time: f32) {
             };
             Some((lit(col), false))
         }),
-        _ => layer.paint(cx, cy, 1.1, |x, y| {
+        _ => layer.paint(cx, cy, 2.0, |x, y| {
             let (dx, dy) = (x - cx, y - cy);
-            let r = dx.hypot(dy) + (hash2(x * 3.0, y * 3.0) % 7) as f32 * 0.03;
-            if r > 1.0 {
+            let r = dx.hypot(dy) + (hash2(x * 3.0, y * 3.0) % 7) as f32 * 0.05;
+            if r > 1.8 {
                 return None;
             }
             let h = hash2(x * 2.0, y * 2.0) % 4;
