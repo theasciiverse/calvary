@@ -356,14 +356,17 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, mission: usize, page
     }
     // the dedication, on every title page
     // the dedication sits low, two rows above the bottom edge
-    let foot = area.y + area.height.saturating_sub(5);
+    let thanks = ["For Dave Taylor, Jonathan Clark, Carly Taylor and the whole team.", "Twenty-eight years on, it is finished."];
+    // on one line when it fits, else on two, the whole block a row higher
+    let wide = area.width as usize > thanks[0].len() + thanks[1].len() + 1;
+    let rows_of_thanks: Vec<String> = if wide { vec![thanks.join(" ")] } else { thanks.iter().map(|t| t.to_string()).collect() };
+    let foot = area.y + area.height.saturating_sub(4 + rows_of_thanks.len() as u16);
     line(f, foot, Line::from(Span::styled("Built on GOLGOTHA (1998) by Crack dot Com, given to the world in the public domain.", Style::default().fg(DIM))));
-    line(
-        f,
-        foot + 1,
-        Line::from(Span::styled("For Dave Taylor, Jonathan Clark, Carly Taylor and the whole team. Twenty-eight years on, it is finished.", Style::default().fg(DIM))),
-    );
-    line(f, foot + 2, Line::from(vec![Span::styled("ASCIIVERSE", Style::default().fg(AMBER)), Span::styled("  2026", Style::default().fg(DIM))]));
+    for (k, t) in rows_of_thanks.iter().enumerate() {
+        line(f, foot + 1 + k as u16, Line::from(Span::styled(t.clone(), Style::default().fg(DIM))));
+    }
+    let last = foot + 1 + rows_of_thanks.len() as u16;
+    line(f, last, Line::from(vec![Span::styled("ASCIIVERSE", Style::default().fg(AMBER)), Span::styled("  2026", Style::default().fg(DIM))]));
     rows
 }
 

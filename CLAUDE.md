@@ -736,7 +736,13 @@ if not already done.)
 **Not at launch (David, 2026-10-27):** Calvary is held back from the
 Asciiverse launch until at least the campaign's first act is built. As of
 2026-10-29 Act I's seven missions are built, but not yet played through by
-a person. Write the store page and README once Act 1 plays.
+a person. README.md, LICENSE (MIT, as the other Asciiverse titles), the
+store page and manifest (`hub/catalog/calvary.md`, `.toml`; year 1998, the
+original's, so neither OLD! nor NEW!) and the 100x30 preview
+(`asciiverse/calvary.cast`, recorded by `asciiverse/record-preview.sh`
+with hub's `tools/castrec.py`) were written 2026-10-29, at David's
+request. Smallest playable size: 100x30 (at 80 columns the battle HUD
+loses the ammunition counts).
 
 Act I is built (2026-10-29): missions 1 to 7, each with its own map,
 rules and briefing. None has been played through by a person yet; the
