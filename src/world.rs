@@ -89,10 +89,10 @@ const BUILDING_SIGHT: f32 = 4.0;
 /// wake whoever lies near them as they rise. Awake, they walk at this pace
 /// over anything at all and stamp on everything of every army, the Order's
 /// own excepted, that stands in reach.
-pub const NEPHILIM_HEALTH: f32 = 3000.0;
+pub const NEPHILIM_HEALTH: f32 = 1500.0;
 const NEPHILIM_WAKE: f32 = 7.0;
 const NEPHILIM_CHAIN: f32 = 9.0;
-const NEPHILIM_SPEED: f32 = 0.5;
+const NEPHILIM_SPEED: f32 = 0.4;
 const NEPHILIM_SIGHT: f32 = 24.0;
 const STOMP_REACH: f32 = 1.2;
 const STOMP_RADIUS: f32 = 1.5;
@@ -2693,7 +2693,7 @@ mod rules {
         assert!(!w.entities[giants[0]].asleep && !w.entities[giants[1]].asleep && w.entities[giants[2]].asleep);
         let deer = w.entities.iter().position(|e| e.kind == "reindeer").unwrap();
         let start = (w.entities[deer].x, w.entities[deer].y);
-        for _ in 0..(12 * 30) {
+        for _ in 0..(20 * 30) {
             w.step(1.0 / 30.0);
         }
         assert!(!w.entities[peon].alive, "stamped on");

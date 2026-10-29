@@ -561,6 +561,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bring Calloway's letters from the vault to our HQ. Nobody else may carry them home.",
     },
+    Mission {
+        act: 3,
+        number: 35,
+        title: "The Nephilim Battle",
+        map: include_str!("../maps/nephilim.cmap"),
+        briefing: &[
+            "Commander, Reid. Jotunheimen. The name means the home of the giants,",
+            "and that is not a figure of speech any more, sir. They are under the",
+            "ice of the lake, a dozen of them, and the Order is on the north shore",
+            "driving its tanks over them to wake them. Anything that drives near",
+            "one wakes it. The thaw is seven minutes away, the letters say, and",
+            "then the ice takes them back. Hold the south shore until it does.",
+        ],
+        objective: "Hold the south shore for seven minutes, until the ice breaks. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
