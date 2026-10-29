@@ -432,7 +432,9 @@ impl World {
         for o in &level.objects {
             let team = Team::from_player(o.player);
             let class = match o.kind.as_str() {
-                "" | "path_object" | "field_camera" | "sfx_obj" | "lightbulb" | "moneycrate" | "tunnel" | "tunnel_entrance" => continue,
+                // `convoy` is the original's unit-grouping object (its table row
+                // is "a dummy entry"), nothing to put on the field
+                "" | "path_object" | "field_camera" | "sfx_obj" | "lightbulb" | "moneycrate" | "tunnel" | "tunnel_entrance" | "convoy" => continue,
                 "moneyplane" if team.fights() => Class::Plane,
                 "moneyplane" => continue,
                 "mainbasepad" => Class::Hq,

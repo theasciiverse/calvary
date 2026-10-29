@@ -214,6 +214,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bridge the canal and bring four of the six trucks to the west post. Keep the HQ standing.",
     },
+    Mission {
+        act: 1,
+        number: 12,
+        title: "Cairo",
+        map: include_str!("../maps/cairo.cmap"),
+        briefing: &[
+            "Commander, Reid. Cairo, the old walled town on the terraces. We hold the",
+            "north-east corner and an airfield; the Europeans hold the south-east,",
+            "and between us it is street by street, the ring road or the long way",
+            "round by the west gate, where two of our launchers still stand. The",
+            "airbase builds helicopters now, sir: they fly the roads like the tanks,",
+            "only over the walls. Their HQ, and we have Cairo.",
+        ],
+        objective: "Destroy the European HQ in the south-east. Keep ours standing.",
+    },
 ];
 
 /// The mission's map, parsed.
