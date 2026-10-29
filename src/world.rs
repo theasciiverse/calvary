@@ -90,27 +90,41 @@ fn factory_for(kind: &str) -> Class {
 pub enum Team {
     Player,
     Enemy,
+    /// A second hostile army (player 5 in a `.cmap`; the original levels
+    /// use players 3 and 4 for scenery), at war with both the others.
+    Rival,
     Neutral,
     Scenery,
 }
+
+/// The sides the computer plays.
+pub const COMPUTER_SIDES: [Team; 2] = [Team::Enemy, Team::Rival];
 
 impl Team {
     pub fn from_player(p: u8) -> Team {
         match p {
             1 => Team::Player,
             2 => Team::Enemy,
+            5 => Team::Rival,
             0 => Team::Neutral,
             _ => Team::Scenery,
         }
     }
 
+    /// A side with an army: units, factories, money.
+    pub fn fights(self) -> bool {
+        matches!(self, Team::Player | Team::Enemy | Team::Rival)
+    }
+
+    /// Every army is at war with every other.
     pub fn hostile(self, other: Team) -> bool {
-        matches!((self, other), (Team::Player, Team::Enemy) | (Team::Enemy, Team::Player))
+        self != other && self.fights() && other.fights()
     }
 
     fn index(self) -> usize {
         match self {
             Team::Player => 0,
+            Team::Rival => 2,
             _ => 1,
         }
     }
@@ -259,6 +273,8 @@ pub struct PathNode {
     pub y: f32,
     pub links_a: Vec<usize>,
     pub links_e: Vec<usize>,
+    /// The rival army's links.
+    pub links_r: Vec<usize>,
     /// A gap a bridger can span (the original's `bridgeable_spot`).
     pub bridge_spot: bool,
     /// The bridge laid here (an entity), while it stands.
@@ -269,7 +285,11 @@ pub struct PathNode {
 
 impl PathNode {
     pub fn links(&self, team: Team) -> &[usize] {
-        if team == Team::Enemy { &self.links_e } else { &self.links_a }
+        match team {
+            Team::Enemy => &self.links_e,
+            Team::Rival => &self.links_r,
+            _ => &self.links_a,
+        }
     }
 }
 
@@ -327,7 +347,7 @@ pub struct World {
     pub blasts: Vec<Blast>,
     /// Sounds for the audio layer, drained by the main loop.
     pub sounds: Vec<Sfx>,
-    pub money: [i32; 2],
+    pub money: [i32; 3],
     pub lives: u32,
     pub player_tank: Option<usize>,
     pub messages: VecDeque<(f32, String)>,
@@ -355,13 +375,13 @@ pub struct World {
     /// dealt by the player's supertank).
     burns: Vec<(usize, f32, u32, bool)>,
     burn_clock: f32,
-    queues: [VecDeque<&'static str>; 2],
-    deploy_timer: [f32; 2],
+    queues: [VecDeque<&'static str>; 3],
+    deploy_timer: [f32; 3],
     bank_timer: f32,
-    ai_timer: f32,
+    ai_timer: [f32; 3],
     /// Formation being built (index into FORMATIONS) and the next unit in it.
-    ai_form: Option<usize>,
-    ai_place: usize,
+    ai_form: [Option<usize>; 3],
+    ai_place: [usize; 3],
     time: f32,
     rng: u64,
 }
@@ -373,20 +393,21 @@ impl World {
         for (i, o) in level.objects.iter().enumerate() {
             if o.kind == "path_object" {
                 node_of.insert(i, nodes.len());
-                nodes.push(PathNode { x: o.x, y: o.y, links_a: Vec::new(), links_e: Vec::new(), bridge_spot: o.bridge, bridge: None, dir: 0.0 });
+                nodes.push(PathNode { x: o.x, y: o.y, links_a: Vec::new(), links_e: Vec::new(), links_r: Vec::new(), bridge_spot: o.bridge, bridge: None, dir: 0.0 });
             }
         }
         for (i, o) in level.objects.iter().enumerate() {
             if let Some(&n) = node_of.get(&i) {
                 nodes[n].links_a = o.links_a.iter().filter_map(|l| node_of.get(l).copied()).collect();
                 nodes[n].links_e = o.links_e.iter().filter_map(|l| node_of.get(l).copied()).collect();
+                nodes[n].links_r = o.links_r.iter().filter_map(|l| node_of.get(l).copied()).collect();
             }
         }
         // the route's direction through each node: toward its next node, or
         // away from the node that leads to it
         for n in 0..nodes.len() {
-            let from = (0..nodes.len()).find(|&m| nodes[m].links_a.contains(&n) || nodes[m].links_e.contains(&n));
-            let to = nodes[n].links_a.first().or(nodes[n].links_e.first()).copied();
+            let from = (0..nodes.len()).find(|&m| nodes[m].links_a.contains(&n) || nodes[m].links_e.contains(&n) || nodes[m].links_r.contains(&n));
+            let to = nodes[n].links_a.first().or(nodes[n].links_e.first()).or(nodes[n].links_r.first()).copied();
             let (ax, ay, bx, by) = match (from, to) {
                 (_, Some(t)) => (nodes[n].x, nodes[n].y, nodes[t].x, nodes[t].y),
                 (Some(f), None) => (nodes[f].x, nodes[f].y, nodes[n].x, nodes[n].y),
@@ -402,7 +423,7 @@ impl World {
             let team = Team::from_player(o.player);
             let class = match o.kind.as_str() {
                 "" | "path_object" | "field_camera" | "sfx_obj" | "lightbulb" | "moneycrate" | "tunnel" | "tunnel_entrance" => continue,
-                "moneyplane" if matches!(team, Team::Player | Team::Enemy) => Class::Plane,
+                "moneyplane" if team.fights() => Class::Plane,
                 "moneyplane" => continue,
                 "mainbasepad" => Class::Hq,
                 "garage" => Class::Garage,
@@ -418,7 +439,7 @@ impl World {
                     Class::PlayerTank
                 }
                 "stank" => Class::EnemyTank,
-                k if balance::unit(k).is_some() && matches!(team, Team::Player | Team::Enemy) => Class::Vehicle,
+                k if balance::unit(k).is_some() && team.fights() => Class::Vehicle,
                 _ => Class::Prop,
             };
             let max_hp = if o.health > 0 { o.health as f32 } else { balance::unit(&o.kind).map_or(100.0, |s| s.health as f32) };
@@ -451,7 +472,7 @@ impl World {
             bolts: Vec::new(),
             blasts: Vec::new(),
             sounds: Vec::new(),
-            money: [START_MONEY; 2],
+            money: level.money.unwrap_or([START_MONEY; 3]),
             lives: START_LIVES,
             player_tank,
             messages: VecDeque::new(),
@@ -467,12 +488,12 @@ impl World {
             points: 0,
             burns: Vec::new(),
             burn_clock: 0.0,
-            queues: [VecDeque::new(), VecDeque::new()],
-            deploy_timer: [0.0; 2],
+            queues: [VecDeque::new(), VecDeque::new(), VecDeque::new()],
+            deploy_timer: [0.0; 3],
             bank_timer: BANK_INTERVAL,
-            ai_timer: 5.0,
-            ai_form: None,
-            ai_place: 0,
+            ai_timer: [5.0; 3],
+            ai_form: [None; 3],
+            ai_place: [0; 3],
             time: 0.0,
             rng: 0x2545_F491_4F6C_DD1D,
         };
@@ -674,7 +695,13 @@ impl World {
         }
         self.time += dt;
         self.economy(dt);
-        self.computer_player(dt);
+        for side in COMPUTER_SIDES {
+            // a side with no factory and no HQ plays no part (and draws no
+            // random numbers, so maps without it play as they always did)
+            if side == Team::Enemy || [Class::Garage, Class::Airbase, Class::Hq].iter().any(|&c| self.find(c, side).is_some()) {
+                self.computer_player(side, dt);
+            }
+        }
         self.deploy(dt);
         for i in 0..self.entities.len() {
             if self.entities[i].alive {
@@ -732,7 +759,8 @@ impl World {
                 })
             };
             let other = if holder == Team::Player { Team::Enemy } else { Team::Player };
-            let (ours, theirs) = (on_site(holder), on_site(other));
+            let ours = on_site(holder);
+            let theirs = [Team::Player, Team::Enemy, Team::Rival].into_iter().any(|t| t.hostile(holder) && on_site(t));
             let side = match (ours, theirs) {
                 (true, false) => Some(holder),
                 (false, true) => Some(other),
@@ -798,7 +826,7 @@ impl World {
         if self.bank_timer <= 0.0 {
             self.bank_timer += BANK_INTERVAL;
             for e in &mut self.entities {
-                if e.alive && e.class == Class::Bank && matches!(e.team, Team::Player | Team::Enemy) {
+                if e.alive && e.class == Class::Bank && e.team.fights() {
                     e.crates = (e.crates + 1).min(CRATE_CAPACITY);
                 }
             }
@@ -858,63 +886,64 @@ impl World {
     /// garage until the formation is complete, release them together as a
     /// convoy, then wait 100 to 600 ticks before the next. A lost supertank is
     /// rebuilt at the HQ when the money allows.
-    fn computer_player(&mut self, dt: f32) {
-        self.ai_timer -= dt;
-        if self.ai_timer > 0.0 {
+    fn computer_player(&mut self, side: Team, dt: f32) {
+        let s = side.index();
+        self.ai_timer[s] -= dt;
+        if self.ai_timer[s] > 0.0 {
             return;
         }
         let tick = 1.0 / ORIGINAL_HZ;
-        if self.find(Class::EnemyTank, Team::Enemy).is_none() && self.resurrect_enemy_tank() {
-            self.ai_timer = 20.0 * tick;
+        if self.find(Class::EnemyTank, side).is_none() && self.resurrect_enemy_tank(side) {
+            self.ai_timer[s] = 20.0 * tick;
             return;
         }
-        let Some(form) = self.ai_form else {
+        let Some(form) = self.ai_form[s] else {
             let f = (self.rand() * FORMATIONS.len() as f32) as usize % FORMATIONS.len();
-            log::info!("computer: formation {}", FORMATIONS[f].0);
-            self.ai_form = Some(f);
-            self.ai_place = 0;
-            self.ai_timer = tick;
+            log::info!("computer ({side:?}): formation {}", FORMATIONS[f].0);
+            self.ai_form[s] = Some(f);
+            self.ai_place[s] = 0;
+            self.ai_timer[s] = tick;
             return;
         };
         let units: Vec<&'static str> = FORMATIONS[form].1.chars().filter_map(formation_unit).collect();
-        if let Some(&kind) = units.get(self.ai_place) {
-            if !self.can_build(kind) || self.find(factory_for(kind), Team::Enemy).is_none() {
+        if let Some(&kind) = units.get(self.ai_place[s]) {
+            if !self.can_build(kind) || self.find(factory_for(kind), side).is_none() {
                 // not built on this map, or its factory is gone: skip
                 // rather than wait forever
-                self.ai_place += 1;
-            } else if self.order(Team::Enemy, kind) {
-                self.ai_place += 1;
-                self.ai_timer = 15.0 * tick;
+                self.ai_place[s] += 1;
+            } else if self.order(side, kind) {
+                self.ai_place[s] += 1;
+                self.ai_timer[s] = 15.0 * tick;
             } else {
-                self.ai_timer = 20.0 * tick;
+                self.ai_timer[s] = 20.0 * tick;
             }
             return;
         }
         // formation complete once its units have left the factory queue
-        if self.queues[Team::Enemy.index()].is_empty() {
+        if self.queues[s].is_empty() {
             let mut released = 0;
             for e in &mut self.entities {
-                if e.held && e.team == Team::Enemy {
+                if e.held && e.team == side {
                     e.held = false;
                     released += 1;
                 }
             }
-            log::info!("computer: convoy of {released} released ({})", FORMATIONS[form].0);
-            self.ai_form = None;
-            self.ai_timer = (100.0 + self.rand() * 500.0) * tick;
+            log::info!("computer ({side:?}): convoy of {released} released ({})", FORMATIONS[form].0);
+            self.ai_form[s] = None;
+            self.ai_timer[s] = (100.0 + self.rand() * 500.0) * tick;
         } else {
-            self.ai_timer = 5.0 * tick;
+            self.ai_timer[s] = 5.0 * tick;
         }
     }
 
-    fn resurrect_enemy_tank(&mut self) -> bool {
+    fn resurrect_enemy_tank(&mut self, side: Team) -> bool {
         let cost = balance::unit("stank").map_or(10000, |s| s.cost);
-        let Some(hq) = self.find(Class::Hq, Team::Enemy) else { return false };
-        let Some(tank) = self.entities.iter().position(|e| e.class == Class::EnemyTank) else { return false };
-        if self.money[Team::Enemy.index()] < cost {
+        let Some(hq) = self.find(Class::Hq, side) else { return false };
+        let Some(tank) = self.entities.iter().position(|e| e.class == Class::EnemyTank && e.team == side) else { return false };
+        if self.money[side.index()] < cost {
             return false;
         }
-        self.money[Team::Enemy.index()] -= cost;
+        self.money[side.index()] -= cost;
         let (x, y) = (self.entities[hq].x + 2.0, self.entities[hq].y);
         let e = &mut self.entities[tank];
         e.alive = true;
@@ -928,7 +957,7 @@ impl World {
     }
 
     fn deploy(&mut self, dt: f32) {
-        for team in [Team::Player, Team::Enemy] {
+        for team in [Team::Player, Team::Enemy, Team::Rival] {
             let t = team.index();
             self.deploy_timer[t] = (self.deploy_timer[t] - dt).max(0.0);
             if self.deploy_timer[t] > 0.0 || self.queues[t].is_empty() {
@@ -969,7 +998,7 @@ impl World {
                 home: (gx, gy),
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
-            if team == Team::Enemy {
+            if team != Team::Player {
                 let last = self.entities.len() - 1;
                 self.entities[last].held = true;
             }
@@ -1369,7 +1398,7 @@ impl World {
         let was_alive = self.entities[j].alive && self.entities[j].hp > 0.0;
         self.hurt_inner(j, amount);
         let e = &self.entities[j];
-        if by_stank && was_alive && !e.alive && e.team == Team::Enemy {
+        if by_stank && was_alive && !e.alive && e.team.hostile(Team::Player) {
             let before = self.upgrade_level();
             let score = match e.class {
                 Class::EnemyTank => balance::unit("stank").map_or(0, |s| s.cost),
@@ -1433,7 +1462,7 @@ impl World {
             (Class::Hq, Team::Enemy) => self.say("Enemy base destroyed!"),
             (Class::Hq, Team::Player) => self.say("Our base has been destroyed."),
             (Class::EnemyTank, _) => self.say("Enemy supertank destroyed!"),
-            (_, Team::Enemy) if class != Class::Vehicle => self.say(format!("Destroyed enemy {}", kind.replace('_', " "))),
+            (_, Team::Enemy | Team::Rival) if class != Class::Vehicle => self.say(format!("Destroyed enemy {}", kind.replace('_', " "))),
             (_, Team::Player) if class != Class::Vehicle => self.say(format!("Lost our {}", kind.replace('_', " "))),
             _ => {}
         }
@@ -1468,7 +1497,7 @@ impl World {
         self.entities
             .iter()
             .enumerate()
-            .filter(|(_, e)| e.is_target() && e.team == Team::Enemy)
+            .filter(|(_, e)| e.is_target() && e.team.hostile(Team::Player))
             .map(|(i, e)| (i, (e.x - x).hypot(e.y - y) - e.radius()))
             .filter(|&(_, d)| d <= reach)
             .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -1535,7 +1564,7 @@ mod tests {
     #[test]
     fn ordered_units_drive_to_the_enemy() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = f32::MAX;
+        w.ai_timer = [f32::MAX; 3];
         assert!(w.order(Team::Player, "peon_tank"));
         assert_eq!(w.money[0], START_MONEY - 300);
         let start = {
@@ -1574,7 +1603,7 @@ mod rules {
     #[test]
     fn move_then_hold_and_resume() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = f32::MAX;
+        w.ai_timer = [f32::MAX; 3];
         w.order(Team::Player, "peon_tank");
         w.step(1.0 / 30.0);
         let u = w.entities.iter().rposition(|e| e.kind == "peon_tank" && e.team == Team::Player).unwrap();
@@ -1599,7 +1628,7 @@ mod rules {
     #[test]
     fn attack_order_chases_and_hits_its_target() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = f32::MAX;
+        w.ai_timer = [f32::MAX; 3];
         let foe = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
         // a peon tank placed 8 cells from the tower, out of its 3-cell gun range
         w.order(Team::Player, "peon_tank");
@@ -1618,7 +1647,7 @@ mod rules {
     #[test]
     fn orders_for_a_lost_factory_are_refunded() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = f32::MAX;
+        w.ai_timer = [f32::MAX; 3];
         assert!(w.order(Team::Player, "peon_tank"));
         assert!(w.order(Team::Player, "peon_tank"));
         w.step(1.0 / 30.0); // first one deploys
@@ -1696,6 +1725,25 @@ mod rules {
     }
 
     #[test]
+    fn the_rival_army_fights_both_sides() {
+        assert!(Team::Rival.hostile(Team::Enemy) && Team::Rival.hostile(Team::Player) && Team::Enemy.hostile(Team::Rival));
+        assert!(!Team::Rival.hostile(Team::Rival) && !Team::Rival.hostile(Team::Neutral));
+        assert_eq!(Team::from_player(5), Team::Rival);
+        assert_eq!(Team::from_player(3), Team::Scenery, "the original levels' scenery stays scenery");
+        let mut w = river_map();
+        for (team, x) in [(Team::Enemy, 4.0), (Team::Rival, 7.0)] {
+            let mut e = Entity::shown("peon_tank", Class::Vehicle, team, 50.0);
+            (e.x, e.y, e.order) = (x, 8.0, Order::Hold);
+            w.entities.push(e);
+        }
+        for _ in 0..30 * 30 {
+            w.step(1.0 / 30.0);
+        }
+        let alive = |t: Team| w.entities.iter().any(|e| e.alive && e.team == t && e.kind == "peon_tank");
+        assert!(!(alive(Team::Enemy) && alive(Team::Rival)), "the two armies fought it out");
+    }
+
+    #[test]
     fn engineers_take_pads_and_pads_raise_turrets() {
         let mut w = river_map_with("win = ['own takeover_pad 1']\n");
         let mut pad = Entity::shown("takeover_pad", Class::Pad, Team::Neutral, 100.0);
@@ -1768,7 +1816,7 @@ mod rules {
     #[test]
     fn helicopters_fly_the_air_route() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = f32::MAX;
+        w.ai_timer = [f32::MAX; 3];
         assert!(w.order(Team::Player, "helicopter"));
         w.step(1.0 / 30.0);
         let h = w.entities.iter().rposition(|e| e.kind == "helicopter" && e.team == Team::Player).unwrap();
@@ -1784,7 +1832,7 @@ mod rules {
     #[test]
     fn money_planes_fly_crates_home() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = f32::MAX;
+        w.ai_timer = [f32::MAX; 3];
         let planes = w.entities.iter().filter(|e| e.class == Class::Plane && e.team == Team::Player).count();
         assert!(planes > 0, "the level places money planes at the banks");
         for _ in 0..30 * 49 {
@@ -1800,7 +1848,7 @@ mod rules {
     #[test]
     fn acid_burns_over_forty_ticks() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = f32::MAX;
+        w.ai_timer = [f32::MAX; 3];
         let tower = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
         let (x, y, hp) = (w.entities[tower].x, w.entities[tower].y, w.entities[tower].hp);
         w.damage_by("acid", x, y, Some(tower), Team::Player, true);

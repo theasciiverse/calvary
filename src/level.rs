@@ -66,6 +66,9 @@ pub struct Level {
     /// What the factories may build (`.cmap` only; the original kept a
     /// `can_build` list on each garage). None: everything.
     pub build: Option<Vec<String>>,
+    /// Starting money for players 1, 2 and 5 (`.cmap` only; the original's
+    /// `start.scm` gives everyone 10000). None: that.
+    pub money: Option<[i32; 3]>,
 }
 
 /// One object from the level: the base fields every Golgotha object saves.
@@ -85,6 +88,8 @@ pub struct ObjectRec {
     /// For `path_object`s: next nodes for team A and for team E.
     pub links_a: Vec<usize>,
     pub links_e: Vec<usize>,
+    /// For `path_object`s: next nodes for the rival army (`.cmap` only).
+    pub links_r: Vec<usize>,
     /// For `path_object`s: a gap a bridger can span (the original's
     /// `bridgeable_spot`, a Lisp variable; `.cmap` only).
     pub bridge: bool,
@@ -173,7 +178,7 @@ impl<'a> Reader<'a> {
 /// need decoding. Path objects follow with their own versioned block of links.
 fn read_object(data: &[u8], offset: Option<usize>, types: &[String]) -> Result<ObjectRec, String> {
     let Some(offset) = offset else {
-        return Ok(ObjectRec { kind: String::new(), x: 0.0, y: 0.0, z: 0.0, theta: 0.0, health: 0, player: 4, links_a: vec![], links_e: vec![], bridge: false });
+        return Ok(ObjectRec { kind: String::new(), x: 0.0, y: 0.0, z: 0.0, theta: 0.0, health: 0, player: 4, links_a: vec![], links_e: vec![], links_r: vec![], bridge: false });
     };
     let mut r = Reader::at(data, offset);
     let type_id = r.u16()? as usize;
@@ -213,7 +218,7 @@ fn read_object(data: &[u8], offset: Option<usize>, types: &[String]) -> Result<O
             }
         }
     }
-    Ok(ObjectRec { kind, x, y, z, theta, health, player, links_a, links_e, bridge: false })
+    Ok(ObjectRec { kind, x, y, z, theta, health, player, links_a, links_e, links_r: vec![], bridge: false })
 }
 
 impl Level {
@@ -291,7 +296,7 @@ impl Level {
             Err(_) => Vec::new(),
         };
 
-        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects, rules: Default::default(), build: None })
+        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects, rules: Default::default(), build: None, money: None })
     }
 
     pub fn tile(&self, cx: usize, cy: usize) -> &TileInfo {

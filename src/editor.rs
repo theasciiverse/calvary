@@ -172,6 +172,7 @@ impl Editor {
             objects: Vec::new(),
             rules: Default::default(),
             build: None,
+            money: None,
         }
     }
 
@@ -305,6 +306,7 @@ impl Editor {
                     player,
                     links_a: vec![],
                     links_e: vec![],
+                    links_r: vec![],
                     bridge: false,
                 });
                 self.message = format!("placed {kind} ({})", OWNERS.iter().find(|o| o.0 == player).map_or("scenery", |o| o.1));
@@ -329,6 +331,7 @@ impl Editor {
                             player: 1,
                             links_a: vec![],
                             links_e: vec![],
+                            links_r: vec![],
                             bridge: false,
                         });
                         self.level.objects.len() - 1
@@ -442,7 +445,7 @@ impl Editor {
 fn remove_object(level: &mut Level, i: usize) {
     level.objects.remove(i);
     for o in &mut level.objects {
-        for links in [&mut o.links_a, &mut o.links_e] {
+        for links in [&mut o.links_a, &mut o.links_e, &mut o.links_r] {
             links.retain(|&l| l != i);
             for l in links.iter_mut() {
                 if *l > i {
@@ -622,7 +625,7 @@ mod tests {
     fn erase_renumbers_path_links() {
         let mut level = Editor::blank(10, 10, "grassfull");
         for x in 0..3 {
-            level.objects.push(ObjectRec { kind: "path_object".into(), x: x as f32, y: 1.0, z: 0.0, theta: 0.0, health: 100, player: 1, links_a: vec![], links_e: vec![], bridge: false });
+            level.objects.push(ObjectRec { kind: "path_object".into(), x: x as f32, y: 1.0, z: 0.0, theta: 0.0, health: 100, player: 1, links_a: vec![], links_e: vec![], links_r: vec![], bridge: false });
         }
         level.objects[0].links_a = vec![1, 2];
         level.objects[2].links_e = vec![1, 0];

@@ -139,12 +139,15 @@ pub struct Palette {
 
 pub const PLAYER: Palette = Palette { body: (176, 138, 58), front: (236, 196, 108), turret: (226, 190, 104), rim: (120, 92, 40), barrel: (245, 225, 170) };
 pub const ENEMY: Palette = Palette { body: (150, 50, 42), front: (214, 96, 76), turret: (196, 72, 58), rim: (90, 28, 22), barrel: (240, 176, 160) };
+/// The second hostile army: steel blue.
+pub const RIVAL: Palette = Palette { body: (52, 84, 140), front: (104, 146, 214), turret: (76, 112, 180), rim: (28, 44, 80), barrel: (176, 204, 240) };
 pub const NEUTRAL: Palette = Palette { body: (150, 150, 144), front: (196, 196, 188), turret: (178, 178, 170), rim: (90, 90, 86), barrel: (220, 220, 212) };
 
 pub fn palette(team: Team) -> Palette {
     match team {
         Team::Player => PLAYER,
         Team::Enemy => ENEMY,
+        Team::Rival => RIVAL,
         _ => NEUTRAL,
     }
 }

@@ -11,6 +11,7 @@
 //! win = ["no_units 2"]          # optional, see `rules.rs` (default: destroy
 //! lose = ["no mainbasepad 1"]   # their HQ, lose ours)
 //! build = ["peon_tank", "bridger"]   # optional: what the factories offer
+//! money = [10000, 5000, 5000]   # optional: starting money, players 1, 2, 5
 //!
 //! # one printable character per tile type used on the map
 //! legend = '''
@@ -27,7 +28,9 @@
 //! 0505060a...
 //! '''
 //! # one object per line, in order; path links name other lines by index:
-//! # kind player x y theta health [A:i,j] [E:k] [bridge]
+//! # kind player x y theta health [A:i,j] [E:k] [R:l] [bridge]
+//! # (A, E and R: the links players 1, 2 and 5 follow; player 5 is a second
+//! # hostile army, at war with both the others)
 //! # (`bridge` marks a path node as a gap a bridger can span)
 //! objects = '''
 //! mainbasepad 1 7.5 107.5 0 4000
@@ -57,6 +60,8 @@ struct File {
     lose: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     build: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    money: Option<[i32; 3]>,
     legend: String,
     tiles: String,
     heights: String,
@@ -111,6 +116,9 @@ pub fn export(level: &Level, name: &str, music: Option<&str>, name_of: impl Fn(&
         if !o.links_e.is_empty() {
             write!(objects, " E:{}", list(&o.links_e)).unwrap();
         }
+        if !o.links_r.is_empty() {
+            write!(objects, " R:{}", list(&o.links_r)).unwrap();
+        }
         if o.bridge {
             objects.push_str(" bridge");
         }
@@ -121,7 +129,7 @@ pub fn export(level: &Level, name: &str, music: Option<&str>, name_of: impl Fn(&
     } else {
         (level.rules.win.iter().map(|c| c.text()).collect(), level.rules.lose.iter().map(|c| c.text()).collect())
     };
-    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, build: level.build.clone(), legend, tiles, heights, objects };
+    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, build: level.build.clone(), money: level.money, legend, tiles, heights, objects };
     toml::to_string(&file).map_err(|e| e.to_string())
 }
 
@@ -181,7 +189,7 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
         let player: u8 = field("player")?.parse().map_err(|_| format!("objects line {n}: bad player"))?;
         let mut num = |what: &str| -> Result<f32, String> { field(what)?.parse().map_err(|_| format!("objects line {n}: bad {what}")) };
         let (x, y, theta, health) = (num("x")?, num("y")?, num("theta")?, num("health")?);
-        let mut o = ObjectRec { kind: if kind == "-" { String::new() } else { kind.to_string() }, x, y, z: 0.0, theta, health: health as i16, player, links_a: vec![], links_e: vec![], bridge: false };
+        let mut o = ObjectRec { kind: if kind == "-" { String::new() } else { kind.to_string() }, x, y, z: 0.0, theta, health: health as i16, player, links_a: vec![], links_e: vec![], links_r: vec![], bridge: false };
         for extra in p {
             if extra == "bridge" {
                 o.bridge = true;
@@ -192,13 +200,14 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
             match team {
                 "A" => o.links_a = ids,
                 "E" => o.links_e = ids,
-                _ => return Err(format!("objects line {n}: link team must be A or E")),
+                "R" => o.links_r = ids,
+                _ => return Err(format!("objects line {n}: link team must be A, E or R")),
             }
         }
         objects.push(o);
     }
     let count = objects.len();
-    if let Some(bad) = objects.iter().flat_map(|o| o.links_a.iter().chain(&o.links_e)).find(|&&i| i >= count) {
+    if let Some(bad) = objects.iter().flat_map(|o| o.links_a.iter().chain(&o.links_e).chain(&o.links_r)).find(|&&i| i >= count) {
         return Err(format!("objects: link to line {bad}, but there are {count} lines"));
     }
 
@@ -209,7 +218,7 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
     if let Some(bad) = f.build.iter().flatten().find(|k| crate::balance::unit(k).is_none()) {
         return Err(format!("build: {bad:?} is not a unit"));
     }
-    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules, build: f.build };
+    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules, build: f.build, money: f.money };
     Ok((level, f.name, f.music))
 }
 

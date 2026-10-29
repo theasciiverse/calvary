@@ -266,6 +266,7 @@ fn team_color(team: Team) -> Color {
     match team {
         Team::Player => AMBER,
         Team::Enemy => Color::Rgb(235, 70, 55),
+        Team::Rival => Color::Rgb(110, 160, 245),
         _ => Color::Rgb(205, 205, 200),
     }
 }
@@ -334,6 +335,26 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
         (c >= 0.0 && r >= 0.0 && (c as u16) < area.width && (r as u16) < area.height).then(|| (area.x + c as u16, area.y + r as u16))
     };
     let w = &g.world;
+    // the enemies' own roads, where ours do not run, in their colour
+    for (i, n) in w.nodes.iter().enumerate() {
+        for (links, team) in [(&n.links_e, Team::Enemy), (&n.links_r, Team::Rival)] {
+            for &l in links {
+                let m = &w.nodes[l];
+                if n.links_a.contains(&l) || m.links_a.contains(&i) {
+                    continue;
+                }
+                let steps = ((m.x - n.x).hypot(m.y - n.y) / (s * 0.8)).ceil().max(1.0) as usize;
+                for st in 0..=steps {
+                    let t = st as f32 / steps as f32;
+                    if let Some(pos) = to_cell(n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t) {
+                        if let Some(cell) = buf.cell_mut(pos) {
+                            cell.set_char('·').set_fg(team_color(team));
+                        }
+                    }
+                }
+            }
+        }
+    }
     // ground paths, as the original radar drew them; the player's chosen
     // branches bright, the others dim
     for (i, n) in w.nodes.iter().enumerate() {

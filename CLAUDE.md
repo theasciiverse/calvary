@@ -233,6 +233,15 @@ as a cab with a canvas load; they stop where their route ends, and like
 any unit they can be selected, held (X) and sent on (R). (The original's
 own `objs/convoy.cpp` only groups units to move together; there is no
 escort objective in it.)
+A second hostile army (`Team::Rival`, steel blue) is player 5 in a
+`.cmap` (the original levels use players 3 and 4 for scenery, so those
+stay scenery); it follows its own path links, `R:` beside `A:` and `E:`
+(the original stores links per team as well), and every army is at war
+with every other, so the two computer sides fight each other too. Each
+computer side runs its own copy of the ported `ai_joe`; one with no
+factory or HQ on the map does nothing. `money = [10000, 5000, 5000]`
+sets the starting money of players 1, 2 and 5 (default 10000 each, the
+original's `start.scm`).
 A `.cmap`'s music must be one of the bundled tracks, or the map does not
 load (a misspelt track used to play nothing).
 `build = ["peon_tank", "bridger"]` limits what the factories offer on that
@@ -393,8 +402,8 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner and missions 1 to 6, Al Basrah, Shatt al-Arab, Ur,
-   Nakhayb, Babylon and the Euphrates line. Three missions reuse the
+   the campaign runner and all of Act I, missions 1 to 7: Al Basrah,
+   Shatt al-Arab, Ur, Nakhayb, Babylon, the Euphrates line and Nineveh. Three missions reuse the
    existing maps; the rest are new `.cmap` maps.
 9. **Follow mode (done) and first person (next)** (see Rendering).
 
@@ -649,6 +658,20 @@ road. Builds: peon tanks, electric cars, rocket tanks, trikes. Win:
 an unescorted convoy loses three trucks before 2:00; held at home until
 the road is cleared (`SUPERTANK=1`), it gets through at about 4 minutes.
 
+Mission 7, **Nineveh** (`maps/nineveh.cmap`, 120x100, from
+`tools/gen_nineveh.py`, seed 612): the Tigris down the west side, the
+broken circuit of Nineveh's walls, and another giants' site on the mound
+inside them, with Fisher's column camped west of it. The Americans
+(player 5) hold the base in the south we came from, the Europeans
+(player 2) one in the north-east; their road between their bases runs
+through the site, and each sends some convoys on to our camp (the AI
+takes junction branches in turn), so they meet and fight each other at
+the site. An American company starts at the south gate, a European
+patrol north of the site. Both armies start with 5000. Builds: peon
+tanks, electric cars, rocket tanks, trikes, engineers. Win: `hold 1 60
+48 5 120`; lose: our HQ. Without the supertank the probe loses the HQ
+before 3 minutes; with it, the site is held and won at about 5.
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -711,14 +734,14 @@ if not already done.)
 ## Status
 
 **Not at launch (David, 2026-10-27):** Calvary is held back from the
-Asciiverse launch until at least the campaign's first act is built. Today it
-has one complete battle (`test`, the Greek coast) and the first campaign
-mission, so its store page would still have to sell a story the player can
-barely start. Write the store page and README once Act 1 plays.
+Asciiverse launch until at least the campaign's first act is built. As of
+2026-10-29 Act I's seven missions are built, but not yet played through by
+a person. Write the store page and README once Act 1 plays.
 
-Act I, what is left (2026-10-29): mission 7, Nineveh, which needs a
-second hostile army (`Team` has one enemy today). Missions 1 to 6 are
-built but not yet played through by a person.
+Act I is built (2026-10-29): missions 1 to 7, each with its own map,
+rules and briefing. None has been played through by a person yet; the
+balance comes from the mission probe only. Once Act I has been played,
+the store page and README can be written.
 
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,

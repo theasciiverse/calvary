@@ -272,7 +272,7 @@ impl Game {
         }
         let (tx, ty) = (self.tank.x, self.tank.y);
         let w = &self.world;
-        let valid = |i: usize| w.entities[i].is_target() && w.entities[i].team == Team::Enemy && (w.entities[i].x - tx).hypot(w.entities[i].y - ty) <= 14.0;
+        let valid = |i: usize| w.entities[i].is_target() && w.entities[i].team.hostile(Team::Player) && (w.entities[i].x - tx).hypot(w.entities[i].y - ty) <= 14.0;
         // always the nearest: a tank closing in matters more than a building
         self.lock_on = (0..w.entities.len()).filter(|&i| valid(i)).min_by(|&a, &b| {
             let d = |i: usize| (w.entities[i].x - tx).hypot(w.entities[i].y - ty);

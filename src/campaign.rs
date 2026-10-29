@@ -136,6 +136,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bring four of the six supply trucks to the forward post. Keep the HQ standing.",
     },
+    Mission {
+        act: 0,
+        number: 7,
+        title: "Nineveh",
+        map: include_str!("../maps/nineveh.cmap"),
+        briefing: &[
+            "Sir. The order came in an hour ago: raze the site at Nineveh, and",
+            "burn the bones. You said no on an open channel. The company at the",
+            "south gate was ours this morning; it is not ours now. Blue on the map",
+            "is American, red is European, and they will fight each other as soon",
+            "as us. Hold the site until the column is ready to turn west. Two",
+            "minutes with nothing of theirs on it, sir. Then we are deserters.",
+        ],
+        objective: "Hold the site for two minutes against both armies. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -471,7 +486,7 @@ mod tests {
                 w.command(&trucks, crate::world::Command::Resume);
             }
             if supertank && s >= 120 && s % 60 == 0 {
-                for e in w.entities.iter_mut().filter(|e| e.team == Team::Enemy && matches!(e.class, Class::Tower | Class::Vehicle)) {
+                for e in w.entities.iter_mut().filter(|e| e.team.hostile(Team::Player) && matches!(e.class, Class::Tower | Class::Vehicle)) {
                     e.alive = false;
                 }
                 if let (Some(t), Some(site)) = (w.player_tank, w.sites().first().copied()) {
@@ -482,8 +497,8 @@ mod tests {
                 w.step(1.0 / 30.0);
             }
             if s % 60 == 59 {
-                let units = |t: Team| w.entities.iter().filter(|e| e.alive && e.class == Class::Vehicle && e.team == t).count();
-                let banks = |t: Team| w.entities.iter().filter(|e| e.alive && e.class == Class::Bank && e.team == t).count();
+                let units = |t: Team| w.entities.iter().filter(|e| e.alive && e.class == Class::Vehicle && (e.team == t || t == Team::Enemy && e.team.hostile(Team::Player))).count();
+                let banks = |t: Team| w.entities.iter().filter(|e| e.alive && e.class == Class::Bank && (e.team == t || t == Team::Enemy && e.team.hostile(Team::Player))).count();
                 let gaps = (0..w.nodes.len()).filter(|&n| w.gap(n)).count();
                 let towers = w.entities.iter().filter(|e| e.alive && e.class == Class::Tower).count();
                 let held: Vec<String> = w.sites().iter().map(|s| format!("{:.0}/{:.0}", s.5, s.4)).collect();
