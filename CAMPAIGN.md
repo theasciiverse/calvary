@@ -16,7 +16,8 @@ Al Basrah, mission 2, Shatt al-Arab, with the bridger, mission 3, Ur,
 with holding a site, mission 4, Nakhayb, with takeover pads, and
 mission 5, Babylon, with the first giant bones, mission 6, the
 Euphrates line, a convoy, and mission 7, Nineveh, against two armies:
-all of Act I (2026-10-29).
+all of Act I; and all of Act II, missions 8 to 14, with holding out,
+the Watchers' Order and the first aircraft (2026-10-29).
 Three more missions reuse existing maps (marked **existing map**).
 
 ## The story
@@ -195,7 +196,7 @@ globe of the original's opening, and the stars.*
 
 - Three missions reuse the existing maps (12 Cairo, 15 Piraeus,
   23 Zurich); 37 need new maps, in the `.cmap` format with the map editor
-  (both built). Act I, missions 1 to 7, is built.
+  (both built). Acts I and II, missions 1 to 14, are built.
 - The bridger (missions 2, 11, 31) is built: our maps mark bridgeable path
   nodes in the `.cmap` (`bridge`), so it needs no Lisp decoding; the
   original's own levels still carry theirs in undecoded Lisp variables.

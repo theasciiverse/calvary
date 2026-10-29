@@ -8,12 +8,13 @@ earn upgrades for your next supertank; banks fill crates of money that
 planes fly home.
 
 2048. An American archaeologist is murdered, Iraq is blamed, and America
-goes in.
-Commander John Fisher leads the incursion, and at her dig sites his column
-finds what she was killed for: bones, human in shape and far too large.
-The campaign's first act runs from the beachhead at Al Basrah through the
-marshes, Ur, Nakhayb, Babylon and the Euphrates to Nineveh, where Fisher
-refuses an order and both armies turn on him.
+goes in. Commander John Fisher leads the incursion, and at her dig sites
+his column finds what she was killed for: bones, human in shape and far
+too large. The first act runs from the beachhead at Al Basrah to Nineveh,
+where Fisher refuses an order and both armies turn on him; the second
+takes the deserters through Palmyra, the King's Highway, Sinai and the
+Suez Canal to Cairo, Giza and the ships at Alexandria, and at Giza a
+third army comes up out of the ground.
 
 ## Play
 
@@ -27,13 +28,15 @@ av play calvary
 Or from the source: `cargo run --release`. Needs a terminal of at least
 100x30 with truecolour and a font with the Braille block.
 
-- **Campaign:** Act I, seven missions, each with a briefing and its own
-  objective: destroy the defences, bridge the channels, hold a dig site,
-  take a camp with an engineer, bring down a ring of towers, get a convoy
-  through, hold a site against two armies at once. Progress is saved.
+- **Campaign:** Acts I and II, fourteen missions, each with a briefing
+  and its own objective: bridge the channels, hold a dig site, take a
+  camp with an engineer, bring down a ring of towers, get convoys
+  through, hold out as a rearguard, cross a desert on captured money,
+  board ships under a jet strike, fight two armies and then three.
+  Progress is saved.
 - **Battles:** from the title menu, a full battle on the Greek coast (the
   original's own level), a skirmish in the Swiss valley, and the walled
-  town in Egypt to drive around in.
+  town in Egypt to drive around in (in the campaign it is Cairo).
 - **Three views:** top-down tactical (the default), the strategy map with
   the road network (Tab) and a follow view behind the supertank (M).
 

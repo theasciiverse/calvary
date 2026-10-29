@@ -233,6 +233,12 @@ as a cab with a canvas load; they stop where their route ends, and like
 any unit they can be selected, held (X) and sent on (R). (The original's
 own `objs/convoy.cpp` only groups units to move together; there is no
 escort objective in it.)
+The Watchers' Order (`Team::Watchers`, black hulls with a bone-white
+band) is player 6, with `W:` links, a fourth army at war with every
+other; `money` takes a fourth amount for it. `time SECS` wins (or loses)
+once the battle has lasted that long, the HUD counting down `HOLD OUT
+m:ss`, after the tick the original's win and lose functions were given;
+`own KIND P N` needs N of them (default one).
 A second hostile army (`Team::Rival`, steel blue) is player 5 in a
 `.cmap` (the original levels use players 3 and 4 for scenery, so those
 stay scenery); it follows its own path links, `R:` beside `A:` and `E:`
@@ -408,9 +414,12 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner and all of Act I, missions 1 to 7: Al Basrah,
-   Shatt al-Arab, Ur, Nakhayb, Babylon, the Euphrates line and Nineveh. Three missions reuse the
-   existing maps; the rest are new `.cmap` maps.
+   the campaign runner, Act I (missions 1 to 7, Iraq) and Act II
+   (missions 8 to 14, the Levant and Egypt). Cairo is the original's own
+   walled town; the rest are new `.cmap` maps, made by `tools/gen_*.py`
+   (Act II's on the shared `tools/mapgen.py`) and checked with
+   `tools/check_map.py` (reachability over non-blocking ground, nothing
+   placed on it).
 9. **Follow mode (done) and first person (next)** (see Rendering).
 
 Open questions:
@@ -678,6 +687,46 @@ tanks, electric cars, rocket tanks, trikes, engineers. Win: `hold 1 60
 48 5 120`; lose: our HQ. Without the supertank the probe loses the HQ
 before 3 minutes; with it, the site is held and won at about 5.
 
+Act II, **The Desertion** (2026-10-29), all on Cairo's music; probe
+results are without the supertank, then with the stand-in:
+
+- 8, **Palmyra** (`tools/gen_palmyra.py`): the rearguard at the west end
+  of the Great Colonnade, the Temple of Bel, the oasis; the American
+  pursuit (player 5) comes in by three roads. Win `time 300`. Lost at
+  about 3 minutes; won.
+- 9, **The King's Highway** (`gen_kings_highway.py`, 90x150): six trucks
+  south past Kerak castle (the Europeans' garrison) or down the desert
+  road the Americans raid, a crossover between; Wadi Mujib crosses both,
+  passable only where the roads climb through; the road west to
+  Jerusalem is closed by a rockfall. Four trucks to the south post.
+  Lost with the minute-by-minute stand-in, won at about 5 minutes with
+  `CLEAR_EVERY=30`.
+- 10, **Sinai** (`gen_sinai.py`, 140x80): 4000 and no bank of our own;
+  three neutral banks on the way west, paid out only once an engineer
+  takes one; the Europeans hold the Mitla Pass between two sheer ridges,
+  towers on the ridge tops, rocket tanks in the dunes. Win: their HQ.
+  Lost at about 6 minutes (their engineers take every bank); won at 8.
+- 11, **The Suez Canal** (`gen_suez.py`): six trucks west over three
+  crossings where old piers leave one cell of water for a bridger; the
+  Europeans on the far bank shoot the decks, the Americans come down the
+  near bank. Lost before 2 minutes; won at about 5.
+- 12, **Cairo** (`gen_cairo.py`): the original `egypt2` level, read
+  through `--export`, everything on it kept (the European supertank moved
+  from beside our launchers, which killed it at once, to its own HQ),
+  with factories, banks, turrets, roads through the streets and our
+  airbase: the first helicopters. Win: their HQ. A stalemate; won at
+  about 9.
+- 13, **Giza** (`gen_giza.py`): three pyramids in the terrain (too steep
+  to climb) and the Sphinx, in the original's Sphinx limestone; the
+  Europeans dig by the great pyramid, and the Watchers' Order comes up
+  out of the Valley Temple. Win: `no garage 6`. Lost at about 3; won at
+  4 to 5.
+- 14, **Alexandria** (`gen_alexandria.py`): three ships at the quay,
+  boarded from takeover pads; the Europeans hold the waterfront and a
+  squadron of their jets and bombers is in the air at the start (ai_joe's
+  formations never build jets, so the strike is placed). Win: `own
+  takeover_pad 1 2`. Lost at about 9; won at about 6.
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -741,7 +790,7 @@ if not already done.)
 
 **Not at launch (David, 2026-10-27):** Calvary is held back from the
 Asciiverse launch until at least the campaign's first act is built. As of
-2026-10-29 Act I's seven missions are built, but not yet played through by
+2026-10-29 Acts I and II (fourteen missions) are built, but not yet played through by
 a person. README.md, LICENSE (MIT, as the other Asciiverse titles), the
 store page and manifest (`hub/catalog/calvary.md`, `.toml`; year 1998, the
 original's, so neither OLD! nor NEW!) and the 100x30 preview
@@ -750,10 +799,9 @@ with hub's `tools/castrec.py`) were written 2026-10-29, at David's
 request. Smallest playable size: 100x30 (at 80 columns the battle HUD
 loses the ammunition counts).
 
-Act I is built (2026-10-29): missions 1 to 7, each with its own map,
-rules and briefing. None has been played through by a person yet; the
-balance comes from the mission probe only. Once Act I has been played,
-the store page and README can be written.
+Acts I and II are built (2026-10-29): missions 1 to 14, each with its
+own map, rules and briefing. None has been played through by a person
+yet; the balance comes from the mission probe only.
 
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,
