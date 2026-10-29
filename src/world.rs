@@ -190,6 +190,8 @@ pub enum Order {
     Move(f32, f32),
     /// Go after one enemy until it is destroyed, then hold.
     Attack(usize),
+    /// Take a relic home to (x, y), by the roads (anyone's, either way).
+    Home(f32, f32),
 }
 
 /// A command from the player to the selected units.
@@ -1199,6 +1201,7 @@ impl World {
                     }
                 }
                 Order::Attack(_) => self.entities[i].order = Order::Hold,
+                Order::Home(x, y) => self.go_home(i, x, y, dt),
             },
             Class::EnemyTank => {
                 let (hx, hy) = self.entities[i].home;
@@ -1297,6 +1300,65 @@ impl World {
         }
         if self.drive_towards(i, nx, ny, dt) {
             self.entities[i].next_node = self.next_after(node, team);
+        }
+    }
+
+    /// Path nodes linked to `n` by any army's road, in either direction.
+    fn road_neighbours(&self, n: usize) -> Vec<usize> {
+        let p = &self.nodes[n];
+        let mut out: Vec<usize> = [&p.links_a, &p.links_e, &p.links_r, &p.links_w].into_iter().flatten().copied().collect();
+        out.extend((0..self.nodes.len()).filter(|&m| {
+            let q = &self.nodes[m];
+            [&q.links_a, &q.links_e, &q.links_r, &q.links_w].into_iter().any(|l| l.contains(&n))
+        }));
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    /// Drive a relic home to (x, y): node to node along the shortest way by
+    /// the roads to the node nearest home, then straight in. With no road
+    /// between, straight there.
+    fn go_home(&mut self, i: usize, x: f32, y: f32, dt: f32) {
+        let goal = self.nearest_node(x, y, Team::Player, false);
+        let here = self.entities[i].next_node.or_else(|| self.nearest_node(self.entities[i].x, self.entities[i].y, Team::Player, false));
+        let (Some(goal), Some(node)) = (goal, here) else {
+            self.entities[i].order = Order::Move(x, y);
+            return;
+        };
+        self.entities[i].next_node = Some(node);
+        let (nx, ny) = (self.nodes[node].x, self.nodes[node].y);
+        let e = &self.entities[i];
+        if self.gap(node) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT {
+            return;
+        }
+        if !self.drive_towards(i, nx, ny, dt) {
+            return;
+        }
+        if node == goal {
+            self.entities[i].order = Order::Move(x, y);
+            return;
+        }
+        // shortest road distance to the goal, from every node
+        let mut dist = vec![f32::INFINITY; self.nodes.len()];
+        let mut todo = vec![goal];
+        dist[goal] = 0.0;
+        while let Some(a) = todo.pop() {
+            for b in self.road_neighbours(a) {
+                let d = dist[a] + (self.nodes[a].x - self.nodes[b].x).hypot(self.nodes[a].y - self.nodes[b].y);
+                if d < dist[b] {
+                    dist[b] = d;
+                    todo.push(b);
+                }
+            }
+        }
+        let next = self.road_neighbours(node).into_iter().filter(|&b| dist[b].is_finite()).min_by(|&a, &b| {
+            let via = |m: usize| dist[m] + (self.nodes[node].x - self.nodes[m].x).hypot(self.nodes[node].y - self.nodes[m].y);
+            via(a).total_cmp(&via(b))
+        });
+        match next {
+            Some(b) if dist[b] < dist[node] => self.entities[i].next_node = Some(b),
+            _ => self.entities[i].order = Order::Move(x, y),
         }
     }
 
@@ -1480,11 +1542,13 @@ impl World {
                     self.radio("narrative/building_captured_22khz.mp3");
                 }
                 self.say(if team == Team::Player { "We have the relic! Bring it home" } else { "The enemy has the relic!" });
-                // the carrier heads home; whoever else was going for it goes back to its road
-                if self.entities[c].class == Class::Vehicle {
+                // the carrier heads home (a supply truck keeps to its road);
+                // whoever else was going for it goes back to its road
+                if self.entities[c].class == Class::Vehicle && self.entities[c].kind != "car" {
                     let home = self.find(Class::Hq, team).or_else(|| self.find(Class::Garage, team)).map(|h| (self.entities[h].x, self.entities[h].y));
                     if let Some((hx, hy)) = home {
-                        self.entities[c].order = Order::Move(hx, hy);
+                        self.entities[c].order = Order::Home(hx, hy);
+                        self.entities[c].next_node = None;
                     }
                 }
                 for j in 0..self.entities.len() {
@@ -1926,7 +1990,7 @@ mod rules {
             }
         }
         assert_eq!((w.entities[relic].carrier, w.entities[relic].team), (Some(ours), Team::Player));
-        assert_eq!(w.entities[ours].order, Order::Move(5.0, 25.0), "and takes it home");
+        assert_eq!(w.entities[ours].order, Order::Home(5.0, 25.0), "and takes it home");
         for _ in 0..(3 * 30) {
             w.step(1.0 / 30.0);
         }

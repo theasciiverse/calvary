@@ -350,6 +350,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Hold the top of the Palatine for two minutes. Keep the HQ standing.",
     },
+    Mission {
+        act: 2,
+        number: 21,
+        title: "Turin",
+        map: include_str!("../maps/turin.cmap"),
+        briefing: &[
+            "Commander, Reid. Turin. Sir, they have the Shroud. Not the Europeans:",
+            "the Order, in its own colours, black and bone. They took it from the",
+            "cathedral an hour ago and it is on a truck going out through the city",
+            "to the Alpine road, with an escort. If it gets out we never see it",
+            "again. Stop the truck, pick the Shroud up, and bring it here. The",
+            "Europeans in the Lingotto factories will want it too.",
+        ],
+        objective: "Take the Shroud from the Order's truck and bring it to our HQ, before it leaves by the Alpine road.",
+    },
 ];
 
 /// The mission's map, parsed.
