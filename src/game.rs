@@ -31,6 +31,8 @@ pub enum View {
     Strategy,
     /// Third person from behind the supertank, the original's follow mode.
     Chase,
+    /// From the turret along the gun, the original's action mode.
+    First,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -223,13 +225,14 @@ impl Game {
         log::info!("view {:?}", self.view);
     }
 
-    /// M: top-down and follow mode, in turn.
+    /// M: top-down, follow mode and first person, in turn.
     pub fn cycle_view(&mut self) {
         self.view = match self.view {
             View::Tactical => {
                 self.chase_heading = self.tank.heading;
                 View::Chase
             }
+            View::Chase => View::First,
             _ => View::Tactical,
         };
         self.camera = None;

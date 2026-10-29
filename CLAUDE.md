@@ -384,12 +384,17 @@ object rotation, a tile-transition helper for coastlines.
   far to the side can have its target off screen (a turret-follow camera is
   an option). Frame time, `cargo test --release chase_frame_time --
   --ignored --nocapture`: about 1.2 ms at 160x45, 2.5 ms at 300x100.
-- **First person (next):** the same renderer with the camera at the
-  turret looking along the aim, as the third entry in M's cycle.
-- **Earlier note, first person / chase view (v2):** the original's main driving view. The
-  terrain is a plain heightmap, which suits a voxel-space style renderer
-  (column ray marching, as in Comanche, 1992) in half-blocks or Braille.
-  That is a judgement from the data format, not tested yet.
+- **First person (built, 2026-10-29):** the original's action mode, the
+  third entry in M's cycle (top-down, follow, first person). The same
+  renderer with the eye on the turret, 0.15 cells ahead of the tank's
+  centre and 0.85 over its ground, looking along the gun (the original
+  fixes its camera to the turret model, `calc_action_cam` in
+  `objs/stank.cpp`; no pitch here), horizon 40% down the view; of the
+  supertank only the barrel shows, running out from under the eye. The
+  mouse cannot point at a spot here, because the view turns with the
+  turret: the pointer steers the turret like a stick (still within 0.03
+  rad of the middle, faster further out) and the shell lands on the
+  ground under it; buttons as in follow mode.
 
 ## Plan
 
@@ -516,7 +521,7 @@ object rotation, a tile-transition helper for coastlines.
    (from Act II on, on the shared `tools/mapgen.py`) and checked with
    `tools/check_map.py` (reachability over non-blocking ground, nothing
    placed on it).
-9. **Follow mode (done) and first person (next)** (see Rendering).
+9. **Follow mode and first person (done)** (see Rendering).
 
 Open questions:
 - Map orientation: whether Golgotha's +y is south (as drawn here) or north.
@@ -562,7 +567,7 @@ bridger, 9/0/B helicopter/jet/bomber at the airbase,
 J switch route at the nearest junction (or click a junction), unit
 commands (click/drag select, right-click to move or attack; U , . G X R Z), T turret lock (tracks the nearest
 enemy within 14 cells and aims shells at its height), TAB
-strategy view, M follow mode, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6
+strategy view, M follow mode then first person, `+`/`=` and `-` zoom the tactical view (1, 2, 4 or 6
 columns per map cell; contour spacing scales with it), `[` `]` previous/next level, F1/H/? help window (opens
 at start, pauses the game), ESC closes help or quits. With the kitty
 keyboard protocol keys are exact; otherwise a key counts as held while OS

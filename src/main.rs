@@ -509,7 +509,8 @@ fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: 
     let here = (m.column, m.row);
     let tactical = game.view == game::View::Tactical;
     // the mouse aims and fires in both driving views
-    let aiming = tactical || game.view == game::View::Chase;
+    let perspective = matches!(game.view, game::View::Chase | game::View::First);
+    let aiming = tactical || perspective;
     input.mouse_at = Some(here);
     match m.kind {
         MouseEventKind::Moved => {
@@ -517,8 +518,8 @@ fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: 
                 input.mouse_aiming = true;
             }
         }
-        MouseEventKind::Down(MouseButton::Left) if game.view == game::View::Chase => {
-            // follow mode: no selecting by click, the left button only fires
+        MouseEventKind::Down(MouseButton::Left) if perspective => {
+            // follow mode and first person: no selecting by click, the left button only fires
             input.mouse_aiming = true;
             input.mouse_main = true;
         }
@@ -573,7 +574,7 @@ fn on_mouse(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect, m: 
             }
         }
         MouseEventKind::Down(MouseButton::Right) => {
-            if game.selected.is_empty() || game.view == game::View::Chase {
+            if game.selected.is_empty() || perspective {
                 if aiming {
                     input.mouse_chain = true;
                 }
@@ -602,6 +603,22 @@ fn mouse_aim(game: &mut Game, input: &mut Input, size: ratatui::layout::Rect) {
         return;
     }
     let Some(pos) = input.mouse_at else { return };
+    if game.view == game::View::First {
+        // first person: the camera turns with the turret, so the pointer
+        // steers it like a stick, faster the further it is from the middle,
+        // and the shell lands on the ground under it
+        let (map, _) = render::split(size);
+        if pos.1 >= map.y + map.height {
+            return;
+        }
+        let (angle, ground) = chase::pick(game, map, pos.0, pos.1);
+        let off = (angle - game.tank.aim() + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+        let turn = if off.abs() < 0.03 { 0.0 } else { off * 0.08 };
+        let range = ground.map_or(f32::MAX, |(x, y)| (x - game.tank.x).hypot(y - game.tank.y).max(0.6));
+        input.mouse_aim = Some((game.tank.aim() + turn, range));
+        game.crosshair = Some(pos);
+        return;
+    }
     if game.view == game::View::Chase {
         // follow mode: the ground under the pointer, or along it into the sky
         let (map, _) = render::split(size);
@@ -694,6 +711,35 @@ mod tests {
         game.selected = vec![0];
         on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Right), at));
         assert!(input.controls(std::time::Instant::now()).fire_chain);
+    }
+
+    #[test]
+    fn mouse_steers_the_turret_in_first_person() {
+        let size = Rect::new(0, 0, 160, 45);
+        let mut game = Game::new(0).unwrap();
+        game.help = false;
+        game.cycle_view();
+        game.cycle_view();
+        assert_eq!(game.view, game::View::First);
+        let mut input = Input::new(false);
+        let (map, _) = render::split(size);
+        let middle = map.x + map.width / 2;
+        let aim = game.tank.aim();
+        let rel = |a: f32| (a - aim + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+        // in the middle the turret holds still
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Moved, (middle, 34)));
+        mouse_aim(&mut game, &mut input, size);
+        assert!(rel(input.mouse_aim.expect("aiming").0).abs() < 1e-4);
+        // right of the middle it turns right, further out faster
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Moved, (middle + 20, 34)));
+        mouse_aim(&mut game, &mut input, size);
+        let near = rel(input.mouse_aim.unwrap().0);
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Moved, (middle + 60, 34)));
+        mouse_aim(&mut game, &mut input, size);
+        let far = rel(input.mouse_aim.unwrap().0);
+        assert!(near > 0.0 && far > near, "{near} {far}");
+        on_mouse(&mut game, &mut input, size, mouse(MouseEventKind::Down(MouseButton::Left), (middle + 60, 34)));
+        assert!(input.controls(std::time::Instant::now()).fire_main);
     }
 
     #[test]

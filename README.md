@@ -65,7 +65,7 @@ Or from the source: `cargo run --release`. Needs a terminal of at least
   at the airbase (each map offers its own)
 - J switches the route at the nearest junction; U selects nearby units, G
   rallies them, X holds, R sends them back onto the road, Z deselects
-- Tab map, M follow view, + and - zoom, C centre the turret
+- Tab map, M follow view and first person, + and - zoom, C centre the turret
 - F1 help, F8 sound, F9 next music track, F12 records a film, Esc back
 - Gamepad: left stick drives, right stick aims (click to lock), RT gun,
   LT machine gun, X rockets, d-pad and A build, Y map, Start help

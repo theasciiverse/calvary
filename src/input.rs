@@ -103,7 +103,7 @@ pub struct Input {
     pub escape: bool,
     pub toggle_help: bool,
     pub toggle_view: bool,
-    /// M: top-down and follow mode.
+    /// M: top-down, follow mode and first person.
     pub cycle_view: bool,
     pub level_step: i32,
     pub zoom_step: i32,

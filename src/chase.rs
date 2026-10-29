@@ -21,6 +21,13 @@ const FOV: f32 = 1.2;
 const FAR: f32 = 70.0;
 /// Camera distance behind the tank.
 const BACK: f32 = 7.0;
+/// First person: the eye sits on the turret, this far ahead of the tank's
+/// centre and this high over its ground (the original's camera is fixed to
+/// the turret model, `calc_action_cam` in `objs/stank.cpp`), and the
+/// horizon this far down the view.
+const EYE_FWD: f32 = 0.15;
+const EYE_UP: f32 = 0.85;
+const HORIZON_FIRST: f32 = 0.40;
 /// Where the tank should appear, as a fraction of the view's pixel height;
 /// the camera height follows from it (and the screen's shape).
 const TANK_AT: f32 = 0.76;
@@ -81,15 +88,23 @@ struct View {
     horizon: f32,
     focal: f32,
     cam: (f32, f32, f32),
+    heading: f32,
+    /// First person: from the turret, along the gun.
+    first: bool,
 }
 
 fn view(g: &Game, area: Rect) -> View {
     let (w, h) = (area.width as usize, area.height as usize * 2);
-    let horizon = h as f32 * HORIZON;
     let focal = (w.max(1) as f32 / 2.0) / (FOV / 2.0).tan();
+    if g.view == crate::game::View::First {
+        let (t, heading) = (&g.tank, g.tank.aim());
+        let cam = (t.x + heading.cos() * EYE_FWD, t.y + heading.sin() * EYE_FWD, g.terrain.height(t.x, t.y) * RELIEF + EYE_UP);
+        return View { w, h, horizon: h as f32 * HORIZON_FIRST, focal, cam, heading, first: true };
+    }
+    let horizon = h as f32 * HORIZON;
     // high enough that the tank lands at TANK_AT of the view
     let up = ((TANK_AT * h as f32 - horizon) * BACK / focal).clamp(1.2, 6.0);
-    View { w, h, horizon, focal, cam: camera(g, g.chase_heading, up) }
+    View { w, h, horizon, focal, cam: camera(g, g.chase_heading, up), heading: g.chase_heading, first: false }
 }
 
 /// What the mouse points at in follow mode: the ground under screen cell
@@ -100,7 +115,7 @@ pub fn pick(g: &Game, area: Rect, col: u16, row: u16) -> (f32, Option<(f32, f32)
     let v = view(g, area);
     let (cx, cy, cz) = v.cam;
     let a = ((col.saturating_sub(area.x) as f32 + 0.5) / v.w.max(1) as f32 - 0.5) * FOV;
-    let angle = g.chase_heading + a;
+    let angle = v.heading + a;
     let (rx, ry) = (angle.cos(), angle.sin());
     let py = (row.saturating_sub(area.y) as f32 + 0.5) * 2.0;
     let mut dist = 0.6;
@@ -123,7 +138,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
     if w == 0 || h == 0 {
         return;
     }
-    let heading = g.chase_heading;
+    let heading = v.heading;
     let (horizon, focal) = (v.horizon, v.focal);
     let (cx, cy, cz) = v.cam;
     let mut f = Frame { w, h, px: vec![(0, 0, 0); w * h], depth: vec![f32::MAX; w * h] };
@@ -215,7 +230,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
         }
         // nothing standing between the camera and the tank: it would hide it
         let (dx, dy) = (e.x - cx, e.y - cy);
-        if dx * hx + dy * hy < BACK - 0.6 && (dx * right.0 + dy * right.1).abs() < 1.6 + e.radius() {
+        if !v.first && dx * hx + dy * hy < BACK - 0.6 && (dx * right.0 + dy * right.1).abs() < 1.6 + e.radius() {
             continue;
         }
         let alive = e.alive;
@@ -304,8 +319,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
     let t = &g.tank;
     let base = g.terrain.height(t.x, t.y) * RELIEF;
     let hull = if g.world.player_tank.is_some_and(|i| g.world.entities[i].flash > 0.0) { (255, 220, 160) } else { (176, 138, 58) };
-    boxed(&mut f, t.x, t.y, 0.0, 0.75, 0.45, hull, (236, 196, 108));
-    boxed(&mut f, t.x, t.y, 0.45, 0.32, 0.3, (226, 190, 104), (245, 225, 170));
+    // (in first person only the barrel, running out ahead of the eye)
+    if !v.first {
+        boxed(&mut f, t.x, t.y, 0.0, 0.75, 0.45, hull, (236, 196, 108));
+        boxed(&mut f, t.x, t.y, 0.45, 0.32, 0.3, (226, 190, 104), (245, 225, 170));
+    }
     // the barrel: a solid tube from the turret to the muzzle, sampled densely
     // and rounded (not truncated), as thick as a 0.08-cell tube at its
     // distance, so it tapers into the scene instead of stepping
@@ -316,7 +334,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
         let kk = k as f32 / steps as f32;
         let d = from + (to - from) * kk;
         let Some((sx, sy, z)) = project(t.x + aim.cos() * d, t.y + aim.sin() * d, base + 0.62) else { continue };
-        let r = (0.08 * focal / z).clamp(0.5, 3.0);
+        // thinner from the turret itself, where the near end is right under the eye
+        let r = if v.first { (0.05 * focal / z).clamp(0.5, 1.5) } else { (0.08 * focal / z).clamp(0.5, 3.0) };
         let tip = kk > 0.88;
         let c = if tip && t.flash > 0.0 { (255, 250, 225) } else if tip { (255, 238, 196) } else { (232, 206, 140) };
         let (x0, x1) = ((sx - r).round() as i32, (sx + r).round() as i32 - 1);
