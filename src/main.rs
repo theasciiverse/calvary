@@ -70,11 +70,45 @@ fn main() -> io::Result<()> {
     } else {
         None
     };
-    if let Some(ed) = edit {
+    if let Some(mut ed) = edit {
+        // F5 in the editor plays the map: the battle needs sound and input
+        // like any other, so both are opened up front
+        let mut audio = audio::Audio::new(args.iter().any(|a| a == "--mute"));
         let mut terminal = ratatui::init();
+        let kitty = supports_keyboard_enhancement().unwrap_or(false);
+        if kitty {
+            let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES;
+            execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
+        }
         execute!(io::stdout(), EnableMouseCapture)?;
-        let result = editor::run(&mut terminal, ed);
+        let mut input = Input::new(kitty);
+        input.open_pad();
+        let result = loop {
+            match editor::run(&mut terminal, ed) {
+                Ok(editor::Exit::Quit) => break Ok(()),
+                Ok(editor::Exit::Play(back, at)) => {
+                    log::info!("editor: test-play, supertank at {at:?}");
+                    let r = run(&mut terminal, &mut audio, &mut input, 0, Some(back.map_for_play()), at, Mode::TestPlay);
+                    audio.stop_music();
+                    input.quit = false;
+                    input.escape = false;
+                    if let Err(e) = r {
+                        break Err(e);
+                    }
+                    // even Ctrl+C only ends the test-play: the editor may
+                    // hold unsaved work
+                    input.exit_app = false;
+                    ed = *back;
+                }
+                Err(e) => break Err(e),
+            }
+        };
         let _ = execute!(io::stdout(), DisableMouseCapture);
+        if kitty {
+            let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+        }
         ratatui::restore();
         return result;
     }
@@ -121,7 +155,7 @@ fn main() -> io::Result<()> {
     // directly; otherwise the title, and back to it after each battle
     let direct = map.is_some() || at.is_some() || args.iter().any(|a| LEVELS.iter().any(|l| l.name == *a));
     let result = if direct {
-        run(&mut terminal, &mut audio, &mut input, start, map, at, false).map(|_| ())
+        run(&mut terminal, &mut audio, &mut input, start, map, at, Mode::Battle).map(|_| ())
     } else {
         let mut first = !args.iter().any(|a| a == "--no-intro");
         loop {
@@ -129,9 +163,9 @@ fn main() -> io::Result<()> {
             first = false;
             let r = match choice {
                 Ok(title::Choice::Campaign(i)) => play_campaign(&mut terminal, &mut audio, &mut input, i),
-                Ok(title::Choice::Level(i)) => run(&mut terminal, &mut audio, &mut input, i, None, None, false).map(|_| ()),
+                Ok(title::Choice::Level(i)) => run(&mut terminal, &mut audio, &mut input, i, None, None, Mode::Battle).map(|_| ()),
                 Ok(title::Choice::Map(path)) => match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| cmap::parse(&t)) {
-                    Ok(m) => run(&mut terminal, &mut audio, &mut input, 0, Some(m), None, false).map(|_| ()),
+                    Ok(m) => run(&mut terminal, &mut audio, &mut input, 0, Some(m), None, Mode::Battle).map(|_| ()),
                     Err(e) => Err(io::Error::other(format!("{path}: {e}"))),
                 },
                 Ok(title::Choice::Quit) => break Ok(()),
@@ -163,7 +197,7 @@ fn play_campaign(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, input
             let m = &campaign::MISSIONS[index];
             log::info!("campaign: mission {} {}", m.number, m.title);
             let map = campaign::map(m).map_err(io::Error::other)?;
-            let (outcome, verdict) = run(terminal, audio, input, 0, Some(map), None, true)?;
+            let (outcome, verdict) = run(terminal, audio, input, 0, Some(map), None, Mode::Campaign)?;
             input.quit = false;
             input.escape = false;
             if outcome == world::Outcome::Playing || input.exit_app {
@@ -186,9 +220,19 @@ fn play_campaign(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, input
     }
 }
 
+/// How a battle was started.
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    /// From the title or the command line.
+    Battle,
+    Campaign,
+    /// From the map editor (F5): back to it on Esc.
+    TestPlay,
+}
+
 /// One battle. Returns how it ended (`Playing` when left before the end) and
-/// why. In the campaign the level keys are off, and a decided battle ends on
-/// its own a few seconds later.
+/// why. In the campaign and a test-play the level keys are off; in the
+/// campaign a decided battle ends on its own a few seconds later.
 fn run(
     terminal: &mut DefaultTerminal,
     audio: &mut audio::Audio,
@@ -196,8 +240,9 @@ fn run(
     start: usize,
     map: Option<(level::Level, String, Option<String>)>,
     at: Option<(f32, f32)>,
-    campaign: bool,
+    mode: Mode,
 ) -> io::Result<(world::Outcome, String)> {
+    let campaign = mode == Mode::Campaign;
     let mut game = match &map {
         Some((level, name, music)) => {
             audio.play_music(music.as_deref().unwrap_or(audio::track_for_level(name)));
@@ -213,8 +258,9 @@ fn run(
         game.tank.y = y;
     }
     game.campaign = campaign;
-    // the briefing has said what to do; the help window stays for F1
-    if campaign {
+    // the briefing has said what to do, or the map maker knows the keys;
+    // the help window stays for F1
+    if mode != Mode::Battle {
         game.help = false;
     }
     let mut decided: Option<Instant> = None;
@@ -285,7 +331,7 @@ fn run(
                 input.quit = true;
             }
         }
-        if campaign {
+        if mode != Mode::Battle {
             input.level_step = 0;
         }
         if std::mem::take(&mut input.toggle_lock) && !game.help {

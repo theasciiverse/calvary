@@ -188,6 +188,13 @@ impl Audio {
         }
     }
 
+    /// Silence the music (back in the map editor after a test-play).
+    pub fn stop_music(&mut self) {
+        if let Some(m) = self.music.take() {
+            m.stop();
+        }
+    }
+
     pub fn toggle_mute(&mut self) {
         self.muted = !self.muted;
         if self.muted {

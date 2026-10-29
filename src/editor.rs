@@ -7,8 +7,12 @@
 //! the cursor, Space or the left button applies (hold to keep applying),
 //! `[` `]` brush size, `,` `.` previous/next tile or object kind, T tile set,
 //! F tile flags (water/blocking), P owner, Enter ends a path chain, B marks
-//! the path node under the cursor as a bridge spot, U undo,
-//! Tab map view, +/- zoom, F2 save, Esc quit (twice if unsaved).
+//! the path node under the cursor as a bridge spot, L whose roads the path
+//! tool draws (ours and the enemy's back along them, the rival's, the
+//! enemy's own), I the map's rules (win, lose, build, money, music; Tab
+//! steps through them, Enter sets one), U undo, Tab map view, +/- zoom,
+//! F5 test-play (F6 with the supertank at the cursor; Esc comes back),
+//! F2 save, Esc quit (twice if unsaved).
 
 use crate::cmap;
 use crate::game::{Game, View};
@@ -88,7 +92,37 @@ const OBJECT_KINDS: [&str; 31] = [
     "greclighthouse",
 ];
 
-const OWNERS: [(u8, &str); 4] = [(1, "player"), (2, "enemy"), (0, "neutral"), (4, "scenery")];
+const OWNERS: [(u8, &str); 5] = [(1, "player"), (2, "enemy"), (5, "rival"), (0, "neutral"), (4, "scenery")];
+
+/// Whose roads the path tool draws (L cycles): ours, which the Europeans
+/// (player 2) also drive the other way, as on every map so far; the rival
+/// army's (player 5, `R:` links); or the Europeans' own, forward.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Road {
+    Ours,
+    Rival,
+    Enemy,
+}
+const ROADS: [(Road, &str); 3] = [(Road::Ours, "ours, enemy back"), (Road::Rival, "rival"), (Road::Enemy, "enemy")];
+
+/// The map's settings the I prompt edits, in order.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Field {
+    Win,
+    Lose,
+    Build,
+    Money,
+    Music,
+}
+const FIELDS: [(Field, &str); 5] = [(Field::Win, "win"), (Field::Lose, "lose"), (Field::Build, "build"), (Field::Money, "money"), (Field::Music, "music")];
+
+/// What the editor asks of its caller when it returns.
+pub enum Exit {
+    Quit,
+    /// Play the map as it stands (unsaved edits included), the supertank at
+    /// this position if one is given; then come back to the editor.
+    Play(Box<Editor>, Option<(f32, f32)>),
+}
 const FLAG_SETS: [(u32, &str); 4] = [(0, "ground"), (2, "water"), (4, "blocking"), (6, "deep water")];
 
 pub struct Editor {
@@ -115,6 +149,9 @@ pub struct Editor {
     stroke_started: bool,
     message: String,
     quit_armed: bool,
+    road: usize,
+    /// The I prompt: which setting, and its text being typed.
+    prompt: Option<(usize, String)>,
 }
 
 fn default_health(kind: &str) -> i16 {
@@ -152,8 +189,10 @@ impl Editor {
             rebuild: false,
             applying: false,
             stroke_started: false,
-            message: "1-8 tools, Space or click to apply, F2 save, Esc quit".into(),
+            message: "1-8 tools, Space or click to apply, I map rules, F5 play, F2 save, Esc quit".into(),
             quit_armed: false,
+            road: 0,
+            prompt: None,
         }
     }
 
@@ -337,13 +376,21 @@ impl Editor {
                         self.level.objects.len() - 1
                     }
                 };
-                // team A drives the chain forward, team E back along it
+                // ours: team A drives the chain forward, team E back along it;
+                // the rival's and the enemy's own roads run forward only
                 if let Some(prev) = self.chain.filter(|&p| p != node) {
-                    if !self.level.objects[prev].links_a.contains(&node) {
-                        self.level.objects[prev].links_a.push(node);
-                    }
-                    if !self.level.objects[node].links_e.contains(&prev) {
-                        self.level.objects[node].links_e.push(prev);
+                    let push = |v: &mut Vec<usize>, n: usize| {
+                        if !v.contains(&n) {
+                            v.push(n);
+                        }
+                    };
+                    match ROADS[self.road].0 {
+                        Road::Ours => {
+                            push(&mut self.level.objects[prev].links_a, node);
+                            push(&mut self.level.objects[node].links_e, prev);
+                        }
+                        Road::Rival => push(&mut self.level.objects[prev].links_r, node),
+                        Road::Enemy => push(&mut self.level.objects[prev].links_e, node),
                     }
                 }
                 self.chain = Some(node);
@@ -426,7 +473,7 @@ impl Editor {
                 FLAG_SETS[self.flags].1
             ),
             Tool::Place => format!("object {}  owner {}", OBJECT_KINDS[self.object_pick], OWNERS[self.owner].1),
-            Tool::Path => format!("path chain {}", if self.chain.is_some() { "open" } else { "-" }),
+            Tool::Path => format!("path chain {}  roads {} (L)", if self.chain.is_some() { "open" } else { "-" }, ROADS[self.road].1),
             _ => String::new(),
         };
         let info = Line::from(vec![
@@ -436,8 +483,137 @@ impl Editor {
             Span::styled(detail, green),
             Span::styled(if self.dirty { "  *unsaved" } else { "" }.to_string(), amber),
         ]);
-        let msg = Line::from(Span::styled(format!(" {}", self.message), dim));
+        let msg = match &self.prompt {
+            Some((f, text)) => Line::from(vec![
+                Span::styled(format!(" {}: ", FIELDS[*f].1), amber),
+                Span::styled(format!("{text}_"), green),
+                if self.message.is_empty() {
+                    Span::styled(format!("   {}", field_help(FIELDS[*f].0)), dim)
+                } else {
+                    Span::styled(format!("   {}", self.message), amber)
+                },
+            ]),
+            None => Line::from(Span::styled(format!(" {}", self.message), dim)),
+        };
         vec![Line::from(tools), info, msg]
+    }
+}
+
+/// What a setting's text looks like, under the prompt.
+fn field_help(f: Field) -> &'static str {
+    match f {
+        Field::Win | Field::Lose => "conditions split by ;  e.g. no mainbasepad 2; hold 1 50 40 4 90   (empty: the default)",
+        Field::Build => "units split by ,  e.g. peon_tank, bridger   (empty: everything)",
+        Field::Money => "players 1 2 5  e.g. 10000 5000 5000   (empty: 10000 each)",
+        Field::Music => "a track, e.g. Al_Basrah.mp3   (empty: none)",
+    }
+}
+
+impl Editor {
+    /// The map as it stands, for a test-play.
+    pub fn map_for_play(&self) -> (Level, String, Option<String>) {
+        (self.level.clone(), self.name.clone(), self.music.clone())
+    }
+
+    /// A setting as the prompt shows it.
+    fn field_text(&self, f: Field) -> String {
+        let conds = |v: &[crate::rules::Cond]| v.iter().map(|c| c.text()).collect::<Vec<_>>().join("; ");
+        let default = self.level.rules.is_default();
+        match f {
+            Field::Win if default => String::new(),
+            Field::Lose if default => String::new(),
+            Field::Win => conds(&self.level.rules.win),
+            Field::Lose => conds(&self.level.rules.lose),
+            Field::Build => self.level.build.as_ref().map_or(String::new(), |b| b.join(", ")),
+            Field::Money => self.level.money.map_or(String::new(), |m| format!("{} {} {}", m[0], m[1], m[2])),
+            Field::Music => self.music.clone().unwrap_or_default(),
+        }
+    }
+
+    /// Take the prompt's text into the map, or say what is wrong with it.
+    fn set_field(&mut self, f: Field, text: &str) -> Result<(), String> {
+        let list = |t: &str, sep: char| t.split(sep).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect::<Vec<_>>();
+        match f {
+            Field::Win | Field::Lose => {
+                let (mut win, mut lose) = if self.level.rules.is_default() {
+                    (Vec::new(), Vec::new())
+                } else {
+                    (self.level.rules.win.iter().map(|c| c.text()).collect(), self.level.rules.lose.iter().map(|c| c.text()).collect())
+                };
+                if f == Field::Win {
+                    win = list(text, ';');
+                } else {
+                    lose = list(text, ';');
+                }
+                self.level.rules = crate::rules::Rules::parse(&win, &lose)?;
+            }
+            Field::Build => {
+                let units = list(text, ',');
+                if let Some(bad) = units.iter().find(|k| crate::balance::unit(k).is_none()) {
+                    return Err(format!("{bad:?} is not a unit"));
+                }
+                self.level.build = (!units.is_empty()).then_some(units);
+            }
+            Field::Money => {
+                let n: Vec<i32> = text.split_whitespace().map(|w| w.parse().map_err(|_| format!("{w:?} is not a number"))).collect::<Result<_, _>>()?;
+                self.level.money = match n.as_slice() {
+                    [] => None,
+                    [a, b, c] => Some([*a, *b, *c]),
+                    _ => return Err("three amounts, for players 1, 2 and 5".into()),
+                };
+            }
+            Field::Music => {
+                let t = text.trim();
+                if !t.is_empty() && !crate::audio::MUSIC.iter().any(|(n, _)| *n == t) {
+                    let all: Vec<&str> = crate::audio::MUSIC.iter().map(|(n, _)| *n).collect();
+                    return Err(format!("not a track; the tracks: {}", all.join(" ")));
+                }
+                self.music = (!t.is_empty()).then(|| t.to_string());
+            }
+        }
+        Ok(())
+    }
+
+    /// A key while the I prompt is open.
+    fn prompt_key(&mut self, code: KeyCode) {
+        let Some((f, mut text)) = self.prompt.take() else { return };
+        match code {
+            KeyCode::Esc => {
+                self.message = format!("{} unchanged", FIELDS[f].1);
+                return;
+            }
+            KeyCode::Enter | KeyCode::Tab | KeyCode::BackTab => {
+                self.snapshot();
+                match self.set_field(FIELDS[f].0, &text) {
+                    Ok(()) => {
+                        self.dirty = true;
+                        self.rebuild = true;
+                        self.message.clear();
+                        if code == KeyCode::Enter {
+                            self.message = format!("{} set", FIELDS[f].1);
+                            return;
+                        }
+                        let n = if code == KeyCode::Tab { (f + 1) % FIELDS.len() } else { (f + FIELDS.len() - 1) % FIELDS.len() };
+                        self.prompt = Some((n, self.field_text(FIELDS[n].0)));
+                        return;
+                    }
+                    Err(e) => {
+                        self.undo.pop();
+                        self.message = format!("{}: {e}", FIELDS[f].1);
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                text.pop();
+                self.message.clear();
+            }
+            KeyCode::Char(c) => {
+                text.push(c);
+                self.message.clear();
+            }
+            _ => {}
+        }
+        self.prompt = Some((f, text));
     }
 }
 
@@ -456,7 +632,7 @@ fn remove_object(level: &mut Level, i: usize) {
     }
 }
 
-pub fn run(terminal: &mut DefaultTerminal, mut ed: Editor) -> io::Result<()> {
+pub fn run(terminal: &mut DefaultTerminal, mut ed: Editor) -> io::Result<Exit> {
     loop {
         if ed.rebuild {
             ed.rebuild_view();
@@ -478,18 +654,34 @@ pub fn run(terminal: &mut DefaultTerminal, mut ed: Editor) -> io::Result<()> {
             continue;
         }
         match event::read()? {
+            Event::Key(k) if k.kind != KeyEventKind::Release && ed.prompt.is_some() => ed.prompt_key(k.code),
             Event::Key(k) if k.kind != KeyEventKind::Release => {
                 let step = if ed.game.view == View::Strategy { 3.0 } else { 1.0 };
                 match k.code {
                     KeyCode::Esc => {
                         if !ed.dirty || ed.quit_armed {
-                            return Ok(());
+                            return Ok(Exit::Quit);
                         }
                         ed.quit_armed = true;
                         ed.message = "unsaved changes: Esc again to quit without saving, F2 to save".into();
                         continue;
                     }
                     KeyCode::F(2) => ed.save(),
+                    KeyCode::F(5) | KeyCode::F(6) => {
+                        let at = (k.code == KeyCode::F(6)).then_some(ed.cursor);
+                        ed.chain = None;
+                        ed.applying = false;
+                        return Ok(Exit::Play(Box::new(ed), at));
+                    }
+                    KeyCode::Char('i') => {
+                        ed.prompt = Some((0, ed.field_text(FIELDS[0].0)));
+                        ed.message = String::new();
+                    }
+                    KeyCode::Char('l') => {
+                        ed.road = (ed.road + 1) % ROADS.len();
+                        ed.chain = None;
+                        ed.message = format!("path tool draws roads: {}", ROADS[ed.road].1);
+                    }
                     KeyCode::Char(c @ '1'..='8') => {
                         ed.tool = TOOLS[c as usize - '1' as usize].0;
                         ed.chain = None;
@@ -591,14 +783,17 @@ fn draw_overlay(f: &mut ratatui::Frame, area: Rect, ed: &Editor) {
             }
         }
     };
-    // path links and nodes
-    for o in ed.level.objects.iter().filter(|o| o.kind == "path_object") {
-        for &l in &o.links_a {
+    // path links and nodes: ours white, the enemy's own red, the rival's blue
+    // (enemy links that only run ours backwards are not drawn again)
+    for (i, o) in ed.level.objects.iter().enumerate().filter(|(_, o)| o.kind == "path_object") {
+        let enemy_own = o.links_e.iter().filter(|&&l| !ed.level.objects[l].links_a.contains(&i));
+        let roads = o.links_a.iter().map(|&l| (l, Color::Rgb(235, 235, 225))).chain(enemy_own.map(|&l| (l, Color::Rgb(235, 70, 55)))).chain(o.links_r.iter().map(|&l| (l, Color::Rgb(110, 160, 245))));
+        for (l, color) in roads.collect::<Vec<_>>() {
             let m = &ed.level.objects[l];
             let steps = ((m.x - o.x).hypot(m.y - o.y) * 2.0).ceil().max(1.0) as usize;
             for s in 1..steps {
                 let t = s as f32 / steps as f32;
-                mark(o.x + (m.x - o.x) * t, o.y + (m.y - o.y) * t, '·', Color::Rgb(235, 235, 225));
+                mark(o.x + (m.x - o.x) * t, o.y + (m.y - o.y) * t, '·', color);
             }
         }
     }
@@ -659,5 +854,37 @@ mod tests {
         assert_eq!(nodes.len(), 3);
         assert_eq!(nodes[0].links_a, vec![1]);
         assert_eq!(nodes[2].links_e, vec![1]);
+    }
+
+    /// L switches the path tool to the rival's roads; I sets the map's rules,
+    /// refusing what would not load.
+    #[test]
+    fn rival_roads_and_map_rules() {
+        let mut ed = Editor::new("unused.cmap", Editor::blank(20, 12, "grassfull"), "t".into(), None);
+        ed.tool = Tool::Path;
+        ed.road = ROADS.iter().position(|r| r.0 == Road::Rival).unwrap();
+        for x in [2.0, 8.0] {
+            ed.cursor = (x, 3.0);
+            ed.applying = false;
+            ed.apply();
+        }
+        assert_eq!(ed.level.objects[0].links_r, vec![1]);
+        assert!(ed.level.objects[0].links_a.is_empty() && ed.level.objects[1].links_e.is_empty());
+        ed.set_field(Field::Win, "hold 1 5 5 3 60; no mainbasepad 2").unwrap();
+        ed.set_field(Field::Build, "peon_tank, bridger").unwrap();
+        ed.set_field(Field::Money, "9000 4000 3000").unwrap();
+        ed.set_field(Field::Music, "Greece.mp3").unwrap();
+        assert!(ed.set_field(Field::Win, "hold 1 5").is_err());
+        assert!(ed.set_field(Field::Build, "tractor").is_err());
+        assert!(ed.set_field(Field::Money, "9000").is_err());
+        assert!(ed.set_field(Field::Music, "Nope.mp3").is_err());
+        let text = cmap::export(&ed.level, "t", ed.music.as_deref(), terrain::tile_name_for).unwrap();
+        let (back, _, music) = cmap::parse(&text).unwrap();
+        assert_eq!(ed.field_text(Field::Win), "hold 1 5 5 3 60; no mainbasepad 2");
+        assert_eq!(back.rules.win.len(), 2);
+        assert_eq!(back.build, Some(vec!["peon_tank".to_string(), "bridger".to_string()]));
+        assert_eq!(back.money, Some([9000, 4000, 3000]));
+        assert_eq!(music.as_deref(), Some("Greece.mp3"));
+        assert_eq!(back.objects[0].links_r, vec![1]);
     }
 }

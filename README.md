@@ -57,7 +57,8 @@ Or from the source: `cargo run --release`. Needs a terminal of at least
 
 - `calvary LEVEL` or `calvary path/to/map.cmap`: straight into a battle
 - `--no-intro` skips the opening, `--mute` starts silent
-- `--edit maps/x.cmap`, `--new NAME WxH TILE`: the map editor
+- `--edit maps/x.cmap`, `--new NAME WxH TILE`: the map editor (F5 plays
+  the map from inside it, I sets its rules)
 - `--film FILE`: play a recorded film
 
 ## Maps
