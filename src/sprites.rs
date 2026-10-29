@@ -908,7 +908,7 @@ fn paint_keyhole(layer: &mut PixelLayer, e: &Entity, time: f32) {
         }
         let slot = (dx.hypot(dy + 0.25) < 0.32) || (dx.abs() < 0.14 && (-0.1..0.75).contains(&dy));
         let col = if slot {
-            mix((150, 40, 200), (255, 210, 255), pulse)
+            mix((110, 30, 235), (175, 140, 255), pulse)
         } else if r > 1.4 {
             mix((60, 20, 50), (170, 40, 90), pulse * 0.8)
         } else {
