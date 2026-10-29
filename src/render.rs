@@ -189,11 +189,11 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     }
     for b in &g.world.bolts {
         let color = bolt_color(b.weapon);
-        if b.weapon == "super_mortar" && (g.time * 6.0).sin() > -0.3 {
-            // where a supergun's shell will come down: its blast radius
+        if let Some(r) = lobbed(b.weapon).filter(|_| (g.time * 6.0).sin() > -0.3) {
+            // where a supergun's shell or a volcanic bomb will come down
             for k in 0..40 {
                 let a = k as f32 / 40.0 * std::f32::consts::TAU;
-                c.plot(b.to.0 + a.cos() * 3.0, b.to.1 + a.sin() * 3.0, (255, 90, 60), 7);
+                c.plot(b.to.0 + a.cos() * r, b.to.1 + a.sin() * r, (255, 90, 60), 7);
             }
         }
         if b.speed == 0.0 {
@@ -256,13 +256,22 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     draw_messages(f, area, g);
 }
 
+/// Shots lobbed high on an arc, with the radius they hit when they land.
+pub fn lobbed(weapon: &str) -> Option<f32> {
+    match weapon {
+        "super_mortar" => Some(3.0),
+        "lava_bomb" => Some(1.5),
+        _ => None,
+    }
+}
+
 fn bolt_color(weapon: &str) -> Rgb {
     match weapon {
         "bolt" | "electric_beam" | "beam" | "plasma" => (130, 220, 255),
         "acid" => (150, 255, 90),
         "vortex_missile" => (200, 120, 255),
         "nuke_missile" => (255, 255, 200),
-        "super_mortar" | "napalm" => (255, 90, 40),
+        "super_mortar" | "napalm" | "lava_bomb" => (255, 90, 40),
         "chain_gun" => (255, 230, 120),
         w if w.contains("missile") || w.contains("rocket") => (255, 130, 50),
         _ => (255, 250, 230),
@@ -405,6 +414,13 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
         if let Some(pos) = to_cell(n.x, n.y) {
             if let Some(cell) = buf.cell_mut(pos) {
                 cell.set_char('╳').set_fg(AMBER).set_bg(Color::Black);
+            }
+        }
+    }
+    for &(x, y, _) in &w.volcanoes {
+        if let Some(pos) = to_cell(x, y) {
+            if let Some(cell) = buf.cell_mut(pos) {
+                cell.set_char('▲').set_fg(Color::Rgb(255, 90, 40)).set_bg(Color::Black);
             }
         }
     }

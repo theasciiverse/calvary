@@ -327,8 +327,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
     }
     for b in &g.world.bolts {
         let mut ground = g.terrain.height(b.x, b.y) * RELIEF + 0.6;
-        if b.weapon == "super_mortar" {
-            // a supergun's shell climbs and falls on its arc
+        if crate::render::lobbed(b.weapon).is_some() {
+            // a supergun's shell or a volcanic bomb climbs and falls on its arc
             let total = (b.to.0 - b.from.0).hypot(b.to.1 - b.from.1).max(1e-3);
             let t = 1.0 - (b.to.0 - b.x).hypot(b.to.1 - b.y) / total;
             ground += 4.0 * total * 0.3 * t * (1.0 - t) * RELIEF;

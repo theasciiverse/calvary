@@ -305,6 +305,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the airbase on Kefalonia and the supergun on Lefkada. Keep the HQ standing.",
     },
+    Mission {
+        act: 2,
+        number: 18,
+        title: "Naples",
+        map: include_str!("../maps/naples.cmap"),
+        briefing: &[
+            "Commander, Reid. Italy. The Europeans hold Naples, and they are digging",
+            "at Herculaneum, on the shore under Vesuvius. Calloway's notebook has it",
+            "underlined twice. And sir, the mountain woke up the day they broke",
+            "ground. Lava is coming down three channels, one across the coast road.",
+            "It burns anything that drives into it, and the crater is throwing rock",
+            "onto the slopes. Go round, or go fast. Then hold the dig.",
+        ],
+        objective: "Hold the dig at Herculaneum for two minutes. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.

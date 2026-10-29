@@ -58,7 +58,7 @@ const TILE_SETS: [&str; 16] =
 
 /// What the place tool can put down: structures, the supertank start, money
 /// planes, and the commoner pieces of scenery from the original levels.
-const OBJECT_KINDS: [&str; 31] = [
+const OBJECT_KINDS: [&str; 32] = [
     "mainbasepad",
     "garage",
     "airbase",
@@ -69,6 +69,7 @@ const OBJECT_KINDS: [&str; 31] = [
     "tower_electric",
     "tower_missile",
     "supergun",
+    "volcano",
     "stank",
     "peon_tank",
     "palmtree1",

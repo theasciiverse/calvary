@@ -57,6 +57,13 @@ const GAP_WAIT: f32 = 1.4;
 const CAPTURE_RANGE: f32 = 2.0;
 /// Instant weapons (speed 0 in the table) draw their beam this long.
 const BEAM_TIME: f32 = 0.15;
+/// Lava (a `lava*` tile with the wave flag: the original animates it like
+/// water and nothing more) burns whatever stands in it, this much a second.
+const LAVA_DPS: f32 = 10.0;
+/// A `volcano` throws a bomb onto its cone every few seconds, this far out.
+const VOLCANO_RANGE: f32 = 14.0;
+const LAVA_BOMB_DAMAGE: f32 = 60.0;
+const LAVA_BOMB_RADIUS: f32 = 1.5;
 
 /// What the garage (keys 1-8, V) and the airbase (9, 0, B) offer, in the
 /// order the HUD lists them.
@@ -374,6 +381,10 @@ pub struct World {
     /// Blocking cells (the tile flag), row major, `width` wide: units under
     /// orders stop at them; routes are trusted as the map maker drew them.
     blocked: Vec<bool>,
+    /// Lava cells, row major like `blocked`.
+    lava: Vec<bool>,
+    /// Volcano craters, and the time to each one's next bomb.
+    pub volcanoes: Vec<(f32, f32, f32)>,
     width: usize,
     /// Junction choices: path node -> which of its links new units take.
     pub route_choice: HashMap<usize, usize>,
@@ -426,6 +437,13 @@ impl World {
             nodes[n].dir = (by - ay).atan2(bx - ax);
         }
         let blocked = (0..level.width * level.height).map(|i| crate::terrain::tile_flags(level.tile(i % level.width, i / level.width)) & crate::level::TILE_BLOCKING != 0).collect();
+        let lava = (0..level.width * level.height)
+            .map(|i| {
+                let t = level.tile(i % level.width, i / level.width);
+                crate::terrain::tile_flags(t) & crate::level::TILE_WAVE != 0 && crate::terrain::tile_name_for(t).is_some_and(|n| n.starts_with("lava"))
+            })
+            .collect();
+        let mut volcanoes = Vec::new();
 
         let mut entities = Vec::new();
         let mut player_tank = None;
@@ -435,6 +453,10 @@ impl World {
                 // `convoy` is the original's unit-grouping object (its table row
                 // is "a dummy entry"), nothing to put on the field
                 "" | "path_object" | "field_camera" | "sfx_obj" | "lightbulb" | "moneycrate" | "tunnel" | "tunnel_entrance" | "convoy" => continue,
+                "volcano" => {
+                    volcanoes.push((o.x, o.y, 3.0));
+                    continue;
+                }
                 "moneyplane" if team.fights() => Class::Plane,
                 "moneyplane" => continue,
                 "mainbasepad" => Class::Hq,
@@ -495,6 +517,8 @@ impl World {
             hold_time: HashMap::new(),
             hold_side: HashMap::new(),
             blocked,
+            lava,
+            volcanoes,
             width: level.width,
             route_choice: HashMap::new(),
             points: 0,
@@ -720,6 +744,7 @@ impl World {
                 self.think(i, dt);
             }
         }
+        self.step_lava(dt);
         self.step_bolts(dt);
         self.step_burns(dt);
         for e in &mut self.entities {
@@ -1356,12 +1381,62 @@ impl World {
             true
         });
         for (w, x, y, target, team) in hits {
+            if w == "lava_bomb" {
+                self.lava_bomb(x, y);
+                continue;
+            }
             // a moving target may have left the spot
             let direct = target.filter(|&t| (self.entities[t].x - x).hypot(self.entities[t].y - y) <= self.entities[t].radius() + 0.4);
             self.damage(w, x, y, direct, team);
             let power = balance::weapon(w).map_or(0.4, |s| if s.area { 0.6 + s.radius * 0.3 } else { 0.4 });
             self.blasts.push(Blast { x, y, power });
         }
+    }
+
+    /// Whether (x, y) is a lava cell.
+    pub fn lava_at(&self, x: f32, y: f32) -> bool {
+        if x < 0.0 || y < 0.0 {
+            return false;
+        }
+        let (cx, cy) = (x as usize, y as usize);
+        cx < self.width && self.lava.get(cy * self.width + cx).copied().unwrap_or(false)
+    }
+
+    /// Lava burns what drives into it, and volcanoes throw bombs onto their
+    /// cones (Calvary's own: the original's lava was only a picture).
+    fn step_lava(&mut self, dt: f32) {
+        for j in 0..self.entities.len() {
+            let e = &self.entities[j];
+            let ground = matches!(e.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank) && !flies(&e.kind);
+            if e.alive && ground && self.lava_at(e.x, e.y) {
+                self.hurt_by(j, LAVA_DPS * dt, false);
+            }
+        }
+        for v in 0..self.volcanoes.len() {
+            self.volcanoes[v].2 -= dt;
+            if self.volcanoes[v].2 > 0.0 {
+                continue;
+            }
+            let (vx, vy, _) = self.volcanoes[v];
+            self.volcanoes[v].2 = 2.0 + self.rand() * 3.0;
+            let (a, r) = (self.rand() * std::f32::consts::TAU, self.rand().sqrt() * VOLCANO_RANGE);
+            let to = (vx + a.cos() * r, vy + a.sin() * r);
+            // thrown high: about two seconds in the air wherever it lands
+            let speed = (r / 2.0).max(1.0);
+            self.bolts.push(Bolt { weapon: "lava_bomb", team: Team::Neutral, x: vx, y: vy, from: (vx, vy), to, target: None, speed, beam: 0.0 });
+        }
+    }
+
+    /// A volcanic bomb comes down: it hurts every side alike.
+    fn lava_bomb(&mut self, x: f32, y: f32) {
+        for j in 0..self.entities.len() {
+            let e = &self.entities[j];
+            if e.is_target() && !flies(&e.kind) && (e.x - x).hypot(e.y - y) <= LAVA_BOMB_RADIUS + e.radius() {
+                self.hurt_by(j, LAVA_BOMB_DAMAGE, false);
+            }
+        }
+        self.blasts.push(Blast { x, y, power: 1.1 });
+        self.sound("explosion/generic.mp3", Some((x, y)), 0.6);
     }
 
     /// Supertanks lost so far.
@@ -1719,6 +1794,35 @@ mod rules {
             "name = 'river'\nwidth = 12\nheight = 30\n{header}build = ['peon_tank', 'bridger']\nlegend = {q}\ng 0 grassfull\nw 6 egyptwater1\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
         );
         World::from_level(&crate::cmap::parse(&text).unwrap().0)
+    }
+
+    #[test]
+    fn lava_burns_and_volcanoes_throw_bombs() {
+        let mut tiles = String::new();
+        for y in 0..30 {
+            tiles.push_str(&(if y == 10 { "L" } else { "g" }).repeat(12));
+            tiles.push('\n');
+        }
+        let heights = format!("{}\n", "05".repeat(13)).repeat(31);
+        let q = "'''";
+        let objects = "mainbasepad 1 6 28 0 4000\nmainbasepad 2 6 2 0 4000\nvolcano 0 6 20 0 100\n";
+        let text = format!(
+            "name = 'lava'\nwidth = 12\nheight = 30\nlegend = {q}\ng 0 grassfull\nL 2 lavafull\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
+        );
+        let mut w = World::from_level(&crate::cmap::parse(&text).unwrap().0);
+        assert!(w.lava_at(3.5, 10.5) && !w.lava_at(3.5, 11.5));
+        assert_eq!(w.volcanoes.len(), 1, "the volcano is no entity, only a crater");
+        let mut e = Entity::shown("bridger", Class::Vehicle, Team::Player, 50.0);
+        (e.x, e.y, e.order) = (3.5, 10.5, Order::Hold);
+        w.entities.push(e);
+        let burnt = w.entities.len() - 1;
+        let mut landed = Vec::new();
+        for _ in 0..(20 * 30) {
+            w.step(1.0 / 30.0);
+            landed.extend(w.bolts.iter().filter(|b| b.weapon == "lava_bomb").map(|b| b.to));
+        }
+        assert!(!w.entities[burnt].alive, "50 health lasts five seconds in lava");
+        assert!(!landed.is_empty() && landed.iter().all(|&(x, y)| (x - 6.0).hypot(y - 20.0) <= VOLCANO_RANGE + 0.01));
     }
 
     #[test]
