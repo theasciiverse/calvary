@@ -356,7 +356,7 @@ pub fn result(terminal: &mut DefaultTerminal, input: &mut Input, index: usize, w
     let last = index + 1 == MISSIONS.len();
     let next = match (won, last) {
         (true, false) => format!("Enter: on to mission {}, {}", MISSIONS[index + 1].number, MISSIONS[index + 1].title),
-        (true, true) => "The road north is not built yet. Enter or Esc: back to the title".to_string(),
+        (true, true) => "Act I is over. The road west is not built yet. Enter or Esc: back to the title".to_string(),
         (false, _) => format!("Enter: try {} again    Esc: back to the title", MISSIONS[index].title),
     };
     let start = Instant::now();
