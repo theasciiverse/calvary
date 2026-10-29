@@ -16,7 +16,9 @@ takes the deserters through Palmyra, the King's Highway, Sinai and the
 Suez Canal to Cairo, Giza and the ships at Alexandria, and at Giza a
 third army comes up out of the ground; the third crosses Europe from
 Piraeus to Vienna, racing that army, the Watchers' Order, for the relics
-it is collecting.
+it is collecting; the fourth follows the Order's map north, over the
+frozen Baltic and through Finland with the Finns beside him, to a lake
+in Norway where the giants are waking.
 
 ## Play
 
@@ -30,14 +32,17 @@ av play calvary
 Or from the source: `cargo run --release`. Needs a terminal of at least
 100x30 with truecolour and a font with the Braille block.
 
-- **Campaign:** Acts I to III, 27 missions, each with a briefing and
+- **Campaign:** Acts I to IV, 35 missions, each with a briefing and
   its own objective: bridge the channels, hold a dig site, take a camp
   with an engineer, bring down a ring of towers, get convoys through,
   hold out as a rearguard, cross a desert on captured money, board ships
   under a jet strike, take superguns off a mountain, bomb an island,
   hold a dig under a waking volcano, race for relics at night, bring an
   avalanche down on a convoy, storm a chateau, fight two armies and then
-  three. Progress is saved.
+  three, take trucks over sea ice that breaks under shellfire, fight
+  beside the Finns, hunt hidden factories in the polar night, duel the
+  Order's own supertank on a fjord, and hold a frozen lake while the
+  giants under it wake. Progress is saved.
 - **Battles:** from the title menu, a full battle on the Greek coast (the
   original's own level), a skirmish in the Swiss valley, and the walled
   town in Egypt to drive around in (in the campaign they are Piraeus,

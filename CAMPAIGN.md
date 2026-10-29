@@ -20,7 +20,10 @@ all of Act I; all of Act II, missions 8 to 14, with holding out,
 the Watchers' Order and the first aircraft; and all of Act III,
 missions 15 to 27, with superguns, bombers, lava and a volcano, a night
 battle, relic races, avalanches and the Order's own chateau and
-factories (2026-10-29). Three missions use the original's own levels
+factories; and all of Act IV, missions 28 to 35, with sea ice that
+breaks, a carrier, the Finns as allies, fog of war, reindeer, the
+Order's supertank and the Nephilim themselves (2026-10-29). Three
+missions use the original's own levels
 (marked **existing map**).
 
 ## The story
@@ -155,24 +158,29 @@ schedule."*
 
 ### Act IV: The North
 
-*Transmission: "Svalbard is where we stopped calling them 'sites'."*
+*Transmission: "Svalbard is where we stopped calling them sites. They
+were never graves. They were beds."*
 
-28. **Berlin**: crom industrial; Munich. The Order's command, found empty;
-   their map shows forty points and a line north.
-29. **The Baltic crossing**: snow + sea; Helsinki. Ice and ships; air
-   cover only from carriers.
-30. **Helsinki**: snow + crom; Helsinki. Harbour city battle; the
-   Finnish army joins Fisher.
-31. **The Finnish lakes**: snow + water; Finland. Lake country manoeuvre,
-   bridgers over the narrows.
-32. **Lapland**: snow; Finland. Polar night, fog of war, reindeer herds
-   (bird and animal props).
-33. **The fjord**: snow + sea; Norway Nephelim Battle (quiet opening).
-   Cliffs and a single road; supertank duel with the Order's own.
-34. **Svalbard**: snow + crom; Norway Nephelim Battle. The vault under
-   the mountain holds Calloway's last letters; the lock and the keyhole.
+28. **Berlin**: crom industrial; Munich. The Order's command, found nearly
+   empty; an engineer takes it. Their map shows forty points and a line
+   north.
+29. **The Baltic crossing**: sea ice; Helsinki. Six trucks over the frozen
+   gulf; superguns break the ice roads, and a road with a hole is closed.
+   Air cover from a carrier (the original's unused carrier model).
+30. **Helsinki**: snow + crom; Helsinki. Harbour city battle; the Finnish
+   army joins Fisher as an allied army with its own factory.
+31. **The Finnish lakes**: snow + water; Finland. Lake country, six
+   narrows for the bridgers.
+32. **Lapland**: snow; Finland. Polar night and fog of war, reindeer
+   herds, the Order's two hidden factories.
+33. **The fjord**: snow + sea; Norway Nephelim Battle. Cliffs and a single
+   road with blown bridges; the Order's own supertank, and battleships
+   (the original's unused battleship model).
+34. **Svalbard**: snow + crom; Norway Nephelim Battle. The vault under the
+   mountain holds Calloway's last letters: a race over the fjord ice.
 35. **The Nephilim Battle**: snow + alien crust; Norway Nephelim Battle.
-   The first giants wake under the ice. Hold until the ice breaks.
+   Jotunheimen: the first giants wake under the ice. Hold until it
+   breaks.
 
 ### Act V: Golgotha
 
@@ -199,12 +207,13 @@ globe of the original's opening, and the stars.*
 
 - Three missions reuse the existing maps (12 Cairo, 15 Piraeus,
   23 Zurich); 37 need new maps, in the `.cmap` format with the map editor
-  (both built). Acts I to III, missions 1 to 27, are built.
+  (both built). Acts I to IV, missions 1 to 35, are built.
 - The bridger (missions 2, 11, 31) is built: our maps mark bridgeable path
   nodes in the `.cmap` (`bridge`), so it needs no Lisp decoding; the
   original's own levels still carry theirs in undecoded Lisp variables.
   Lava damage, a volcano, night, avalanches and the relic races are built
-  (Act III); holy-site no-fire zones are not.
+  (Act III); sea ice, allies, fog of war, the carrier and battleship, the
+  Nephilim and reindeer too (Act IV); holy-site no-fire zones are not.
 - Briefings: Kruese's transmission fragments open each act, Reid's radio
   lines frame each mission; the original radio voice clips cover the
   battle barks.

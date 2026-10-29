@@ -241,6 +241,41 @@ other; `money` takes a fourth amount for it. `time SECS` wins (or loses)
 once the battle has lasted that long, the HUD counting down `HOLD OUT
 m:ss`, after the tick the original's win and lose functions were given;
 `own KIND P N` needs N of them (default one).
+An allied army (`Team::Allies`, player 7, Act IV's Finns: white hulls,
+a blue band) is at war with every army but ours, runs its own copy of
+`ai_joe` and drives our roads (`A:` links), so it needs no link letter
+of its own; `money` takes a fifth amount for it. Its HQ can be a lose
+condition (`no mainbasepad 7`).
+`fog = true` is fog of war as the original kept it on every level (each
+`map_cell` starts `FOGGED`): every cell unseen until something of ours
+or our allies' has been near it, the supertank clearing 7 cells round
+itself (`g1_unfog_radius` in `objs/stank.cpp`), units and towers their
+detection range (`find_target`), our buildings 4 cells past their walls;
+seen ground stays seen. Fogged ground is drawn near black, as on the
+original's radar, and nothing but our own and our allies' shows on it,
+roads and junctions on the map view included. Here only the maps that
+ask for it are fogged (Lapland, Svalbard); the original's always were.
+Sea ice (any `*icepatch*` tile, ground until broken) takes 600 damage a
+cell from every hit within the blast (`ICE_STRENGTH`): a supergun shell
+opens a hole, a few rockets or bombs crack through, tank guns hardly mark
+it; cracked ice darkens and broken ice is open water, blocking, drowning
+whatever stood on it (Calvary's own: the original's tiles never change).
+A unit whose road runs into open water goes back to the last junction
+before it and on by a branch whose way is open (`World::detour`), or
+waits if none is; the player can still switch junctions with J.
+The Nephilim (`nephilim`, Calvary's own, player 6 on our maps) lie under
+the ground, untargetable, until anything that drives comes within 7
+cells or they are hurt; each that rises wakes those within 9. Awake they
+walk at 0.4 cells a second over anything, after the nearest thing of
+another army, and stamp: 220 to everything on the ground within 1.5
+cells every 1.6 s, cracking ice under the foot; 1500 health; they hit
+nothing in the air. Reindeer (`reindeer`, scenery) graze near where they
+were put and bolt from anything driving or exploding within 5 cells.
+The original's `aircraftcarrier` and `battleship` models, which none of
+its levels used, are measured from their `.gmod` (3.7 by 1.4 and 2.3 by
+1.15 cells at the 0.1 model scale; these two stand Y-up): the carrier is
+an airbase at sea, the battleship a gun on the gunport row (b120mm, 500
+health).
 A second hostile army (`Team::Rival`, steel blue) is player 5 in a
 `.cmap` (the original levels use players 3 and 4 for scenery, so those
 stay scenery); it follows its own path links, `R:` beside `A:` and `E:`
@@ -271,11 +306,12 @@ T tile set (used, grass, greece, sea, snow, watr, egypt, france, rome,
 crom, lava, marsh, castle, temple, rock, alien), F tile flags (ground,
 water, blocking), P owner (the place tool also has takeover pads,
 turrets, tents and reed huts, superguns, volcanoes, cornices, relics,
-the cathedral and the original's `francecastle`), B makes the path node under the cursor a
+the cathedral and the original's `francecastle`, the original's carrier
+and battleship, Nephilim and reindeer; owners include the allies), B makes the path node under the cursor a
 bridge spot (shown as a blinking dashed deck, ╳ on the map), L whose
 roads the path tool draws (ours, which the enemy also drives back along;
 the rival's, `R:`; the enemy's own, forward; drawn white, blue and red),
-I the map's rules in a prompt (win, lose, build, money, music, night; Tab steps
+I the map's rules in a prompt (win, lose, build, money, music, night, fog; Tab steps
 through them, Enter sets one, a mistake is shown and nothing changes),
 F5 test-play the map as it stands (F6: the supertank at the cursor; Esc
 or even Ctrl+C comes back to the editor, unsaved work kept), U undo, Tab map view, +/- zoom, F2 save, Esc
@@ -449,8 +485,9 @@ object rotation, a tile-transition helper for coastlines.
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
    the campaign runner, Act I (missions 1 to 7, Iraq), Act II
-   (missions 8 to 14, the Levant and Egypt) and Act III (missions 15 to
-   27, Greece to Vienna). Cairo, Piraeus and Zurich are the original's
+   (missions 8 to 14, the Levant and Egypt), Act III (missions 15 to
+   27, Greece to Vienna) and Act IV (missions 28 to 35, Berlin to
+   Jotunheimen). Cairo, Piraeus and Zurich are the original's
    own levels; the rest are new `.cmap` maps, made by `tools/gen_*.py`
    (from Act II on, on the shared `tools/mapgen.py`) and checked with
    `tools/check_map.py` (reachability over non-blocking ground, nothing
@@ -831,6 +868,46 @@ nearest unit by road for a loose relic, as a player would):
   treasury inside the Ring, under a European tower guard; the Order from
   the west, the Europeans over the canal. Lost at 4; won at 4.
 
+Act IV, **The North** (2026-10-29), Berlin to Jotunheimen. Before it,
+the original's air flags (Plan 6) went in and every mission was probed
+again: unchanged but Alexandria (now `CLEAR_FROM=60`).
+
+- 28, **Berlin** (`gen_berlin.py`): the Order's command in the
+  Tiergarten, a pad under its own turret inside a ring of guns and a
+  supergun; an engineer in wins. The Europeans keep to Kreuzberg (by the
+  Tiergarten they shot the command's turret for us). No tank busters on
+  the list, as on Piraeus. Lost at 3; won at 5.
+- 29, **The Baltic crossing** (`gen_baltic.py`): six trucks over the
+  frozen Gulf of Finland, an open lead with three ice bridges, superguns
+  on two islands, battleships in the lead, our aircraft on a carrier.
+  Four trucks ashore. Lost at 2; won at 5 (the trucks detour round the
+  holes the superguns open).
+- 30, **Helsinki** (`gen_helsinki.py`): the Finns join, holding the
+  Senate Square; the Europeans on Katajanokka, with an airfield, a
+  battleship and Suomenlinna's supergun; an ice road over the South
+  Harbour. Their HQ; ours and the Finns' must stand. Stalemate alone; won
+  at 5.
+- 31, **The Finnish lakes** (`gen_lakes.py`): two chains of lakes from
+  edge to edge, six one-cell narrows with their bridges blown, a Finnish
+  detachment. Their HQ. Stalemate alone; won at 6.
+- 32, **Lapland** (`gen_lapland.py`): night and fog, the Order's two
+  factories somewhere in the fells, three roads out not saying where they
+  go, frozen lakes, reindeer herds. Lost at 4; won at 9.
+- 33, **The fjord** (`gen_fjord.py`): one road along a ledge, three
+  streams with blown bridges, the Order's own supertank, a supergun and
+  two battleships under the ledge; a short build list. Stalemate alone;
+  won at 13.
+- 34, **Svalbard** (`gen_svalbard.py`): Calloway's letters in a vault cut
+  into the mountain over the frozen Adventfjorden, in fog; our road and
+  the Europeans' over the ice, the Order on the north side. Lost at 5;
+  won at 5.
+- 35, **The Nephilim Battle** (`gen_nephilim.py`): Jotunheimen's frozen
+  lake, eight Nephilim under the ice, the Order's rite on alien crust on
+  the north shore, its convoys waking them. Hold out seven minutes. Lost
+  at 4; held with the stand-in (which clears giants with the rest; with
+  `SPARE=nephilim` its parked supertank is stamped flat, as a driven one
+  need not be).
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -894,7 +971,7 @@ if not already done.)
 
 **Not at launch (David, 2026-10-27):** Calvary is held back from the
 Asciiverse launch until at least the campaign's first act is built. As of
-2026-10-29 Acts I to III (27 missions) are built, but not yet played through by
+2026-10-29 Acts I to IV (35 missions) are built, but not yet played through by
 a person. README.md, LICENSE (MIT, as the other Asciiverse titles), the
 store page and manifest (`hub/catalog/calvary.md`, `.toml`; year 1998, the
 original's, so neither OLD! nor NEW!) and the 100x30 preview
@@ -903,7 +980,7 @@ with hub's `tools/castrec.py`) were written 2026-10-29, at David's
 request. Smallest playable size: 100x30 (at 80 columns the battle HUD
 loses the ammunition counts).
 
-Acts I to III are built (2026-10-29): missions 1 to 27, each with its
+Acts I to IV are built (2026-10-29): missions 1 to 35, each with its
 own map, rules and briefing. None has been played through by a person
 yet; the balance comes from the mission probe only.
 
