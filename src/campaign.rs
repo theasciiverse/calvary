@@ -46,6 +46,7 @@ pub const ACTS: &[Act] = &[
     },
     Act { name: "Act II: The Desertion", transmission: &["After Nineveh we had no flag.", "We had a notebook and a sergeant who could read it."] },
     Act { name: "Act III: The European War", transmission: &["Europe was not fighting America.", "Europe was fighting on schedule."] },
+    Act { name: "Act IV: The North", transmission: &["Svalbard is where we stopped calling them sites.", "They were never graves. They were beds."] },
 ];
 
 pub const MISSIONS: &[Mission] = &[
@@ -455,6 +456,36 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bring the Holy Lance from the Hofburg treasury to our HQ. Nobody else may carry it home.",
     },
+    Mission {
+        act: 3,
+        number: 28,
+        title: "Berlin",
+        map: include_str!("../maps/berlin.cmap"),
+        briefing: &[
+            "Commander, Reid. Berlin. Calloway's notebook ends with an address in the",
+            "Tiergarten, and it is the Order's command. The Europeans say it is empty,",
+            "sir, and for once I believe them: a garrison, a factory and some guns,",
+            "nothing like Munich. Whatever they kept in there, they left it. Get an",
+            "engineer inside before the Europeans come down from the Spree and burn",
+            "it.",
+        ],
+        objective: "Take the Order's command in the Tiergarten with an engineer. Keep the HQ standing.",
+    },
+    Mission {
+        act: 3,
+        number: 29,
+        title: "The Baltic crossing",
+        map: include_str!("../maps/baltic.cmap"),
+        briefing: &[
+            "Commander, Reid. The map in the Order's command has forty points on it,",
+            "and a line from Berlin north into Finland. The Finns will meet us if we",
+            "can get to them. Six trucks over the frozen gulf, sir. The ice holds a",
+            "tank, but not a supergun shell, and the Europeans have two of them on",
+            "the islands and battleships in the lead. A road with a hole in it is",
+            "closed; take another. Our planes fly off the carrier in the channel.",
+        ],
+        objective: "Bring four of the six trucks over the ice to the Finnish shore. Lose three and it is over.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -768,7 +799,8 @@ mod tests {
     /// the enemy towers and armour are cleared every minute from 2:00 and
     /// the supertank parks on the map's site to hold, and supply trucks wait
     /// at home until 2:00, standing in for the supertank's work
-    /// (`CLEAR_EVERY=30`: clear every 30 s instead, a closer escort). `RUST_LOG=info` shows the battle's log.
+    /// (`CLEAR_EVERY=30`: clear every 30 s instead, a closer escort). `RUST_LOG=info` shows the battle's log,
+    /// `TRUCKS=1` where the supply trucks are each minute.
     #[test]
     #[ignore]
     fn mission_report() {
@@ -797,6 +829,10 @@ mod tests {
             }
             if supertank && s == 121 {
                 w.command(&trucks, crate::world::Command::Resume);
+            }
+            if std::env::var("TRUCKS").is_ok() && s % 60 == 0 {
+                let at: Vec<String> = trucks.iter().filter(|&&i| w.entities[i].alive).map(|&i| format!("({:.0},{:.0} {:?} n{:?})", w.entities[i].x, w.entities[i].y, w.entities[i].order, w.entities[i].next_node)).collect();
+                eprintln!("{s}s trucks {}", at.join(" "));
             }
             if supertank && s >= from && s % every == 0 {
                 for e in w.entities.iter_mut().filter(|e| e.team.hostile(Team::Player) && matches!(e.class, Class::Tower | Class::Vehicle) && !spare.contains(&e.kind)) {

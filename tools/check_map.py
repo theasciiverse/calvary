@@ -32,7 +32,7 @@ while stack:
                 stack.append((a, b))
 for p in pts[1:]:
     print(f"{p}: {'reachable' if p in seen else 'NOT reachable'}")
-props = ("palmtree", "pinetree", "ruins", "tent", "crate", "cabin", "giant_", "wall", "house", "ship", "silo", "moneyplane", "cornice")
+props = ("palmtree", "pinetree", "ruins", "tent", "crate", "cabin", "giant_", "wall", "house", "ship", "silo", "moneyplane", "cornice", "aircraftcarrier", "reindeer", "nephilim")
 # bridge spots stand on water by design, and so do ships
 bad = [o for o in objs if not o.split()[0].startswith(props) and "ship" not in o.split()[0] and not o.endswith(" bridge") and blocked(int(float(o.split()[2])), int(float(o.split()[3])))]
 print(f"{len(bad)} on blocking ground", *bad[:5], sep="\n  ")

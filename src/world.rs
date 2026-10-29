@@ -285,6 +285,9 @@ pub struct Entity {
     pub bombing: f32,
     /// A Nephilim still lying under the ground, not yet woken.
     pub asleep: bool,
+    /// Going round a road closed by open water: back to this junction,
+    /// then on by this branch of it.
+    pub detour: Option<(usize, usize)>,
 }
 
 impl Entity {
@@ -314,6 +317,7 @@ impl Entity {
             carrier: None,
             bombing: 0.0,
             asleep: false,
+            detour: None,
         }
     }
 
@@ -670,6 +674,7 @@ impl World {
                 carrier: None,
                 bombing: 0.0,
                 asleep: o.kind == "nephilim",
+                detour: None,
             });
         }
         let mut w = World {
@@ -1233,6 +1238,7 @@ impl World {
                 carrier: None,
                 bombing: 0.0,
                 asleep: false,
+                detour: None,
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
             if team != Team::Player {
@@ -1523,12 +1529,28 @@ impl World {
         if self.gap(node) && e.kind != "bridger" && !flies(&e.kind) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT {
             return;
         }
-        // and so does open water where the ice on the road broke
+        // and open water where the ice on the road broke closes the road:
+        // back to the last junction before it and on by another branch, or
+        // wait if every way is closed
         if !flies(&e.kind) && self.water_ahead(e.x, e.y, nx, ny) {
+            if let Some((from, b)) = self.detour(node, team) {
+                let (bx, by) = (self.nodes[b].x, self.nodes[b].y);
+                let (x, y) = (self.entities[i].x, self.entities[i].y);
+                let e_open = !self.water_on(x, y, bx, by);
+                let e = &mut self.entities[i];
+                if e_open {
+                    e.next_node = Some(b);
+                } else {
+                    (e.next_node, e.detour) = (Some(from), Some((from, b)));
+                }
+            }
             return;
         }
         if self.drive_towards(i, nx, ny, dt) {
-            self.entities[i].next_node = self.next_after(node, team);
+            self.entities[i].next_node = match self.entities[i].detour.take() {
+                Some((j, b)) if j == node => Some(b),
+                _ => self.next_after(node, team),
+            };
         }
     }
 
@@ -1926,6 +1948,23 @@ impl World {
         }
     }
 
+    /// A road closed by open water: walking back from `node` to the last
+    /// junction before it, that junction and a branch of it whose way out is
+    /// not water.
+    fn detour(&self, node: usize, team: Team) -> Option<(usize, usize)> {
+        let mut at = node;
+        for _ in 0..8 {
+            let from = (0..self.nodes.len()).find(|&m| self.nodes[m].links(team).contains(&at))?;
+            let (fx, fy) = (self.nodes[from].x, self.nodes[from].y);
+            let open = self.nodes[from].links(team).iter().copied().find(|&b| b != at && !self.water_on(fx, fy, self.nodes[b].x, self.nodes[b].y));
+            if let Some(b) = open {
+                return Some((from, b));
+            }
+            at = from;
+        }
+        None
+    }
+
     /// Whether the way from (x, y) toward (tx, ty) runs into broken ice
     /// within the next cell.
     fn water_ahead(&self, x: f32, y: f32, tx: f32, ty: f32) -> bool {
@@ -1935,6 +1974,16 @@ impl World {
         }
         let k = (0.9 / d).min(1.0);
         self.broken_ice(x + (tx - x) * k, y + (ty - y) * k)
+    }
+
+    /// Whether broken ice lies anywhere on the straight way from (x, y) to
+    /// (tx, ty).
+    fn water_on(&self, x: f32, y: f32, tx: f32, ty: f32) -> bool {
+        let steps = ((tx - x).hypot(ty - y) / 0.4).ceil().max(1.0) as usize;
+        self.ice.iter().any(|&s| s < 0.0) && (0..=steps).any(|k| {
+            let t = k as f32 / steps as f32;
+            self.broken_ice(x + (tx - x) * t, y + (ty - y) * t)
+        })
     }
 
     /// Open water where sea ice broke.
@@ -2660,6 +2709,22 @@ mod rules {
         assert!(w.offers(Team::Player, "helicopter") && !w.offers(Team::Enemy, "helicopter"));
         let ship = w.entities.iter().find(|e| e.kind == "battleship").unwrap();
         assert_eq!((ship.class, ship.weapon(), ship.max_hp), (Class::Tower, Some("b120mm"), 500.0));
+    }
+
+    #[test]
+    fn a_road_with_a_hole_in_the_ice_is_closed_and_units_take_another() {
+        let roads = "path_object 1 6 24 0 100 A:4,5\npath_object 1 1.5 14 0 100 A:6\npath_object 1 9.5 14 0 100 A:6\npath_object 1 6 5 0 100\n";
+        let mut w = ice_map("", &format!("peon_tank 1 6 25 0 0\n{roads}"));
+        w.ai_timer = [f32::MAX; 5];
+        let peon = w.entities.iter().position(|e| e.kind == "peon_tank").unwrap();
+        // the west road's ice breaks under a supergun shell
+        w.damage_by("super_mortar", 2.5, 15.0, None, Team::Enemy, false);
+        assert!(w.broken_ice(2.5, 17.5) && !w.broken_ice(7.0, 20.0));
+        for _ in 0..(50 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        let e = &w.entities[peon];
+        assert!(e.alive && e.y < 12.0, "back to the fork and round by the east road: at ({:.1},{:.1})", e.x, e.y);
     }
 
     #[test]
