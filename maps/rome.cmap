@@ -5,7 +5,7 @@ music = "Rome_Italy.mp3"
 win = ["hold 1 62.5 57.5 4 120"]
 lose = ["no mainbasepad 1"]
 build = ["peon_tank", "electric_car", "rocket_tank", "trike", "tank_buster", "engineer", "cobra_tank", "helicopter", "jet", "bomber"]
-money = [10000, 15000, 0]
+money = [10000, 25000, 0]
 legend = '''
 W 6 egyptwater1
 w 6 egyptwater4
@@ -250,19 +250,23 @@ turret 2 58.5 61.5 0.0000 200
 turret 2 90.5 46.5 0.0000 200
 tower_electric 2 99.5 48.5 0.0000 600
 turret 2 95.5 78.5 0.0000 200
-path_object 1 105.5 87.5 0.0000 100 A:24,31
-path_object 1 98.5 80.5 0.0000 100 A:25 E:23
-path_object 1 86.5 74.5 0.0000 100 A:26 E:24
-path_object 1 72.5 62.5 0.0000 100 A:27,28 E:25
-path_object 1 64.5 60.5 0.0000 100 A:30 E:26
-path_object 1 58.5 66.5 0.0000 100 A:29 E:26
-path_object 1 56.5 52.5 0.0000 100 A:30 E:28,35,30
-path_object 1 62.5 55.5 0.0000 100 E:27,29
-path_object 1 110.5 60.5 0.0000 100 A:32 E:23
-path_object 1 103.5 46.5 0.0000 100 A:33 E:31
-path_object 1 88.5 42.5 0.0000 100 A:34 E:32,34
-path_object 1 72.5 36.5 0.0000 100 A:35 E:33,35
-path_object 1 66.5 44.5 0.0000 100 A:29 E:34,29
+peon_tank 2 60.5 54.5 0.0000 0
+rocket_tank 2 63.5 54.5 0.0000 0
+electric_car 2 60.5 56.5 0.0000 0
+peon_tank 2 63.5 56.5 0.0000 0
+path_object 1 105.5 87.5 0.0000 100 A:28,35
+path_object 1 98.5 80.5 0.0000 100 A:29 E:27
+path_object 1 86.5 74.5 0.0000 100 A:30 E:28
+path_object 1 72.5 62.5 0.0000 100 A:31,32 E:29
+path_object 1 64.5 60.5 0.0000 100 A:34 E:30
+path_object 1 58.5 66.5 0.0000 100 A:33 E:30
+path_object 1 56.5 52.5 0.0000 100 A:34 E:32,39,34
+path_object 1 62.5 55.5 0.0000 100 E:31,33
+path_object 1 110.5 60.5 0.0000 100 A:36 E:27
+path_object 1 103.5 46.5 0.0000 100 A:37 E:35
+path_object 1 88.5 42.5 0.0000 100 A:38 E:36,38
+path_object 1 72.5 36.5 0.0000 100 A:39 E:37,39
+path_object 1 66.5 44.5 0.0000 100 A:33 E:38,33
 brickwall 4 103.9 52.2 1.6279 100
 brickwall 4 103.8 54.3 1.6850 100
 brickwall 4 103.5 56.5 1.7422 100

@@ -116,6 +116,9 @@ for kind, x, y, hp in [("tower_missile", 52.5, 70.5, 600), ("tower_electric", 47
                        ("tower_missile", 52.5, 42.5, 600), ("turret", 67.5, 60.5, 200), ("turret", 58.5, 61.5, 200), ("turret", 90.5, 46.5, 200),
                        ("tower_electric", 99.5, 48.5, 600), ("turret", 95.5, 78.5, 200)]:
     m.obj(kind, 2, x, y, 0, hp)
+# the Palatine's garrison
+for k, kind in enumerate(["peon_tank", "rocket_tank", "electric_car", "peon_tank"]):
+    m.obj(kind, 2, 60.5 + (k % 2) * 3, 54.5 + (k // 2) * 2, 0.0, 0)
 m.roads(roads)
 # the Aurelian Walls, broken at the gates and where the Tiber runs
 (cx, cy), (rx, ry) = WALLS
@@ -142,4 +145,4 @@ for _ in range(800):
 
 m.write(sys.argv[1], LEGEND, tile, height, "Rome_Italy.mp3", ["hold 1 62.5 57.5 4 120"], ["no mainbasepad 1"],
         build=["peon_tank", "electric_car", "rocket_tank", "trike", "tank_buster", "engineer", "cobra_tank", "helicopter", "jet", "bomber"],
-        money=[10000, 15000, 0])
+        money=[10000, 25000, 0])

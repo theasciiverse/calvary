@@ -84,7 +84,7 @@ for x in SHIPS:
 for kind, x, y, hp in [("turret", 49.5, 31.5, 200), ("turret", 71.5, 31.5, 200), ("tower_missile", 60.5, 34.5, 600), ("tower_electric", 32.5, 36.5, 600), ("turret", 30.5, 58.5, 200)]:
     m.obj(kind, 2, x, y, 0, hp)
 # the strike: already in the air over the city, coming east
-for k, kind in enumerate(["jet", "jet", "bomber", "jet", "jet", "bomber"]):
+for k, kind in enumerate(["jet", "jet", "bomber", "jet", "jet", "bomber", "bomber"]):
     m.obj(kind, 2, 40.5 + (k % 3) * 2.5, 50.5 + (k // 3) * 2.5, EAST, 0)
 m.roads(roads)
 m.obj("greclighthouse", 4, *PHAROS, 0, 100)

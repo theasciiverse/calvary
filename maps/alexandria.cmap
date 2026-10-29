@@ -233,15 +233,16 @@ bomber 2 45.5 50.5 0.0000 0
 jet 2 40.5 53.0 0.0000 0
 jet 2 43.0 53.0 0.0000 0
 bomber 2 45.5 53.0 0.0000 0
-path_object 1 98.5 72.5 0.0000 100 A:28
-path_object 1 88.5 62.5 0.0000 100 A:29,35 E:27
-path_object 1 84.5 44.5 0.0000 100 A:30 E:28
-path_object 1 82.5 29.5 0.0000 100 A:31 E:29
-path_object 1 60.5 29.5 0.0000 100 A:32 E:30
-path_object 1 38.5 29.5 0.0000 100 A:33 E:31
-path_object 1 28.5 44.5 0.0000 100 A:34 E:32
-path_object 1 22.5 66.5 0.0000 100 E:33,35
-path_object 1 60.5 66.5 0.0000 100 A:34 E:28
+bomber 2 40.5 55.5 0.0000 0
+path_object 1 98.5 72.5 0.0000 100 A:29
+path_object 1 88.5 62.5 0.0000 100 A:30,36 E:28
+path_object 1 84.5 44.5 0.0000 100 A:31 E:29
+path_object 1 82.5 29.5 0.0000 100 A:32 E:30
+path_object 1 60.5 29.5 0.0000 100 A:33 E:31
+path_object 1 38.5 29.5 0.0000 100 A:34 E:32
+path_object 1 28.5 44.5 0.0000 100 A:35 E:33
+path_object 1 22.5 66.5 0.0000 100 E:34,36
+path_object 1 60.5 66.5 0.0000 100 A:35 E:29
 greclighthouse 4 16.0 12.0 0.0000 100
 greecehouses1 4 32.4 51.1 1.5708 100
 greecehouses2 4 33.2 53.8 0.0000 100

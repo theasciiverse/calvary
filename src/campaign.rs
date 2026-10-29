@@ -773,6 +773,48 @@ mod tests {
                 if let (Some(t), Some(site)) = (w.player_tank, w.sites().first().copied()) {
                     (w.entities[t].x, w.entities[t].y) = (site.1, site.2);
                 }
+                // and, as a player would, sends idle units back to the road,
+                // then units near an enemy building at it: units leave
+                // buildings alone by themselves
+                let idle: Vec<usize> = (0..w.entities.len())
+                    .filter(|&i| w.entities[i].alive && w.entities[i].team == Team::Player && w.entities[i].class == Class::Vehicle && w.entities[i].order == crate::world::Order::Hold && w.entities[i].kind != "car")
+                    .collect();
+                w.command(&idle, crate::world::Command::Resume);
+                for i in 0..w.entities.len() {
+                    let e = &w.entities[i];
+                    if !(e.alive && e.team == Team::Player && e.class == Class::Vehicle && e.kind != "car") {
+                        continue;
+                    }
+                    let building = (0..w.entities.len())
+                        .filter(|&j| {
+                            let b = &w.entities[j];
+                            b.is_target() && !b.dangerous() && b.team.hostile(Team::Player) && (b.x - e.x).hypot(b.y - e.y) < 14.0
+                        })
+                        .min_by(|&a, &b| {
+                            let d = |j: usize| (w.entities[j].x - e.x).hypot(w.entities[j].y - e.y);
+                            d(a).total_cmp(&d(b))
+                        });
+                    if let Some(b) = building {
+                        w.command(&[i], crate::world::Command::Attack(b));
+                    }
+                }
+                // and sends the nearest unit for a relic lying loose
+                for r in 0..w.entities.len() {
+                    if w.entities[r].class != Class::Relic || !w.entities[r].alive || w.entities[r].carrier.is_some() {
+                        continue;
+                    }
+                    let (rx, ry) = (w.entities[r].x, w.entities[r].y);
+                    let nearest = (0..w.entities.len())
+                        .filter(|&i| w.entities[i].alive && w.entities[i].team == Team::Player && w.entities[i].class == Class::Vehicle && !crate::world::flies(&w.entities[i].kind))
+                        .min_by(|&a, &b| {
+                            let d = |i: usize| (w.entities[i].x - rx).hypot(w.entities[i].y - ry);
+                            d(a).total_cmp(&d(b))
+                        });
+                    if let Some(i) = nearest {
+                        // by the roads: a straight line may cross a river
+                        (w.entities[i].order, w.entities[i].next_node) = (crate::world::Order::Home(rx, ry), None);
+                    }
+                }
             }
             for _ in 0..30 {
                 w.step(1.0 / 30.0);

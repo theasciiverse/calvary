@@ -241,6 +241,8 @@ pub struct Entity {
     home: (f32, f32),
     /// A relic: the unit carrying it.
     pub carrier: Option<usize>,
+    /// Bombers: seconds of bombs still to drop after passing over a target.
+    pub bombing: f32,
 }
 
 impl Entity {
@@ -268,6 +270,7 @@ impl Entity {
             order: Order::Route,
             home: (0.0, 0.0),
             carrier: None,
+            bombing: 0.0,
         }
     }
 
@@ -284,6 +287,22 @@ impl Entity {
             Class::Relic => 0.4,
             Class::Prop => 0.5,
         }
+    }
+
+    /// The original's `DANGEROUS` flag: what units and towers take on by
+    /// themselves. Garages, airbases, HQs and banks never set it, nor a
+    /// bridger once it is a bridge (`objs/bases.cpp`, `bank.cpp`,
+    /// `bridger.cpp`): they fall to the supertank, to bomb trucks and to
+    /// attack orders (`g1_map_piece_class::find_target`).
+    pub fn dangerous(&self) -> bool {
+        matches!(self.class, Class::Vehicle | Class::EnemyTank | Class::PlayerTank | Class::Tower | Class::Plane)
+    }
+
+    /// The original's `SPECIALTARGETS`: kinds that go for anything, dangerous
+    /// or not (`car.cpp`, `engineer.cpp`, `moneyplane.cpp`, `repairer.cpp`,
+    /// `bomb_truck.cpp`).
+    pub fn special_targets(&self) -> bool {
+        matches!(self.kind.as_str(), "car" | "engineer" | "moneyplane" | "repairer" | "bomb_truck")
     }
 
     pub fn is_target(&self) -> bool {
@@ -544,6 +563,7 @@ impl World {
                 order: Order::Route,
                 home: (o.x, o.y),
                 carrier: None,
+                bombing: 0.0,
             });
         }
         let mut w = World {
@@ -1098,6 +1118,7 @@ impl World {
                 order: Order::Route,
                 home: (gx, gy),
                 carrier: None,
+                bombing: 0.0,
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
             if team != Team::Player {
@@ -1121,7 +1142,7 @@ impl World {
         self.entities
             .iter()
             .enumerate()
-            .filter(|(_, e)| e.is_target() && me.team.hostile(e.team))
+            .filter(|(_, e)| e.is_target() && me.team.hostile(e.team) && (e.dangerous() || me.special_targets()))
             .map(|(j, e)| (j, (e.x - me.x).hypot(e.y - me.y) - e.radius()))
             .filter(|&(_, d)| d <= range)
             .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -1178,6 +1199,10 @@ impl World {
                 return;
             }
         }
+        if kind == "bomber" {
+            self.bomber_pass(i, target, dt);
+            return;
+        }
         if let Some(t) = target {
             let d = self.dist(i, t) - self.entities[t].radius();
             let (tx, ty) = (self.entities[t].x, self.entities[t].y);
@@ -1231,6 +1256,54 @@ impl World {
                 let (hx, hy) = self.entities[i].home;
                 if (self.entities[i].x - hx).hypot(self.entities[i].y - hy) > 1.0 {
                     self.drive_off_route(i, hx, hy, dt);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// A bomber's run (`objs/bomber.cpp`): it bombs a target only while the
+    /// target is ahead of it, flying on all the while, and drops for 20 ticks
+    /// more once over it; then the target is let go and the bomber goes back
+    /// to its route. Bombs fall from under the plane.
+    fn bomber_pass(&mut self, i: usize, target: Option<usize>, dt: f32) {
+        let e = &self.entities[i];
+        let ahead = target.filter(|&t| {
+            let (dx, dy) = (self.entities[t].x - e.x, self.entities[t].y - e.y);
+            let off = (dy.atan2(dx) - e.heading).rem_euclid(std::f32::consts::TAU);
+            !(std::f32::consts::FRAC_PI_2..=3.0 * std::f32::consts::FRAC_PI_2).contains(&off) && (dx.abs() >= 1.0 || dy.abs() >= 1.0)
+        });
+        let in_range = ahead.is_some_and(|t| self.dist(i, t) - self.entities[t].radius() <= e.stats().map_or(6.0, |s| s.detection_range));
+        if target.is_some() && ahead.is_none() {
+            // over it or past it: drop a while longer, then let it go
+            let e = &mut self.entities[i];
+            e.bombing = 20.0 / ORIGINAL_HZ;
+            e.target = None;
+            if matches!(e.order, Order::Attack(_)) {
+                e.order = Order::Route;
+            }
+        }
+        if in_range {
+            self.entities[i].bombing = 20.0 / ORIGINAL_HZ;
+        }
+        let e = &mut self.entities[i];
+        e.bombing = (e.bombing - dt).max(0.0);
+        if e.bombing > 0.0 && e.cooldown == 0.0 {
+            e.cooldown = e.stats().map_or(1.0, |s| s.fire_delay).max(1.0) / ORIGINAL_HZ;
+            let (x, y, h) = (e.x, e.y, e.heading);
+            let (team, w) = (e.team, e.weapon().unwrap_or("dropped_bomb"));
+            self.bolts.push(Bolt { weapon: w, team, x, y, from: (x, y), to: (x + h.cos() * 0.6, y + h.sin() * 0.6), target: None, speed: 2.0, beam: 0.0 });
+        }
+        // and it never stops to bomb: it flies on its route, or at its target
+        match self.entities[i].order {
+            Order::Attack(t) => {
+                let (tx, ty) = (self.entities[t].x, self.entities[t].y);
+                self.drive_off_route(i, tx, ty, dt);
+            }
+            Order::Route => self.follow_path(i, dt),
+            Order::Move(x, y) => {
+                if self.drive_off_route(i, x, y, dt).0 {
+                    self.entities[i].order = Order::Hold;
                 }
             }
             _ => {}
@@ -1300,6 +1373,11 @@ impl World {
         if self.entities[i].next_node.is_none() && self.entities[i].kind == "car" {
             // supply trucks stop where their route ends
             return;
+        }
+        if self.entities[i].next_node.is_none() && flies(&self.entities[i].kind) {
+            // aircraft go round again: back to the start of their route
+            let (hx, hy) = self.entities[i].home;
+            self.entities[i].next_node = self.nearest_node(hx, hy, team, true);
         }
         let Some(node) = self.entities[i].next_node else {
             // end of the line: go for the nearest enemy structure
@@ -1747,6 +1825,9 @@ impl World {
         }
         e.hp -= amount;
         e.flash = 0.15;
+        if !matches!(e.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank | Class::Plane) {
+            log::debug!("{:?} {} hit for {amount:.0}, {:.0} left", e.team, e.kind, e.hp);
+        }
         if e.hp > 0.0 {
             return;
         }
