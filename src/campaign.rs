@@ -244,6 +244,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the black-banded army's garage in the Valley Temple. Keep the HQ standing.",
     },
+    Mission {
+        act: 1,
+        number: 14,
+        title: "Alexandria",
+        map: include_str!("../maps/alexandria.cmap"),
+        briefing: &[
+            "Commander, Reid. Three ships in the Eastern Harbour, and two will carry",
+            "the column to Greece. The Europeans hold the waterfront. Each ship is",
+            "boarded from a pad on the quay: an engineer on the pad, and she is ours.",
+            "And sir, their jets are already up. Bombers with them, coming over the",
+            "city for our camp. Get under cover, then get to the quay.",
+            "Two ships, and we sail.",
+        ],
+        objective: "Take two of the three ships with engineers on their quay pads. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -449,7 +464,10 @@ pub fn result(terminal: &mut DefaultTerminal, input: &mut Input, index: usize, w
     let last = index + 1 == MISSIONS.len();
     let next = match (won, last) {
         (true, false) => format!("Enter: on to mission {}, {}", MISSIONS[index + 1].number, MISSIONS[index + 1].title),
-        (true, true) => "Act I is over. The road west is not built yet. Enter or Esc: back to the title".to_string(),
+        (true, true) => {
+            let act = ACTS[MISSIONS[index].act].name.split(':').next().unwrap_or("The act");
+            format!("{act} is over. What comes next is not built yet. Enter or Esc: back to the title")
+        }
         (false, _) => format!("Enter: try {} again    Esc: back to the title", MISSIONS[index].title),
     };
     let start = Instant::now();

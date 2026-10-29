@@ -579,7 +579,10 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         return;
     }
     // (half length, half width, colour, oriented)
-    let (hl, hw, color, oriented): (f32, f32, Rgb, bool) = if has("ship") || has("tug") {
+    let (hl, hw, color, oriented): (f32, f32, Rgb, bool) = if has("greeceship") {
+        // the original's model is 6 cells long and 0.9 wide
+        (3.0, 0.45, (92, 98, 110), true)
+    } else if has("ship") || has("tug") {
         (1.1, 0.38, (92, 98, 110), true)
     } else if has("greecehouses") {
         (0.5, 0.42, (204, 98, 72), false)

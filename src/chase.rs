@@ -244,6 +244,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Prop if k.contains("tent") => (0.6, 0.5, 0.0, (204, 200, 186), (234, 230, 216)),
             Class::Prop if k.contains("cabin") => (0.4, 0.45, 0.0, (160, 136, 90), (196, 170, 118)),
             Class::Prop if k.contains("ruins") => (0.35, 0.6, 0.0, (196, 186, 162), (210, 200, 176)),
+            Class::Prop if k.contains("greeceship") => (2.0, 0.8, 0.0, (92, 98, 110), (120, 126, 138)),
             Class::Prop if k.contains("ship") || k.contains("tug") => (1.0, 0.6, 0.0, (92, 98, 110), (120, 126, 138)),
             Class::Prop => (0.3, 0.35, 0.0, (150, 150, 140), (176, 176, 166)),
         };
