@@ -246,15 +246,21 @@ a blue band) is at war with every army but ours, runs its own copy of
 `ai_joe` and drives our roads (`A:` links), so it needs no link letter
 of its own; `money` takes a fifth amount for it. Its HQ can be a lose
 condition (`no mainbasepad 7`).
-`fog = true` is fog of war as the original kept it on every level (each
-`map_cell` starts `FOGGED`): every cell unseen until something of ours
+Every battle is fought in fog of war, as the original kept it on every
+level (each `map_cell` starts `FOGGED`, and in the game the flag is only
+ever cleared, `golg__map_cell.cpp`): every cell unseen until something of ours
 or our allies' has been near it, the supertank clearing 7 cells round
 itself (`g1_unfog_radius` in `objs/stank.cpp`), units and towers their
 detection range (`find_target`), our buildings 4 cells past their walls;
 seen ground stays seen. Fogged ground is drawn near black, as on the
 original's radar, and nothing but our own and our allies' shows on it,
-roads and junctions on the map view included. Here only the maps that
-ask for it are fogged (Lapland, Svalbard); the original's always were.
+roads and junctions on the map view included; the turret lock and
+attack orders take only what can be seen. It is the original's shroud,
+not a fog that closes again behind you. It changes only what the player
+sees: no unit, tower or computer side looks at it, so the probe plays
+the same with it (until 2026-10-29 it was a per-map `fog = true`, on
+Lapland and Svalbard only). The editor, films and the credits finale
+show the whole map (`World::lift_fog`); F5 from the editor plays fogged.
 Sea ice (any `*icepatch*` tile, ground until broken) takes 600 damage a
 cell from every hit within the blast (`ICE_STRENGTH`): a supergun shell
 opens a hole, a few rockets or bombs crack through, tank guns hardly mark
@@ -325,7 +331,7 @@ pieces, rubble and the keyhole; owners include the allies), B makes the path nod
 bridge spot (shown as a blinking dashed deck, ╳ on the map), L whose
 roads the path tool draws (ours, which the enemy also drives back along;
 the rival's, `R:`; the enemy's own, forward; drawn white, blue and red),
-I the map's rules in a prompt (win, lose, build, money, music, night, fog; Tab steps
+I the map's rules in a prompt (win, lose, build, money, music, night; Tab steps
 through them, Enter sets one, a mistake is shown and nothing changes),
 F5 test-play the map as it stands (F6: the supertank at the cursor; Esc
 or even Ctrl+C comes back to the editor, unsaved work kept), U undo, Tab map view, +/- zoom, F2 save, Esc
@@ -906,7 +912,7 @@ again: unchanged but Alexandria (now `CLEAR_FROM=60`).
 - 31, **The Finnish lakes** (`gen_lakes.py`): two chains of lakes from
   edge to edge, six one-cell narrows with their bridges blown, a Finnish
   detachment. Their HQ. Stalemate alone; won at 6.
-- 32, **Lapland** (`gen_lapland.py`): night and fog, the Order's two
+- 32, **Lapland** (`gen_lapland.py`): the polar night, the Order's two
   factories somewhere in the fells, three roads out not saying where they
   go, frozen lakes, reindeer herds. Lost at 4; won at 9.
 - 33, **The fjord** (`gen_fjord.py`): one road along a ledge, three
@@ -914,7 +920,7 @@ again: unchanged but Alexandria (now `CLEAR_FROM=60`).
   two battleships under the ledge; a short build list. Stalemate alone;
   won at 13.
 - 34, **Svalbard** (`gen_svalbard.py`): Calloway's letters in a vault cut
-  into the mountain over the frozen Adventfjorden, in fog; our road and
+  into the mountain over the frozen Adventfjorden; our road and
   the Europeans' over the ice, the Order on the north side. Lost at 5;
   won at 5.
 - 35, **The Nephilim Battle** (`gen_nephilim.py`): Jotunheimen's frozen

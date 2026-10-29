@@ -3,7 +3,7 @@ last letters lie in a vault cut into the mountain north of the frozen
 Adventfjorden. Our camp is at Longyearbyen on the south shore, the
 Europeans (player 2) east of us on the same shore, the Watchers' Order
 (player 6) on the north side; we and the Europeans each have a road over
-the fjord ice to the vault, and ice breaks under fire. Fog of war.
+the fjord ice to the vault, and ice breaks under fire.
 Whoever carries the letters home keeps them. Writes a .cmap to argv[1]."""
 import math, random, sys
 from mapgen import Map, Noise, Roads, near, seg_dist
@@ -117,4 +117,4 @@ for _ in range(900):
 m.write(sys.argv[1], LEGEND, tile, height, "Norway_Nephelim_Battle.mp3", [f"reach 1 relic {CAMP[0]} {CAMP[1]} 4 1"],
         [f"reach 6 relic {ORDER[0]} {ORDER[1]} 4 1", f"reach 2 relic {EUROPEANS[0]} {EUROPEANS[1]} 4 1", "no mainbasepad 1"],
         build=["peon_tank", "electric_car", "rocket_tank", "trike", "tank_buster", "engineer", "cobra_tank", "helicopter", "jet", "bomber"],
-        money=[10000, 10000, 0, 10000], fog=True)
+        money=[10000, 10000, 0, 10000])

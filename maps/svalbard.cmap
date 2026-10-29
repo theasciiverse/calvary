@@ -6,7 +6,6 @@ win = ["reach 1 relic 18 84 4 1"]
 lose = ["reach 6 relic 104 14 4 1", "reach 2 relic 102 82 4 1", "no mainbasepad 1"]
 build = ["peon_tank", "electric_car", "rocket_tank", "trike", "tank_buster", "engineer", "cobra_tank", "helicopter", "jet", "bomber"]
 money = [10000, 10000, 0, 10000]
-fog = true
 legend = '''
 i 0 snow-mud_icepatch
 s 0 switzsnowfull

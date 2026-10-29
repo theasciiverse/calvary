@@ -9,7 +9,7 @@
 //! F tile flags (water/blocking), P owner, Enter ends a path chain, B marks
 //! the path node under the cursor as a bridge spot, L whose roads the path
 //! tool draws (ours and the enemy's back along them, the rival's, the
-//! enemy's own), I the map's rules (win, lose, build, money, music, night, fog; Tab
+//! enemy's own), I the map's rules (win, lose, build, money, music, night; Tab
 //! steps through them, Enter sets one), U undo, Tab map view, +/- zoom,
 //! F5 test-play (F6 with the supertank at the cursor; Esc comes back),
 //! F2 save, Esc quit (twice if unsaved).
@@ -129,10 +129,9 @@ enum Field {
     Money,
     Music,
     Night,
-    Fog,
 }
-const FIELDS: [(Field, &str); 7] =
-    [(Field::Win, "win"), (Field::Lose, "lose"), (Field::Build, "build"), (Field::Money, "money"), (Field::Music, "music"), (Field::Night, "night"), (Field::Fog, "fog")];
+const FIELDS: [(Field, &str); 6] =
+    [(Field::Win, "win"), (Field::Lose, "lose"), (Field::Build, "build"), (Field::Money, "money"), (Field::Music, "music"), (Field::Night, "night")];
 
 /// What the editor asks of its caller when it returns.
 pub enum Exit {
@@ -187,10 +186,9 @@ impl Editor {
         let mut game = Game::from_level(&name, &level);
         game.hide_tank = true;
         game.help = false;
-        // a night map is edited by day, a fogged one in full (F5 plays it as it is)
+        // a night map is edited by day, and in full (F5 plays it fogged)
         game.world.night = false;
-        game.world.fog = None;
-        game.world.fog_changed = false;
+        game.world.lift_fog();
         let cursor = (level.width as f32 / 2.0, level.height as f32 / 2.0);
         Editor {
             path: path.to_string(),
@@ -237,7 +235,6 @@ impl Editor {
             build: None,
             money: None,
             night: false,
-            fog: false,
         }
     }
 
@@ -473,8 +470,7 @@ impl Editor {
         self.game.hide_tank = true;
         self.game.help = false;
         self.game.world.night = false;
-        self.game.world.fog = None;
-        self.game.world.fog_changed = false;
+        self.game.world.lift_fog();
         self.game.view = view;
         self.game.zoom = zoom;
         self.game.camera = camera;
@@ -539,7 +535,6 @@ fn field_help(f: Field) -> &'static str {
         Field::Money => "players 1 2 5 [6]  e.g. 10000 5000 5000   (empty: 10000 each)",
         Field::Music => "a track, e.g. Al_Basrah.mp3   (empty: none)",
         Field::Night => "yes: fought at night   (empty: by day)",
-        Field::Fog => "yes: fog of war   (empty: the whole map seen)",
     }
 }
 
@@ -565,7 +560,6 @@ impl Editor {
             }),
             Field::Music => self.music.clone().unwrap_or_default(),
             Field::Night => if self.level.night { "yes".into() } else { String::new() },
-            Field::Fog => if self.level.fog { "yes".into() } else { String::new() },
         }
     }
 
@@ -618,13 +612,6 @@ impl Editor {
                     "yes" | "y" | "true" => true,
                     "" | "no" | "n" | "false" => false,
                     t => return Err(format!("{t:?}: yes, or empty for day")),
-                };
-            }
-            Field::Fog => {
-                self.level.fog = match text.trim() {
-                    "yes" | "y" | "true" => true,
-                    "" | "no" | "n" | "false" => false,
-                    t => return Err(format!("{t:?}: yes, or empty for no fog")),
                 };
             }
         }

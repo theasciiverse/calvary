@@ -7,7 +7,6 @@ lose = ["no mainbasepad 1"]
 build = ["peon_tank", "electric_car", "rocket_tank", "trike", "tank_buster", "engineer", "cobra_tank", "helicopter", "jet", "bomber"]
 money = [10000, 0, 0, 15000]
 night = true
-fog = true
 legend = '''
 i 0 snow-mud_icepatch
 s 0 switzsnowfull

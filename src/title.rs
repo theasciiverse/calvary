@@ -871,6 +871,7 @@ impl Finale {
         // both sides build there (Cairo has no garage of ours)
         let level = LEVELS.iter().position(|l| l.name == "snow").unwrap_or(0);
         let mut game = crate::game::Game::new(level).ok()?;
+        game.world.lift_fog();
         game.show_aim = false;
         let (x, y) = (game.tank.x, game.tank.y);
         Some(Finale { game, sim: 0.0, mark: (x, y, 0.0), reverse_until: 0.0, film: None })

@@ -269,7 +269,8 @@ impl Game {
         self.lock_on.filter(|_| self.lock).map(|i| self.world.entities[i].kind.as_str())
     }
 
-    /// Lock on: the nearest live enemy within gun range (14 cells); the
+    /// Lock on: the nearest live enemy within gun range (14 cells) that the
+    /// player can see (not in the fog, nor lost in the dark); the
     /// swing the turret at it at the turret's own speed.
     fn track_target(&mut self) {
         if !self.lock {
@@ -277,7 +278,7 @@ impl Game {
         }
         let (tx, ty) = (self.tank.x, self.tank.y);
         let w = &self.world;
-        let valid = |i: usize| w.entities[i].is_target() && w.entities[i].team.hostile(Team::Player) && (w.entities[i].x - tx).hypot(w.entities[i].y - ty) <= 14.0;
+        let valid = |i: usize| w.entities[i].is_target() && w.entities[i].team.hostile(Team::Player) && (w.entities[i].x - tx).hypot(w.entities[i].y - ty) <= 14.0 && w.seen(&w.entities[i]);
         // always the nearest: a tank closing in matters more than a building
         self.lock_on = (0..w.entities.len()).filter(|&i| valid(i)).min_by(|&a, &b| {
             let d = |i: usize| (w.entities[i].x - tx).hypot(w.entities[i].y - ty);

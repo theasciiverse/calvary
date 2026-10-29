@@ -11,7 +11,8 @@ landmark models (Jerusalem walls, temple and dig site, the Giza pyramids, a
 French castle, cathedral beams, Swiss skiers).
 
 Status: draft for discussion. Built: the campaign runner (briefings,
-result screens, saved progress, per-map win and lose rules), mission 1,
+result screens, saved progress, per-map win and lose rules, fog of war
+on every map as in the original), mission 1,
 Al Basrah, mission 2, Shatt al-Arab, with the bridger, mission 3, Ur,
 with holding a site, mission 4, Nakhayb, with takeover pads, and
 mission 5, Babylon, with the first giant bones, mission 6, the
@@ -21,7 +22,7 @@ the Watchers' Order and the first aircraft; and all of Act III,
 missions 15 to 27, with superguns, bombers, lava and a volcano, a night
 battle, relic races, avalanches and the Order's own chateau and
 factories; and all of Act IV, missions 28 to 35, with sea ice that
-breaks, a carrier, the Finns as allies, fog of war, reindeer, the
+breaks, a carrier, the Finns as allies, reindeer, the
 Order's supertank and the Nephilim themselves; and all of Act V,
 missions 36 to 40, with holy places as no-fire zones, rubble only
 engineers clear, the keyhole, and the epilogue (2026-10-29): the
@@ -173,7 +174,7 @@ were never graves. They were beds."*
    army joins Fisher as an allied army with its own factory.
 31. **The Finnish lakes**: snow + water; Finland. Lake country, six
    narrows for the bridgers.
-32. **Lapland**: snow; Finland. Polar night and fog of war, reindeer
+32. **Lapland**: snow; Finland. Polar night, reindeer
    herds, the Order's two hidden factories.
 33. **The fjord**: snow + sea; Norway Nephelim Battle. Cliffs and a single
    road with blown bridges; the Order's own supertank, and battleships
@@ -217,7 +218,7 @@ theme; then the credits.*
   nodes in the `.cmap` (`bridge`), so it needs no Lisp decoding; the
   original's own levels still carry theirs in undecoded Lisp variables.
   Lava damage, a volcano, night, avalanches and the relic races are built
-  (Act III); sea ice, allies, fog of war, the carrier and battleship, the
+  (Act III); sea ice, allies, the carrier and battleship, the
   Nephilim and reindeer too (Act IV); holy-site no-fire zones, rubble
   and the keyhole (Act V).
 - Briefings: Kruese's transmission fragments open each act, Reid's radio

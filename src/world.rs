@@ -547,7 +547,9 @@ pub struct World {
     pub avalanches: Vec<Avalanche>,
     /// Fought at night: enemy vehicles are seen only near our own.
     pub night: bool,
-    /// Fog of war (`fog = true`): cells our side has not seen yet, row major.
+    /// Fog of war, on every map as in the original (each `map_cell` starts
+    /// `FOGGED`): cells our side has not seen yet, row major. None: lifted
+    /// (the editor, films, the credits).
     pub fog: Option<Vec<bool>>,
     /// Set when the fog lifts somewhere, for the renderers to copy it.
     pub fog_changed: bool,
@@ -723,8 +725,8 @@ impl World {
             volcanoes,
             avalanches: Vec::new(),
             night: level.night,
-            fog: level.fog.then(|| vec![true; level.width * level.height]),
-            fog_changed: level.fog,
+            fog: Some(vec![true; level.width * level.height]),
+            fog_changed: true,
             fog_clock: 0.0,
             holy_hits: [0; 5],
             keyhole_clock: KEYHOLE_EVERY,
@@ -2022,6 +2024,12 @@ impl World {
         }
     }
 
+    /// Show the whole map: the editor, films and the credits are not fought.
+    pub fn lift_fog(&mut self) {
+        self.fog = None;
+        self.fog_changed = true;
+    }
+
     /// Whether the cell under (x, y) is still in the fog.
     pub fn fogged(&self, x: f32, y: f32) -> bool {
         let Some(fog) = &self.fog else { return false };
@@ -2444,7 +2452,7 @@ impl World {
         self.entities
             .iter()
             .enumerate()
-            .filter(|(_, e)| e.is_target() && e.team.hostile(Team::Player))
+            .filter(|(_, e)| e.is_target() && e.team.hostile(Team::Player) && self.seen(e))
             .map(|(i, e)| (i, (e.x - x).hypot(e.y - y) - e.radius()))
             .filter(|&(_, d)| d <= reach)
             .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -2666,6 +2674,7 @@ mod rules {
             "name = 'relic'\nwidth = 30\nheight = 30\nnight = true\nwin = ['reach 1 relic 5 25 3 1']\nlegend = {q}\ng 0 grassfull\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
         );
         let mut w = World::from_level(&crate::cmap::parse(&text).unwrap().0);
+        w.lift_fog(); // the night alone, here
         let relic = w.entities.iter().position(|e| e.class == Class::Relic).unwrap();
         assert!(!w.entities[relic].is_target(), "a relic cannot be shot");
         let unit = |w: &mut World, team: Team, x: f32, y: f32| {
@@ -2929,7 +2938,7 @@ mod rules {
 
     #[test]
     fn fog_lifts_round_our_side_and_hides_theirs() {
-        let mut w = ice_map("fog = true\n", "peon_tank 2 6 14 0 300\npeon_tank 7 6 24 0 300\n");
+        let mut w = ice_map("", "peon_tank 2 6 14 0 300\npeon_tank 7 6 24 0 300\n");
         w.ai_timer = [f32::MAX; 5];
         let theirs = w.entities.iter().position(|e| e.team == Team::Enemy && e.kind == "peon_tank").unwrap();
         let allied = w.entities.iter().position(|e| e.team == Team::Allies).unwrap();

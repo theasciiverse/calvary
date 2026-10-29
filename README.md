@@ -45,7 +45,8 @@ Or from the source: `cargo run --release`. Needs a terminal of at least
   Order's own supertank on a fjord, hold a frozen lake while the giants
   under it wake, land at Jaffa against all three armies, hold Jerusalem
   without firing on its holy places, dig down to the keyhole under
-  Golgotha and close it. Progress is saved.
+  Golgotha and close it. Every map lies in fog of war until you have
+  been there, as in the original. Progress is saved.
 - **Battles:** from the title menu, a full battle on the Greek coast (the
   original's own level), a skirmish in the Swiss valley, and the walled
   town in Egypt to drive around in (in the campaign they are Piraeus,

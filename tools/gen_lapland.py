@@ -1,6 +1,5 @@
 """Lapland, campaign mission 32: the polar night over the fells. Night
-(the ground lit only round our own) and fog of war (nothing seen until
-something of ours has been near). The Watchers' Order (player 6) has two
+(the ground lit only round our own). The Watchers' Order (player 6) has two
 camps somewhere in the north, each with a factory, sending its convoys
 south over the frozen lakes; three roads lead out from our camp and we do
 not know which ends where. Reindeer herds graze by the lakes and bolt from
@@ -101,4 +100,4 @@ for _ in range(3200):
 
 m.write(sys.argv[1], LEGEND, tile, height, "Finland.mp3", ["no garage 6"], ["no mainbasepad 1"],
         build=["peon_tank", "electric_car", "rocket_tank", "trike", "tank_buster", "engineer", "cobra_tank", "helicopter", "jet", "bomber"],
-        money=[10000, 0, 0, 15000], night=True, fog=True)
+        money=[10000, 0, 0, 15000], night=True)

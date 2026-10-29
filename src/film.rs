@@ -253,6 +253,7 @@ impl Film {
             }
         };
         g.world.entities.clear();
+        g.world.lift_fog();
         g.show_aim = false;
         g.view = crate::game::View::Chase;
         Ok(g)

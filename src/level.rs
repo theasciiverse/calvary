@@ -72,9 +72,6 @@ pub struct Level {
     /// Fought at night (`.cmap` only): dark ground, enemies seen only near
     /// our own.
     pub night: bool,
-    /// Fog of war (`.cmap` only), as the original kept it on every map: each
-    /// cell hidden until something of ours has been near it.
-    pub fog: bool,
 }
 
 /// One object from the level: the base fields every Golgotha object saves.
@@ -304,7 +301,7 @@ impl Level {
             Err(_) => Vec::new(),
         };
 
-        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects, rules: Default::default(), build: None, money: None, night: false, fog: false })
+        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects, rules: Default::default(), build: None, money: None, night: false })
     }
 
     pub fn tile(&self, cx: usize, cy: usize) -> &TileInfo {
