@@ -410,6 +410,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Hold out for six minutes. Neither the Order nor the Europeans may carry the Veil home.",
     },
+    Mission {
+        act: 2,
+        number: 25,
+        title: "The Loire",
+        map: include_str!("../maps/loire.cmap"),
+        briefing: &[
+            "Commander, Reid. We found where they come from. The Order has a chateau",
+            "on the north bank of the Loire: a curtain wall, a moat, two gates, and",
+            "their HQ in the courtyard. There is a supergun in there too, and it",
+            "reaches further than our busters do, so it goes first. Two bridges over",
+            "the river, sir. Nobody has ever attacked these people where they live.",
+            "Let us be the first.",
+        ],
+        objective: "Destroy the Order's HQ inside the chateau walls. Keep ours standing.",
+    },
 ];
 
 /// The mission's map, parsed.

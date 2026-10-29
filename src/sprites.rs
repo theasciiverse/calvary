@@ -590,6 +590,28 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         paint_bones(layer, k, cx, cy, th);
         return;
     }
+    if k == "francecastle" {
+        // the original's `francecastle` (2.9 by 2.85 cells at its 0.1 model
+        // scale): a Loire chateau in white stone under blue-grey slate, a
+        // round tower with a conical roof at each corner
+        let (hx, hy) = (th.cos(), th.sin());
+        layer.paint(cx, cy, 2.0, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let (a, c) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+            for (tx, ty) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                let r = (a - tx).hypot(c - ty);
+                if r < 0.45 {
+                    return Some((if r < 0.12 { (150, 160, 178) } else if r < 0.32 { (84, 94, 112) } else { (226, 222, 208) }, true));
+                }
+            }
+            if a.abs() > 1.05 || c.abs() > 0.85 {
+                return None;
+            }
+            let roof = a.abs() < 0.85 && c.abs() < 0.6;
+            Some((if !roof { (226, 222, 208) } else if c.abs() < 0.08 { (120, 130, 148) } else { (92, 102, 120) }, false))
+        });
+        return;
+    }
     if k == "cathedral" {
         // a cathedral seen from above (Calvary's own, after Chartres): the
         // nave west to east along its heading, the transept across, the
