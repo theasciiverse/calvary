@@ -50,6 +50,8 @@ const PLACES: &[(&str, &str, f32, f32)] = &[
     ("egypt2", "Cairo, Egypt", 30.04, 31.24),
     ("cairo", "Cairo, Egypt", 30.04, 31.24),
     ("basrah", "Al Basrah, Iraq", 30.51, 47.81),
+    // Qurna, where the Tigris and Euphrates meet to form the Shatt al-Arab
+    ("shatt", "Shatt al-Arab, Iraq", 31.00, 47.43),
     ("ur", "Ur, Iraq", 30.96, 46.10),
     ("nakhayb", "Nakhayb, Iraq", 32.04, 42.27),
     ("babylon", "Babylon, Iraq", 32.54, 44.42),

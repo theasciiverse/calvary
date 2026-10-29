@@ -201,11 +201,14 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
 
     let mut layer = PixelLayer::new(area, origin, cols);
     let w = &g.world;
+    for (_, n) in w.nodes.iter().enumerate().filter(|&(k, _)| w.gap(k)) {
+        sprites::paint_gap(&mut layer, n.x, n.y, n.dir, g.time);
+    }
     // scenery first, then structures, then vehicles, aircraft on top
     for pass in 0..4 {
         for e in &w.entities {
             let p = match e.class {
-                Class::Prop => 0,
+                Class::Prop | Class::Bridge => 0,
                 Class::Vehicle if flies(&e.kind) => 3,
                 Class::Vehicle | Class::EnemyTank | Class::PlayerTank => 2,
                 Class::Plane => 3,
@@ -352,6 +355,14 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
+    // gaps waiting for a bridger
+    for (_, n) in w.nodes.iter().enumerate().filter(|&(k, _)| w.gap(k)) {
+        if let Some(pos) = to_cell(n.x, n.y) {
+            if let Some(cell) = buf.cell_mut(pos) {
+                cell.set_char('╳').set_fg(AMBER).set_bg(Color::Black);
+            }
+        }
+    }
     for e in w.entities.iter().filter(|e| e.alive && e.class != Class::Prop) {
         let glyph = match e.class {
             Class::Hq => 'H',
@@ -361,6 +372,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             Class::Tower => 'T',
             Class::EnemyTank | Class::PlayerTank => '◆',
             Class::Plane => '+',
+            Class::Bridge => '=',
             Class::Vehicle if flies(&e.kind) => '+',
             _ => '•',
         };
@@ -444,8 +456,9 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
             None => Span::raw(""),
         },
     ]);
-    let mut build = vec![label(" BUILD ")];
-    for (i, kind) in BUILDABLE.iter().enumerate() {
+    let slots = g.build_slots();
+    let mut build = if slots.is_empty() { vec![label(" no factory: supertank only")] } else { vec![label(" BUILD ")] };
+    for (i, kind) in BUILDABLE.iter().enumerate().filter(|(i, _)| slots.contains(i)) {
         let cost = crate::balance::unit(kind).map_or(0, |s| s.cost);
         let afford = w.money[0] >= cost;
         let cursor = g.pad.as_ref().is_some_and(|p| p.1 == i);
@@ -644,14 +657,14 @@ const HELP: &[(&str, &str)] = &[
     ("Start Back", "help, top-down / follow mode"),
     ("", ""),
     ("", "COMMAND"),
-    ("1 - 8", "build a unit at your garage (costs money)"),
+    ("1 - 8, V", "build a unit at your garage, V a bridger (costs money)"),
     ("9 0 B", "build a helicopter, jet or bomber at your airbase"),
     ("J", "switch the route at the junction nearest your supertank"),
     ("Mouse click", "switch the route at a junction (◇ on the map)"),
     ("T", "turret lock: track the nearest enemy in gun range"),
     ("", "Units drive the paths to the enemy base; money planes fly bank crates home."),
-    ("", "Engineers capture banks and towers. Park at your HQ to rearm."),
-    ("", "Supertank kills score points; earn upgrades for your next tank."),
+    ("", "Engineers capture banks and towers; bridgers span gaps (╳ on the map)."),
+    ("", "Kills earn upgrades for your next supertank. Park at your HQ to rearm."),
     ("", "Destroy the enemy HQ to win."),
     ("[ ]", "previous / next level"),
     ("F1 / H / ?", "this help (the game pauses)"),

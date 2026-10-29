@@ -179,6 +179,7 @@ pub fn look(kind: &str) -> Look {
         "trike" => l(0.3, 0.17, 0.06, 0.0, 0.0),
         "engineer" => l(0.38, 0.26, 0.1, 0.0, 0.0),
         "bomb_truck" => l(0.5, 0.3, 0.08, 0.0, 0.0),
+        "bridger" => l(0.55, 0.3, 0.08, 0.0, 0.0),
         _ => l(0.45, 0.32, 0.12, 0.2, 0.7),
     }
 }
@@ -240,7 +241,12 @@ pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
         Class::Vehicle | Class::EnemyTank => {
             let pose = Pose { x: e.x, y: e.y, heading: e.heading, aim: e.heading + e.turret, odometer: e.odometer, muzzle: 0.0, hit: e.flash };
             paint_vehicle(layer, look(&e.kind), pal, pose);
+            if e.kind == "bridger" {
+                // the folded deck it carries
+                paint_deck(layer, e.x, e.y, e.heading, 0.42, 0.22, e.flash > 0.0);
+            }
         }
+        Class::Bridge => paint_deck(layer, e.x, e.y, e.heading, BRIDGE_HALF_LEN, BRIDGE_HALF_WID, e.flash > 0.0),
         Class::PlayerTank => {}
         Class::Plane => paint_plane(layer, e, pal),
         Class::Prop => paint_prop(layer, e),
@@ -426,6 +432,55 @@ pub fn paint_aircraft_at(layer: &mut PixelLayer, kind: &str, cx: f32, cy: f32, h
             _ => pal.body,
         };
         Some((if hit { mix(c, (255, 255, 255), 0.6) } else { c }, false))
+    });
+}
+
+/// The bridger's road, coloured from the original's own `bridger_road_top`
+/// and `bridger_road_sides` textures.
+pub const BRIDGE_TOP: Rgb = (132, 113, 106);
+pub const BRIDGE_SIDE: Rgb = (140, 101, 21);
+/// Half the deck: the `bridger_road` model is 10 by 5.8 units at the
+/// original's 0.1 model scale, one cell across the gap; drawn as wide as the
+/// lane the supertank can use on it (`World::on_bridge`), so it reads at
+/// terminal zoom.
+const BRIDGE_HALF_LEN: f32 = 0.55;
+const BRIDGE_HALF_WID: f32 = 0.5;
+
+/// A bridge deck along `dir`: road surface, yellow side rails, plank seams.
+fn paint_deck(layer: &mut PixelLayer, cx: f32, cy: f32, dir: f32, hl: f32, hw: f32, hit: bool) {
+    let (hx, hy) = (dir.cos(), dir.sin());
+    layer.paint(cx, cy, hl.hypot(hw), |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        let (l, w) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+        if l.abs() > hl || w.abs() > hw {
+            return None;
+        }
+        let c = if w.abs() > hw * 0.7 {
+            BRIDGE_SIDE
+        } else if ((l + hl) / 0.25).fract() < 0.18 {
+            shade(BRIDGE_TOP, 0.75)
+        } else {
+            BRIDGE_TOP
+        };
+        Some((if hit { mix(c, (255, 255, 255), 0.6) } else { c }, false))
+    });
+}
+
+/// A gap waiting for a bridger: a blinking dashed outline of the deck.
+pub fn paint_gap(layer: &mut PixelLayer, cx: f32, cy: f32, dir: f32, time: f32) {
+    if (time * 2.0).fract() > 0.7 {
+        return;
+    }
+    let (hx, hy) = (dir.cos(), dir.sin());
+    let (hl, hw) = (BRIDGE_HALF_LEN, BRIDGE_HALF_WID);
+    let edge = (layer.pixel_size() * 1.1).max(0.1);
+    layer.paint(cx, cy, hl.hypot(hw), |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        let (l, w) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+        if l.abs() > hl || w.abs() > hw || (hl - l.abs() > edge && hw - w.abs() > edge) {
+            return None;
+        }
+        (((l + w) / 0.2).floor().rem_euclid(2.0) == 0.0).then_some(((236, 180, 60), false))
     });
 }
 

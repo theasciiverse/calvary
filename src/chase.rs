@@ -8,7 +8,7 @@
 //! billboard, so hills hide what is behind them.
 
 use crate::game::Game;
-use crate::sprites::palette;
+use crate::sprites::{self, palette};
 use crate::terrain::Rgb;
 use crate::world::{flies, Class, Team};
 use ratatui::buffer::Buffer;
@@ -232,6 +232,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Bank => (1.0, 1.2, 0.0, (226, 220, 204), (236, 194, 58)),
             Class::Tower => (0.35, 1.8, 0.0, pal.body, pal.turret),
             Class::Plane => (0.5, 0.25, 3.0, pal.body, pal.front),
+            Class::Bridge => (0.5, 0.1, 0.0, sprites::BRIDGE_SIDE, sprites::BRIDGE_TOP),
             Class::Vehicle if flies(k) => (0.5, 0.3, 3.0, pal.body, pal.front),
             Class::Vehicle | Class::EnemyTank => (e.radius() * 0.9, 0.55, 0.0, pal.body, pal.turret),
             Class::Prop if k.contains("palm") || k.contains("tree") => (0.3, 1.6, 0.0, (52, 120, 56), (80, 160, 70)),

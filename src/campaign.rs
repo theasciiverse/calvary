@@ -44,21 +44,38 @@ pub const ACTS: &[Act] = &[Act {
     transmission: &["We went in because they told us an American was dead.", "She was. They lied about who killed her."],
 }];
 
-pub const MISSIONS: &[Mission] = &[Mission {
-    act: 0,
-    number: 1,
-    title: "Al Basrah",
-    map: include_str!("../maps/al-basrah.cmap"),
-    briefing: &[
-        "Commander, Reid here. We are ashore on the Shatt al-Arab, south of the",
-        "old port, and the HQ is down. Command says the people who killed",
-        "Dr. Calloway came through Basrah, and the road north is held: towers",
-        "along the waterfront, armour in the date groves, more of it coming.",
-        "No garage until the engineers land, sir. It is you and the supertank.",
-        "When the guns run dry, come home: the HQ rearms you and patches you up.",
-    ],
-    objective: "Destroy every enemy tank and tower. Keep the HQ standing.",
-}];
+pub const MISSIONS: &[Mission] = &[
+    Mission {
+        act: 0,
+        number: 1,
+        title: "Al Basrah",
+        map: include_str!("../maps/al-basrah.cmap"),
+        briefing: &[
+            "Commander, Reid here. We are ashore on the Shatt al-Arab, south of the",
+            "old port, and the HQ is down. Command says the people who killed",
+            "Dr. Calloway came through Basrah, and the road north is held: towers",
+            "along the waterfront, armour in the date groves, more of it coming.",
+            "No garage until the engineers land, sir. It is you and the supertank.",
+            "When the guns run dry, come home: the HQ rearms you and patches you up.",
+        ],
+        objective: "Destroy every enemy tank and tower. Keep the HQ standing.",
+    },
+    Mission {
+        act: 0,
+        number: 2,
+        title: "Shatt al-Arab",
+        map: include_str!("../maps/shatt-al-arab.cmap"),
+        briefing: &[
+            "Commander, Reid. The engineers are ashore and we have a garage at last.",
+            "North of here the marsh is cut by three channels, and every bridge on",
+            "both causeways is blown. Peon tanks will hold the line, but nothing",
+            "crosses water without a bridger: send one up a causeway and it lays",
+            "itself over the first gap it finds. Their base sits on the levee to",
+            "the north-east. Shell the far banks before you send the bridgers in.",
+        ],
+        objective: "Bridge the channels and destroy the enemy HQ. Keep ours standing.",
+    },
+];
 
 /// The mission's map, parsed.
 pub fn map(m: &Mission) -> Result<(crate::level::Level, String, Option<String>), String> {
@@ -343,5 +360,56 @@ mod tests {
         w.step(1.0 / 30.0);
         assert_eq!(w.outcome, Outcome::Lost);
         assert!(w.verdict.contains("base"), "{}", w.verdict);
+    }
+
+    /// Shatt al-Arab: six gaps, only peons and bridgers, and a bridger sent
+    /// up the first causeway spans its first channel.
+    #[test]
+    fn shatt_al_arab_needs_bridgers() {
+        let (level, _, _) = map(&MISSIONS[1]).unwrap();
+        let mut w = World::from_level(&level);
+        assert_eq!((0..w.nodes.len()).filter(|&n| w.gap(n)).count(), 6);
+        assert!(w.offers(Team::Player, "bridger") && w.offers(Team::Player, "peon_tank") && !w.offers(Team::Player, "rocket_tank"));
+        assert!(w.order(Team::Player, "bridger"));
+        for _ in 0..30 * 120 {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!((0..w.nodes.len()).filter(|&n| w.gap(n)).count(), 5, "one channel bridged");
+        assert_eq!(w.outcome, Outcome::Playing);
+    }
+
+    /// Balance probe for Shatt al-Arab: `cargo test --release
+    /// shatt_al_arab_report -- --ignored --nocapture`. A scripted player
+    /// orders a bridger a minute and a peon every 20 s; with
+    /// `SUPERTANK=1` the enemy towers and armour are cleared every minute
+    /// from 2:00, standing in for the supertank's work.
+    #[test]
+    #[ignore]
+    fn shatt_al_arab_report() {
+        let (level, _, _) = map(&MISSIONS[1]).unwrap();
+        let mut w = World::from_level(&level);
+        let supertank = std::env::var("SUPERTANK").is_ok();
+        for s in 0..900 {
+            if s % 60 == 5 {
+                w.order(Team::Player, "bridger");
+            }
+            if s % 20 == 0 {
+                w.order(Team::Player, "peon_tank");
+            }
+            if supertank && s >= 120 && s % 60 == 0 {
+                for e in w.entities.iter_mut().filter(|e| e.team == Team::Enemy && matches!(e.class, Class::Tower | Class::Vehicle)) {
+                    e.alive = false;
+                }
+            }
+            for _ in 0..30 {
+                w.step(1.0 / 30.0);
+            }
+            if s % 60 == 59 {
+                let units = |t: Team| w.entities.iter().filter(|e| e.alive && e.class == Class::Vehicle && e.team == t).count();
+                let gaps = (0..w.nodes.len()).filter(|&n| w.gap(n)).count();
+                let towers = w.entities.iter().filter(|e| e.alive && e.class == Class::Tower).count();
+                println!("{:>3}s ours {:>2} theirs {:>2} gaps {gaps} towers {towers} money {:?} {:?}", s + 1, units(Team::Player), units(Team::Enemy), w.money, w.outcome);
+            }
+        }
     }
 }

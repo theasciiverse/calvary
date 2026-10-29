@@ -128,7 +128,9 @@ impl Tank {
         ["R", "N", "1", "2", "3"][self.gear]
     }
 
-    pub fn update(&mut self, c: &Controls, terrain: &Terrain, dt: f32) {
+    /// `bridged` says whether a point is on a bridge deck, which carries the
+    /// tank over blocking ground.
+    pub fn update(&mut self, c: &Controls, terrain: &Terrain, bridged: impl Fn(f32, f32) -> bool, dt: f32) {
         if c.gear_step != 0 {
             self.gear = (self.gear as i32 + c.gear_step).clamp(0, GEARS.len() as i32 - 1) as usize;
         }
@@ -180,7 +182,7 @@ impl Tank {
         let (nx, ny) = (self.x + dx * step * climb, self.y + dy * step * climb);
         let probe = (nx + dx * RADIUS * self.speed.signum(), ny + dy * RADIUS * self.speed.signum());
         let free = match terrain.cell_at(probe.0, probe.1) {
-            Some(cell) => !cell.blocking,
+            Some(cell) => !cell.blocking || bridged(probe.0, probe.1),
             None => false,
         };
         self.blocked = !free || climb == 0.0;
@@ -212,11 +214,11 @@ mod tests {
             let mut t = Tank::new(50.0, 75.0, 0);
             t.turret = start;
             let c = Controls { center: true, ..Default::default() };
-            t.update(&c, &terrain, 1.0 / 30.0);
+            t.update(&c, &terrain, |_, _| false, 1.0 / 30.0);
             let after_one = t.turret;
             let idle = Controls::default();
             for _ in 0..90 {
-                t.update(&idle, &terrain, 1.0 / 30.0);
+                t.update(&idle, &terrain, |_, _| false, 1.0 / 30.0);
             }
             assert_eq!(t.turret, 0.0, "from {start}");
             // the first step went toward zero, not away

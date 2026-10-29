@@ -249,6 +249,7 @@ fn run(
             }
         }
         render::follow_camera(&mut game, terminal.size()?.into());
+        input.build_slots = game.build_slots();
         input.poll_pad();
         input.menu_moves = 0;
         mouse_aim(&mut game, input, terminal.size()?.into());

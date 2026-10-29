@@ -52,12 +52,15 @@ fn formation_unit(c: char) -> Option<&'static str> {
 const BANK_INTERVAL: f32 = 500.0 / ORIGINAL_HZ;
 const DEPLOY_INTERVAL: f32 = 10.0 / ORIGINAL_HZ;
 const NODE_REACHED: f32 = 0.35;
+/// How far short of an unbridged gap route units stop.
+const GAP_WAIT: f32 = 1.4;
 const CAPTURE_RANGE: f32 = 2.0;
 /// Instant weapons (speed 0 in the table) draw their beam this long.
 const BEAM_TIME: f32 = 0.15;
 
-/// What the garage (keys 1-8) and the airbase (9, 0, B) offer, in key order.
-pub const BUILDABLE: [&str; 11] = [
+/// What the garage (keys 1-8, V) and the airbase (9, 0, B) offer, in the
+/// order the HUD lists them.
+pub const BUILDABLE: [&str; 12] = [
     "peon_tank",
     "electric_car",
     "rocket_tank",
@@ -66,11 +69,12 @@ pub const BUILDABLE: [&str; 11] = [
     "engineer",
     "bomb_truck",
     "cobra_tank",
+    "bridger",
     "helicopter",
     "jet",
     "bomber",
 ];
-pub const BUILD_KEYS: [&str; 11] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "B"];
+pub const BUILD_KEYS: [&str; 12] = ["1", "2", "3", "4", "5", "6", "7", "8", "V", "9", "0", "B"];
 /// Built at the airbase and flown along its (the original's pink) routes.
 pub const AIR_UNITS: [&str; 3] = ["helicopter", "jet", "bomber"];
 
@@ -127,6 +131,9 @@ pub enum Class {
     EnemyTank,
     /// A money plane: flies its bank's crates to the HQ.
     Plane,
+    /// A bridger that has parked over a gap: a bridge deck anything can
+    /// drive over, until it is shot away.
+    Bridge,
     Prop,
 }
 
@@ -218,6 +225,7 @@ impl Entity {
             Class::PlayerTank | Class::EnemyTank => 0.9,
             Class::Vehicle => 0.5,
             Class::Plane => 0.45,
+            Class::Bridge => 0.5,
             Class::Prop => 0.5,
         }
     }
@@ -246,6 +254,12 @@ pub struct PathNode {
     pub y: f32,
     pub links_a: Vec<usize>,
     pub links_e: Vec<usize>,
+    /// A gap a bridger can span (the original's `bridgeable_spot`).
+    pub bridge_spot: bool,
+    /// The bridge laid here (an entity), while it stands.
+    pub bridge: Option<usize>,
+    /// Which way the route runs through the node, for the bridge deck.
+    pub dir: f32,
 }
 
 impl PathNode {
@@ -317,6 +331,12 @@ pub struct World {
     pub verdict: String,
     /// The map's win and lose conditions.
     rules: crate::rules::Rules,
+    /// What the factories may build (None: everything).
+    build: Option<Vec<String>>,
+    /// Blocking cells (the tile flag), row major, `width` wide: units under
+    /// orders stop at them; routes are trusted as the map maker drew them.
+    blocked: Vec<bool>,
+    width: usize,
     /// Junction choices: path node -> which of its links new units take.
     pub route_choice: HashMap<usize, usize>,
     /// The player's supertank kills, scored at the victim's cost as the
@@ -344,7 +364,7 @@ impl World {
         for (i, o) in level.objects.iter().enumerate() {
             if o.kind == "path_object" {
                 node_of.insert(i, nodes.len());
-                nodes.push(PathNode { x: o.x, y: o.y, links_a: Vec::new(), links_e: Vec::new() });
+                nodes.push(PathNode { x: o.x, y: o.y, links_a: Vec::new(), links_e: Vec::new(), bridge_spot: o.bridge, bridge: None, dir: 0.0 });
             }
         }
         for (i, o) in level.objects.iter().enumerate() {
@@ -353,6 +373,19 @@ impl World {
                 nodes[n].links_e = o.links_e.iter().filter_map(|l| node_of.get(l).copied()).collect();
             }
         }
+        // the route's direction through each node: toward its next node, or
+        // away from the node that leads to it
+        for n in 0..nodes.len() {
+            let from = (0..nodes.len()).find(|&m| nodes[m].links_a.contains(&n) || nodes[m].links_e.contains(&n));
+            let to = nodes[n].links_a.first().or(nodes[n].links_e.first()).copied();
+            let (ax, ay, bx, by) = match (from, to) {
+                (_, Some(t)) => (nodes[n].x, nodes[n].y, nodes[t].x, nodes[t].y),
+                (Some(f), None) => (nodes[f].x, nodes[f].y, nodes[n].x, nodes[n].y),
+                _ => continue,
+            };
+            nodes[n].dir = (by - ay).atan2(bx - ax);
+        }
+        let blocked = (0..level.width * level.height).map(|i| crate::terrain::tile_flags(level.tile(i % level.width, i / level.width)) & crate::level::TILE_BLOCKING != 0).collect();
 
         let mut entities = Vec::new();
         let mut player_tank = None;
@@ -415,6 +448,9 @@ impl World {
             outcome: Outcome::Playing,
             verdict: String::new(),
             rules: level.rules.clone(),
+            build: level.build.clone(),
+            blocked,
+            width: level.width,
             route_choice: HashMap::new(),
             points: 0,
             burns: Vec::new(),
@@ -512,13 +548,74 @@ impl World {
     /// or there is no garage.
     pub fn order(&mut self, team: Team, kind: &'static str) -> bool {
         let Some(stats) = balance::unit(kind) else { return false };
-        if self.find(factory_for(kind), team).is_none() || self.money[team.index()] < stats.cost {
+        if !self.can_build(kind) || self.find(factory_for(kind), team).is_none() || self.money[team.index()] < stats.cost {
             return false;
         }
         self.money[team.index()] -= stats.cost;
         self.queues[team.index()].push_back(kind);
         log::info!("{team:?} ordered {kind} for {}", stats.cost);
         true
+    }
+
+    /// Whether this map's factories offer `kind` at all.
+    pub fn can_build(&self, kind: &str) -> bool {
+        self.build.as_ref().is_none_or(|b| b.iter().any(|k| k == kind))
+    }
+
+    /// Whether `team` has a factory that builds `kind` on this map.
+    pub fn offers(&self, team: Team, kind: &str) -> bool {
+        self.can_build(kind) && self.find(factory_for(kind), team).is_some()
+    }
+
+    /// A bridge spot with no bridge standing on it.
+    pub fn gap(&self, node: usize) -> bool {
+        let n = &self.nodes[node];
+        n.bridge_spot && !n.bridge.is_some_and(|b| self.entities[b].alive)
+    }
+
+    /// On a standing bridge deck: one cell long across the gap (the
+    /// original's `bridger_road` model is 10 by 5.8 units at its 0.1 model
+    /// scale), with a little room either side for the tracks.
+    pub fn on_bridge(&self, x: f32, y: f32) -> bool {
+        self.nodes.iter().filter_map(|n| n.bridge.filter(|&b| self.entities[b].alive).map(|_| n)).any(|n| {
+            let (dx, dy) = (x - n.x, y - n.y);
+            let (l, w) = (dx * n.dir.cos() + dy * n.dir.sin(), -dx * n.dir.sin() + dy * n.dir.cos());
+            l.abs() <= 0.6 && w.abs() <= 0.6
+        })
+    }
+
+    /// Ground a unit can drive onto: on the map, not blocking, or bridged.
+    fn ground_free(&self, x: f32, y: f32) -> bool {
+        if x < 0.0 || y < 0.0 {
+            return false;
+        }
+        let (cx, cy) = (x as usize, y as usize);
+        if cx >= self.width || cy * self.width + cx >= self.blocked.len() {
+            return false;
+        }
+        !self.blocked[cy * self.width + cx] || self.on_bridge(x, y)
+    }
+
+    /// The bridger `i` parks over gap `node` and becomes its bridge, as the
+    /// original's does when it finds a `bridgeable_spot` under it.
+    fn lay_bridge(&mut self, i: usize, node: usize) {
+        let (x, y, dir) = (self.nodes[node].x, self.nodes[node].y, self.nodes[node].dir);
+        let e = &mut self.entities[i];
+        e.class = Class::Bridge;
+        e.x = x;
+        e.y = y;
+        e.heading = dir;
+        e.next_node = None;
+        e.target = None;
+        e.order = Order::Hold;
+        let team = e.team;
+        self.nodes[node].bridge = Some(i);
+        log::info!("{team:?} bridge laid at ({x:.1},{y:.1})");
+        if team == Team::Player {
+            self.say("Bridge laid");
+        } else {
+            self.say("The enemy has bridged a crossing");
+        }
     }
 
     /// Switch the player's route at the junction nearest (x, y), within `reach`.
@@ -690,8 +787,9 @@ impl World {
         };
         let units: Vec<&'static str> = FORMATIONS[form].1.chars().filter_map(formation_unit).collect();
         if let Some(&kind) = units.get(self.ai_place) {
-            if self.find(factory_for(kind), Team::Enemy).is_none() {
-                // its factory is gone: skip rather than wait forever
+            if !self.can_build(kind) || self.find(factory_for(kind), Team::Enemy).is_none() {
+                // not built on this map, or its factory is gone: skip
+                // rather than wait forever
                 self.ai_place += 1;
             } else if self.order(Team::Enemy, kind) {
                 self.ai_place += 1;
@@ -846,9 +944,17 @@ impl World {
         self.entities[i].target = target;
 
         let kind = self.entities[i].kind.clone();
-        // specials: engineers capture, trikes and bomb trucks ram
+        // specials: engineers capture, trikes and bomb trucks ram, bridgers
+        // become a bridge over the first gap they reach
         if class == Class::Vehicle && kind == "engineer" && self.try_capture(i) {
             return;
+        }
+        if class == Class::Vehicle && kind == "bridger" {
+            let (x, y) = (self.entities[i].x, self.entities[i].y);
+            if let Some(n) = (0..self.nodes.len()).find(|&n| self.gap(n) && (self.nodes[n].x - x).hypot(self.nodes[n].y - y) <= 0.5) {
+                self.lay_bridge(i, n);
+                return;
+            }
         }
         if let Some(t) = target {
             let d = self.dist(i, t) - self.entities[t].radius();
@@ -865,7 +971,7 @@ impl World {
                     self.blasts.push(Blast { x, y, power: 2.0 });
                     return;
                 }
-                self.drive_towards(i, tx, ty, dt);
+                self.drive_off_route(i, tx, ty, dt);
                 return;
             }
             if let Some(w) = weapon {
@@ -881,7 +987,7 @@ impl World {
                 }
             }
             if class == Class::EnemyTank || matches!(order, Order::Attack(_)) {
-                self.drive_towards(i, tx, ty, dt);
+                self.drive_off_route(i, tx, ty, dt);
                 return;
             }
         }
@@ -891,7 +997,8 @@ impl World {
                 Order::Route => self.follow_path(i, dt),
                 Order::Hold => {}
                 Order::Move(x, y) => {
-                    if self.drive_towards(i, x, y, dt) {
+                    let (arrived, stuck) = self.drive_off_route(i, x, y, dt);
+                    if arrived || stuck {
                         self.entities[i].order = Order::Hold;
                     }
                 }
@@ -900,7 +1007,7 @@ impl World {
             Class::EnemyTank => {
                 let (hx, hy) = self.entities[i].home;
                 if (self.entities[i].x - hx).hypot(self.entities[i].y - hy) > 1.0 {
-                    self.drive_towards(i, hx, hy, dt);
+                    self.drive_off_route(i, hx, hy, dt);
                 }
             }
             _ => {}
@@ -950,6 +1057,21 @@ impl World {
         d - step < NODE_REACHED
     }
 
+    /// Driving anywhere but along a route: ground units stop at blocking
+    /// ground (water, rock) unless a bridge spans it. Returns (arrived, stuck).
+    fn drive_off_route(&mut self, i: usize, tx: f32, ty: f32, dt: f32) -> (bool, bool) {
+        let (px, py) = (self.entities[i].x, self.entities[i].y);
+        let arrived = self.drive_towards(i, tx, ty, dt);
+        let e = &self.entities[i];
+        if flies(&e.kind) || self.ground_free(e.x, e.y) || !self.ground_free(px, py) {
+            return (arrived, false);
+        }
+        let e = &mut self.entities[i];
+        e.x = px;
+        e.y = py;
+        (false, true)
+    }
+
     fn follow_path(&mut self, i: usize, dt: f32) {
         let team = self.entities[i].team;
         let Some(node) = self.entities[i].next_node else {
@@ -968,6 +1090,11 @@ impl World {
             return;
         };
         let (nx, ny) = (self.nodes[node].x, self.nodes[node].y);
+        // a gap stops everything on the ground but the bridger that spans it
+        let e = &self.entities[i];
+        if self.gap(node) && e.kind != "bridger" && !flies(&e.kind) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT {
+            return;
+        }
         if self.drive_towards(i, nx, ny, dt) {
             self.entities[i].next_node = self.next_after(node, team);
         }
@@ -1179,6 +1306,10 @@ impl World {
             _ => {}
         }
         log::info!("destroyed {team:?} {kind}");
+        if class == Class::Bridge {
+            self.say(if team == Team::Player { "Our bridge is down" } else { "Enemy bridge destroyed" });
+            return;
+        }
         // whether that decides the battle is the map's rules' call (`check_rules`)
         match (class, team) {
             (Class::Hq, Team::Enemy) => self.say("Enemy base destroyed!"),
@@ -1379,6 +1510,60 @@ mod rules {
             w.step(1.0 / 30.0);
         }
         assert_eq!(w.money[0], START_MONEY - 300);
+    }
+
+    /// A river across a small map, one bridge spot on the road over it.
+    fn river_map() -> World {
+        let mut tiles = String::new();
+        for y in 0..30 {
+            tiles.push_str(&(if y == 15 { "w" } else { "g" }).repeat(12));
+            tiles.push('\n');
+        }
+        let heights = format!("{}\n", "05".repeat(13)).repeat(31);
+        let mut objects = String::from("mainbasepad 1 6 28 0 4000\ngarage 1 3 27 0 1000\nmainbasepad 2 6 2 0 4000\n");
+        // nodes 3..=8 run north from the garage; node 6 sits on the river
+        for (k, y) in [26.5f32, 21.5, 18.5, 15.5, 12.5, 6.5].iter().enumerate() {
+            let n = 3 + k;
+            let a = if k < 5 { format!(" A:{}", n + 1) } else { String::new() };
+            let bridge = if n == 6 { " bridge" } else { "" };
+            objects.push_str(&format!("path_object 1 6.5 {y} 0 100{a}{bridge}\n"));
+        }
+        let q = "'''";
+        let text = format!(
+            "name = 'river'\nwidth = 12\nheight = 30\nbuild = ['peon_tank', 'bridger']\nlegend = {q}\ng 0 grassfull\nw 6 egyptwater1\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
+        );
+        World::from_level(&crate::cmap::parse(&text).unwrap().0)
+    }
+
+    #[test]
+    fn bridgers_span_gaps_and_units_wait_for_them() {
+        let mut w = river_map();
+        let spot = w.nodes.iter().position(|n| n.bridge_spot).unwrap();
+        assert!(w.gap(spot) && !w.on_bridge(6.5, 15.5));
+        assert!(!w.can_build("rocket_tank") && !w.order(Team::Player, "rocket_tank"));
+        assert!(w.order(Team::Player, "peon_tank"));
+        for _ in 0..30 * 60 {
+            w.step(1.0 / 30.0);
+        }
+        let peon = w.entities.iter().position(|e| e.kind == "peon_tank").unwrap();
+        assert!(w.entities[peon].y > 15.5 + GAP_WAIT - 0.1, "the peon waits south of the river, at {}", w.entities[peon].y);
+        // ordered straight across, it stops at the water
+        w.command(&[peon], Command::Move(6.5, 10.0));
+        for _ in 0..30 * 20 {
+            w.step(1.0 / 30.0);
+        }
+        assert!(w.entities[peon].y > 15.0, "no driving through the river");
+        w.command(&[peon], Command::Resume);
+        assert!(w.order(Team::Player, "bridger"));
+        for _ in 0..30 * 60 {
+            w.step(1.0 / 30.0);
+        }
+        let bridge = w.entities.iter().position(|e| e.class == Class::Bridge).expect("the bridger lays itself");
+        assert!(!w.gap(spot) && w.on_bridge(6.5, 15.5) && w.on_bridge(6.5, 16.0));
+        assert!(w.entities[peon].y < 15.0, "the peon crosses once the bridge is down");
+        // shot away, the gap opens again
+        w.hurt_inner(bridge, 1000.0);
+        assert!(w.gap(spot) && !w.on_bridge(6.5, 15.5));
     }
 
     #[test]

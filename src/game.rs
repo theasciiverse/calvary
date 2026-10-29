@@ -231,12 +231,24 @@ impl Game {
         log::info!("view {:?}", self.view);
     }
 
-    /// Order build slot `slot` (key 1-8) from the player's garage.
+    /// The build slots (indexes into `BUILDABLE`) the player's factories
+    /// offer on this map.
+    pub fn build_slots(&self) -> Vec<usize> {
+        (0..BUILDABLE.len()).filter(|&i| self.world.offers(Team::Player, BUILDABLE[i])).collect()
+    }
+
+    /// Order build slot `slot` (`BUILD_KEYS`) from the player's factories.
     pub fn order(&mut self, slot: usize) {
         let Some(&kind) = BUILDABLE.get(slot) else { return };
         if !self.world.order(Team::Player, kind) {
             let (factory, name) = if crate::world::flies(kind) { (Class::Airbase, "no airbase") } else { (Class::Garage, "no garage") };
-            let why = if self.world.find(factory, Team::Player).is_none() { name } else { "not enough money" };
+            let why = if !self.world.can_build(kind) {
+                "not on this map"
+            } else if self.world.find(factory, Team::Player).is_none() {
+                name
+            } else {
+                "not enough money"
+            };
             self.world.say(format!("Cannot build {}: {why}", kind.replace('_', " ")));
         }
     }
@@ -358,7 +370,8 @@ impl Game {
         let gear = self.tank.gear;
         let (px, py) = (self.tank.x, self.tank.y);
         let was_inside = self.world.blocks(px, py, 0.6);
-        self.tank.update(c, &self.terrain, DT);
+        let world = &self.world;
+        self.tank.update(c, &self.terrain, |x, y| world.on_bridge(x, y), DT);
         // buildings stop the supertank like rock does (a tank already inside
         // one, e.g. spawned there, may drive out)
         if !was_inside && self.world.blocks(self.tank.x, self.tank.y, 0.6) {

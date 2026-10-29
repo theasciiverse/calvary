@@ -10,6 +10,7 @@
 //! music = "Greece.mp3"          # optional, a file from data/music
 //! win = ["no_units 2"]          # optional, see `rules.rs` (default: destroy
 //! lose = ["no mainbasepad 1"]   # their HQ, lose ours)
+//! build = ["peon_tank", "bridger"]   # optional: what the factories offer
 //!
 //! # one printable character per tile type used on the map
 //! legend = '''
@@ -26,10 +27,12 @@
 //! 0505060a...
 //! '''
 //! # one object per line, in order; path links name other lines by index:
-//! # kind player x y theta health [A:i,j] [E:k]
+//! # kind player x y theta health [A:i,j] [E:k] [bridge]
+//! # (`bridge` marks a path node as a gap a bridger can span)
 //! objects = '''
 //! mainbasepad 1 7.5 107.5 0 4000
 //! path_object 1 9.9 104.6 0 100 A:577
+//! path_object 1 9.9 101.6 0 100 A:1 E:3 bridge
 //! '''
 //! ```
 //!
@@ -52,6 +55,8 @@ struct File {
     win: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     lose: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    build: Option<Vec<String>>,
     legend: String,
     tiles: String,
     heights: String,
@@ -106,6 +111,9 @@ pub fn export(level: &Level, name: &str, music: Option<&str>, name_of: impl Fn(&
         if !o.links_e.is_empty() {
             write!(objects, " E:{}", list(&o.links_e)).unwrap();
         }
+        if o.bridge {
+            objects.push_str(" bridge");
+        }
         objects.push('\n');
     }
     let (win, lose) = if level.rules.is_default() {
@@ -113,7 +121,7 @@ pub fn export(level: &Level, name: &str, music: Option<&str>, name_of: impl Fn(&
     } else {
         (level.rules.win.iter().map(|c| c.text()).collect(), level.rules.lose.iter().map(|c| c.text()).collect())
     };
-    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, legend, tiles, heights, objects };
+    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, build: level.build.clone(), legend, tiles, heights, objects };
     toml::to_string(&file).map_err(|e| e.to_string())
 }
 
@@ -173,8 +181,12 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
         let player: u8 = field("player")?.parse().map_err(|_| format!("objects line {n}: bad player"))?;
         let mut num = |what: &str| -> Result<f32, String> { field(what)?.parse().map_err(|_| format!("objects line {n}: bad {what}")) };
         let (x, y, theta, health) = (num("x")?, num("y")?, num("theta")?, num("health")?);
-        let mut o = ObjectRec { kind: if kind == "-" { String::new() } else { kind.to_string() }, x, y, z: 0.0, theta, health: health as i16, player, links_a: vec![], links_e: vec![] };
+        let mut o = ObjectRec { kind: if kind == "-" { String::new() } else { kind.to_string() }, x, y, z: 0.0, theta, health: health as i16, player, links_a: vec![], links_e: vec![], bridge: false };
         for extra in p {
+            if extra == "bridge" {
+                o.bridge = true;
+                continue;
+            }
             let (team, list) = extra.split_once(':').ok_or_else(|| format!("objects line {n}: bad link {extra:?}"))?;
             let ids: Vec<usize> = list.split(',').map(|i| i.parse().map_err(|_| format!("objects line {n}: bad link {extra:?}"))).collect::<Result<_, _>>()?;
             match team {
@@ -191,7 +203,10 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
     }
 
     let rules = crate::rules::Rules::parse(&f.win, &f.lose)?;
-    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules };
+    if let Some(bad) = f.build.iter().flatten().find(|k| crate::balance::unit(k).is_none()) {
+        return Err(format!("build: {bad:?} is not a unit"));
+    }
+    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules, build: f.build };
     Ok((level, f.name, f.music))
 }
 
@@ -238,5 +253,12 @@ mod tests {
         level.rules.lose.clear();
         let (back, _, _) = parse(&export(&level, "m", None, |_| None).unwrap()).unwrap();
         assert_eq!(back.rules.win, level.rules.win);
+        // so do bridge spots and the build list
+        let (level, _, _) = parse(&ok.replace("4000\n", "4000 bridge\n").replace("height = 1\n", "height = 1\nbuild = ['bridger']\n")).unwrap();
+        assert!(level.objects[0].bridge);
+        let (back, _, _) = parse(&export(&level, "m", None, |_| None).unwrap()).unwrap();
+        assert!(back.objects[0].bridge);
+        assert_eq!(back.build, Some(vec!["bridger".to_string()]));
+        assert!(parse(&ok.replace("height = 1\n", "height = 1\nbuild = ['tractor']\n")).unwrap_err().contains("tractor"));
     }
 }

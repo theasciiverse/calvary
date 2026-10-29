@@ -72,6 +72,11 @@ fn resolve(t: &TileInfo) -> Option<(Rgb, u32)> {
     }
 }
 
+/// A tile's flags, from the baked table for checksum-only tiles.
+pub fn tile_flags(t: &TileInfo) -> u32 {
+    resolve(t).map_or(t.flags, |(_, f)| f)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Cell {
     pub color: Rgb,

@@ -83,6 +83,8 @@ pub struct Input {
     drive_by_pad: bool,
     /// Build menu cursor for the pad (d-pad left/right, A builds).
     pub build_cursor: usize,
+    /// The build slots on offer, which the pad's build cursor steps through.
+    pub build_slots: Vec<usize>,
     /// D-pad up/down presses for menus (+1 = up); the game ignores them.
     pub menu_moves: i32,
     center_edge: bool,
@@ -136,6 +138,7 @@ impl Input {
             pad_rocket: false,
             drive_by_pad: false,
             build_cursor: 0,
+            build_slots: (0..crate::world::BUILDABLE.len()).collect(),
             menu_moves: 0,
             exit_app: false,
             center_edge: false,
@@ -213,9 +216,10 @@ impl Input {
             KeyCode::F(12) => self.toggle_film = true,
             KeyCode::Char('c') | KeyCode::Char('C') if !k.modifiers.contains(KeyModifiers::CONTROL) => self.center_edge = true,
             KeyCode::Char(c @ ('u' | 'U' | ',' | '.' | 'g' | 'G' | 'x' | 'X' | 'r' | 'R' | 'z' | 'Z')) => self.unit_key = Some(c.to_ascii_lowercase()),
-            KeyCode::Char(c @ '1'..='9') => self.build = Some(c as usize - '1' as usize),
-            KeyCode::Char('0') => self.build = Some(9),
-            KeyCode::Char('b') | KeyCode::Char('B') => self.build = Some(10),
+            KeyCode::Char(c @ ('0'..='9' | 'b' | 'B' | 'v' | 'V')) => {
+                let key = c.to_ascii_uppercase().to_string();
+                self.build = crate::world::BUILD_KEYS.iter().position(|k| *k == key);
+            }
             KeyCode::Char('+') | KeyCode::Char('=') => self.zoom_step += 1,
             KeyCode::Char('-') | KeyCode::Char('_') => self.zoom_step -= 1,
             KeyCode::Char('[') => self.level_step -= 1,
@@ -270,7 +274,9 @@ impl Input {
                     }
                     EventType::ButtonPressed(b, _) => {
                         log::debug!("pad button {b:?}");
-                        let slots = crate::world::BUILDABLE.len();
+                        let slots = &self.build_slots;
+                        let at = slots.iter().position(|&s| s == self.build_cursor).unwrap_or(0);
+                        let step = |d: usize| slots.get((at + d) % slots.len().max(1)).copied().unwrap_or(0);
                         match b {
                             Button::West => self.pad_rocket = true,
                             Button::RightThumb => self.toggle_lock = true,
@@ -280,8 +286,8 @@ impl Input {
                             Button::South => self.build = Some(self.build_cursor),
                             Button::East => self.switch_route = true,
                             Button::North => self.toggle_view = true,
-                            Button::DPadLeft => self.build_cursor = (self.build_cursor + slots - 1) % slots,
-                            Button::DPadRight => self.build_cursor = (self.build_cursor + 1) % slots,
+                            Button::DPadLeft => self.build_cursor = step(slots.len().max(1) - 1),
+                            Button::DPadRight => self.build_cursor = step(1),
                             Button::DPadUp => {
                                 self.menu_moves += 1;
                                 self.unit_key = Some('p');

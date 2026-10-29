@@ -210,6 +210,10 @@ data: `win = ["no_units 2"]`, `lose = ["no mainbasepad 1"]` (conditions:
 together win; the last supertank lost always loses. Left out, a map plays
 as before (lose your HQ, destroy theirs), and a condition already true
 when the battle starts is dropped, so sandbox maps without HQs never end.
+`build = ["peon_tank", "bridger"]` limits what the factories offer on that
+map (the original kept a `can_build` list on each garage), for both sides;
+the HUD lists only what is on offer, or "no factory: supertank only". A
+path line ending in `bridge` is a bridge spot.
 
 The map editor (`src/editor.rs`): `calvary --edit maps/x.cmap`, or
 `calvary --new NAME WxH TILE [PATH]` for a blank map (saved to
@@ -223,7 +227,8 @@ Arrows/WASD or the mouse move the cursor, Space or left click applies
 (hold the button to keep painting), `[` `]` brush, `,` `.` tile or object,
 T tile set (used, grass, greece, sea, snow, watr, egypt, france, rome,
 crom, lava, marsh, castle, temple, rock, alien), F tile flags (ground,
-water, blocking), P owner, U undo, Tab map view, +/- zoom, F2 save, Esc
+water, blocking), P owner, B makes the path node under the cursor a
+bridge spot (shown as a blinking dashed deck, ╳ on the map), U undo, Tab map view, +/- zoom, F2 save, Esc
 quit (twice when unsaved). Open ideas: test-play from inside the editor,
 object rotation, a tile-transition helper for coastlines.
 
@@ -297,7 +302,17 @@ object rotation, a tile-transition helper for coastlines.
    napalm/nuke/titanium; ammo, reloads and armour hit points from
    `def_stank_weapons`). Single-target weapons with a tick count (acid,
    napalm, electric beams) burn once per original tick. Still open:
-   bridger, units placed in `snow` that have no garage to come from.
+   units placed in `snow` that have no garage to come from.
+   The bridger (done 2026-10-29), after `objs/bridger.cpp`: a path node can
+   be a bridge spot (the original's `bridgeable_spot`, `bridge` in a
+   `.cmap`); a bridger that reaches one with no bridge parks over it and
+   becomes the bridge (the `bridger_road` deck, one cell long at the
+   original's 0.1 model scale), which anything can drive over and anyone
+   can shoot away, opening the gap again. Route units wait short of an
+   unbridged gap; units under orders stop at blocking ground (routes are
+   trusted as drawn); the supertank crosses blocking ground only on a
+   deck. Built at the garage with V (keys 1-8 as before); the original
+   used A, which drives here.
    Money as in the original: banks fill a crate every 500 ticks (up to
    10), and the money planes placed at each bank in the level fly the
    crates to the HQ, where they pay out; planes can be shot down, and
@@ -351,7 +366,7 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner and mission 1, Al Basrah. Three missions reuse the
+   the campaign runner and missions 1 and 2, Al Basrah and Shatt al-Arab. Three missions reuse the
    existing maps; the rest are new `.cmap` maps.
 9. **Follow mode (done) and first person (next)** (see Rendering).
 
@@ -394,8 +409,8 @@ python3 tools/tile_colors.py     # rebake data/tile_colors.tsv (needs Pillow)
 
 Controls: W/S throttle gear (sticky: R, N, 1, 2, 3, so driving works on
 terminals that never report key release), A/D turn, Q/E turret, SPACE main
-gun, F machine gun, ENTER rocket (two), 1-8 build at the garage, 9/0/B
-helicopter/jet/bomber at the airbase,
+gun, F machine gun, ENTER rocket (two), 1-8 build at the garage, V
+bridger, 9/0/B helicopter/jet/bomber at the airbase,
 J switch route at the nearest junction (or click a junction), unit
 commands (click/drag select, right-click to move or attack; U , . G X R Z), T turret lock (tracks the nearest
 enemy within 14 cells and aims shells at its height), TAB
@@ -535,6 +550,22 @@ tools/gen_al_basrah.py maps/al-basrah.cmap`, reproducible: fixed seed), a
 template for the next maps; once a map is touched up in the editor, the
 `.cmap` is the source.
 
+Mission 2, **Shatt al-Arab** (`maps/shatt-al-arab.cmap`, 110x100, from
+`tools/gen_shatt.py`, seed 2048): reed marsh north of Basrah cut by three
+channels from edge to edge. Our landing (HQ, garage, a bank with its money
+plane, so a spent war chest refills) in the south-west, the enemy's levee
+base (HQ, garage, no income) in the north-east. Two causeways split at a
+junction by our base and cross every channel at a one-cell narrows: six
+bridge spots. Builds: peon tanks and bridgers only, for both sides. Towers
+hold the far banks of the middle and last channels; the enemy's convoys
+mass behind the last unbridged gap of their lane. Win: their HQ; lose:
+ours. Balance probe: `cargo test --release shatt_al_arab_report --
+--ignored --nocapture` (`SUPERTANK=1` stands in for the supertank's work
+by clearing towers and armour each minute; then the west causeway is
+bridged and the base falls at about 6 minutes). The channels were
+checked with a flood fill when the map was made: no way round, and a way
+through either causeway once bridged.
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -602,12 +633,11 @@ has one complete battle (`test`, the Greek coast) and the first campaign
 mission, so its store page would still have to sell a story the player can
 barely start. Write the store page and README once Act 1 plays.
 
-Act I, what is left (2026-10-29): missions 2 to 7 (Shatt al-Arab marshes,
-Ur, Nakhayb, Babylon, the Euphrates line, Nineveh), each a new map; new
-win conditions (hold a site for a time, capture, convoy defence); a second
-hostile army for Nineveh (`Team` has one enemy today); the bridger for
-mission 2, which on our own maps can mark bridgeable path nodes in the
-`.cmap` rather than wait on decoding the original's Lisp variables.
+Act I, what is left (2026-10-29): missions 3 to 7 (Ur, Nakhayb, Babylon,
+the Euphrates line, Nineveh), each a new map; new win conditions (hold a
+site for a time, capture, convoy defence); a second hostile army for
+Nineveh (`Team` has one enemy today). Missions 1 and 2 are built but not
+yet played through by a person.
 
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,

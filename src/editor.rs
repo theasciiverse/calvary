@@ -6,7 +6,8 @@
 //! place objects; draw paths; erase objects. Arrows/WASD or the mouse move
 //! the cursor, Space or the left button applies (hold to keep applying),
 //! `[` `]` brush size, `,` `.` previous/next tile or object kind, T tile set,
-//! F tile flags (water/blocking), P owner, Enter ends a path chain, U undo,
+//! F tile flags (water/blocking), P owner, Enter ends a path chain, B marks
+//! the path node under the cursor as a bridge spot, U undo,
 //! Tab map view, +/- zoom, F2 save, Esc quit (twice if unsaved).
 
 use crate::cmap;
@@ -161,6 +162,7 @@ impl Editor {
             object_types: Vec::new(),
             objects: Vec::new(),
             rules: Default::default(),
+            build: None,
         }
     }
 
@@ -292,6 +294,7 @@ impl Editor {
                     player,
                     links_a: vec![],
                     links_e: vec![],
+                    bridge: false,
                 });
                 self.message = format!("placed {kind} ({})", OWNERS.iter().find(|o| o.0 == player).map_or("scenery", |o| o.1));
             }
@@ -315,6 +318,7 @@ impl Editor {
                             player: 1,
                             links_a: vec![],
                             links_e: vec![],
+                            bridge: false,
                         });
                         self.level.objects.len() - 1
                     }
@@ -329,7 +333,7 @@ impl Editor {
                     }
                 }
                 self.chain = Some(node);
-                self.message = "path: click the next node, Enter ends the chain".into();
+                self.message = "path: click the next node, Enter ends the chain, B on a node makes it a bridge spot".into();
             }
             Tool::Erase => {
                 if self.stroke_started && self.applying_repeat() {
@@ -507,6 +511,21 @@ pub fn run(terminal: &mut DefaultTerminal, mut ed: Editor) -> io::Result<()> {
                         ed.chain = None;
                         ed.message = "path chain ended".into();
                     }
+                    KeyCode::Char('b') => {
+                        // the path node under the cursor: a gap a bridger spans, or not
+                        let c = ed.cursor;
+                        match ed.level.objects.iter().position(|o| o.kind == "path_object" && (o.x - c.0).hypot(o.y - c.1) < 0.8) {
+                            Some(n) => {
+                                ed.snapshot();
+                                let o = &mut ed.level.objects[n];
+                                o.bridge = !o.bridge;
+                                ed.message = if o.bridge { "bridge spot: a bridger spans this node" } else { "bridge spot removed" }.into();
+                                ed.dirty = true;
+                                ed.rebuild = true;
+                            }
+                            None => ed.message = "B marks a path node as a bridge spot: put the cursor on one".into(),
+                        }
+                    }
                     KeyCode::Char('u') => match ed.undo.pop() {
                         Some(l) => {
                             ed.level = l;
@@ -592,7 +611,7 @@ mod tests {
     fn erase_renumbers_path_links() {
         let mut level = Editor::blank(10, 10, "grassfull");
         for x in 0..3 {
-            level.objects.push(ObjectRec { kind: "path_object".into(), x: x as f32, y: 1.0, z: 0.0, theta: 0.0, health: 100, player: 1, links_a: vec![], links_e: vec![] });
+            level.objects.push(ObjectRec { kind: "path_object".into(), x: x as f32, y: 1.0, z: 0.0, theta: 0.0, health: 100, player: 1, links_a: vec![], links_e: vec![], bridge: false });
         }
         level.objects[0].links_a = vec![1, 2];
         level.objects[2].links_e = vec![1, 0];
