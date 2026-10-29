@@ -64,12 +64,12 @@ def tile(x, y):
         return "p"
     if near(LANDING, cx, cy, 1.0):
         return "f"   # the Finns' flag where the trucks come ashore
+    if in_channel(cx, cy):
+        return "W"
     if cy > shore_y(cx, SOUTH_SHORE, 4) or cy < shore_y(cx, NORTH_SHORE, 5):
         if roads.dist(cx, cy) < 1.1:
             return "d" if abs(cy - SOUTH_SHORE) < 3 or abs(cy - NORTH_SHORE) < 3 else "s"
         return "w" if noise(cx, cy, 4) > 0.6 else ("o" if noise(cx + 20, cy, 3) > 0.72 else "S")
-    if in_channel(cx, cy):
-        return "W"
     isl = island(cx, cy)
     if isl > 0:
         return "o" if isl < 1.2 else ("w" if noise(cx, cy, 3) > 0.55 else "s")
@@ -85,7 +85,7 @@ def height(vx, vy):
         return 10 + min(isl, 5) * 3
     if vy > shore_y(vx, SOUTH_SHORE, 4) + 1 or vy < shore_y(vx, NORTH_SHORE, 5) - 1:
         return 14 + noise(vx, vy, 10) * 6
-    return 9
+    return 8 + noise(vx, vy, 3) * 3   # pressure ridges in the ice
 
 NORTH = -math.pi / 2
 m.obj("mainbasepad", 1, *CAMP, 0, 4000)

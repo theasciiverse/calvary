@@ -486,6 +486,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bring four of the six trucks over the ice to the Finnish shore. Lose three and it is over.",
     },
+    Mission {
+        act: 3,
+        number: 30,
+        title: "Helsinki",
+        map: include_str!("../maps/helsinki.cmap"),
+        briefing: &[
+            "Commander, Reid. The Finns kept their word, sir. Their army holds the",
+            "Senate Square and they are fighting beside us from today: white tanks,",
+            "blue stripe, do not shoot them. The Europeans hold Katajanokka over the",
+            "North Harbour, an airfield in Kallio, a battleship in the South Harbour",
+            "and a supergun out on Suomenlinna. The harbour is frozen; there is a",
+            "road over the ice. Their HQ goes, and nobody loses theirs.",
+        ],
+        objective: "Destroy the Europeans' HQ on Katajanokka. Neither our HQ nor the Finns' may fall.",
+    },
 ];
 
 /// The mission's map, parsed.
