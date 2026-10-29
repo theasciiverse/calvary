@@ -416,6 +416,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
         (c >= 0.0 && r >= 0.0 && (c as u16) < area.width && (r as u16) < area.height).then(|| (area.x + c as u16, area.y + r as u16))
     };
     let w = &g.world;
+    let t_fogged = |x: f32, y: f32| g.terrain.fogged(x, y);
     // the enemies' own roads, where ours do not run, in their colour
     for (i, n) in w.nodes.iter().enumerate() {
         for (links, team) in [(&n.links_e, Team::Enemy), (&n.links_r, Team::Rival), (&n.links_w, Team::Watchers)] {
@@ -427,7 +428,12 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
                 let steps = ((m.x - n.x).hypot(m.y - n.y) / (s * 0.8)).ceil().max(1.0) as usize;
                 for st in 0..=steps {
                     let t = st as f32 / steps as f32;
-                    if let Some(pos) = to_cell(n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t) {
+                    let (x, y) = (n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t);
+                    // roads show only where we have been
+                    if t_fogged(x, y) {
+                        continue;
+                    }
+                    if let Some(pos) = to_cell(x, y) {
                         if let Some(cell) = buf.cell_mut(pos) {
                             cell.set_char('·').set_fg(team_color(team));
                         }
@@ -445,7 +451,11 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             let steps = ((m.x - n.x).hypot(m.y - n.y) / (s * 0.8)).ceil().max(1.0) as usize;
             for st in 0..=steps {
                 let t = st as f32 / steps as f32;
-                if let Some(pos) = to_cell(n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t) {
+                let (x, y) = (n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t);
+                if t_fogged(x, y) {
+                    continue;
+                }
+                if let Some(pos) = to_cell(x, y) {
                     if let Some(cell) = buf.cell_mut(pos) {
                         cell.set_char('·').set_fg(if chosen { Color::Rgb(235, 235, 225) } else { Color::Rgb(120, 120, 115) });
                     }
@@ -453,7 +463,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
-    for n in w.nodes.iter().filter(|n| n.links_a.len() > 1) {
+    for n in w.nodes.iter().filter(|n| n.links_a.len() > 1 && !t_fogged(n.x, n.y)) {
         if let Some(pos) = to_cell(n.x, n.y) {
             if let Some(cell) = buf.cell_mut(pos) {
                 cell.set_char('◇').set_fg(Color::Rgb(250, 250, 240));

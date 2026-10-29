@@ -516,6 +516,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bridge the narrows and destroy the Europeans' HQ in the north. Keep ours standing.",
     },
+    Mission {
+        act: 3,
+        number: 32,
+        title: "Lapland",
+        map: include_str!("../maps/lapland.cmap"),
+        briefing: &[
+            "Commander, Reid. Lapland, and the sun does not come up here this time",
+            "of year. The Order has two camps somewhere north of us in the fells,",
+            "each with a factory, and their convoys come down over the frozen",
+            "lakes. Three roads out of camp and nobody can tell me where they go.",
+            "We will see what our tanks see and nothing else, sir. Mind the",
+            "reindeer.",
+        ],
+        objective: "Find and destroy the Order's two factories in the fells. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
