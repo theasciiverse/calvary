@@ -204,6 +204,9 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     for (_, n) in w.nodes.iter().enumerate().filter(|&(k, _)| w.gap(k)) {
         sprites::paint_gap(&mut layer, n.x, n.y, n.dir, g.time);
     }
+    for (team, x, y, r, secs, held) in w.sites() {
+        sprites::paint_site(&mut layer, x, y, r, (held / secs).min(1.0), team);
+    }
     // scenery first, then structures, then vehicles, aircraft on top
     for pass in 0..4 {
         for e in &w.entities {
@@ -355,6 +358,19 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
+    // sites to hold: a ring of dots, the part held so far bright
+    for (team, x, y, r, secs, held) in w.sites() {
+        let steps = (r * 8.0) as usize + 8;
+        for k in 0..steps {
+            let a = k as f32 / steps as f32 * std::f32::consts::TAU;
+            if let Some(pos) = to_cell(x + a.cos() * r, y + a.sin() * r) {
+                if let Some(cell) = buf.cell_mut(pos) {
+                    let lit = (k as f32) < steps as f32 * held / secs;
+                    cell.set_char(if lit { '●' } else { '·' }).set_fg(team_color(team));
+                }
+            }
+        }
+    }
     // gaps waiting for a bridger
     for (_, n) in w.nodes.iter().enumerate().filter(|&(k, _)| w.gap(k)) {
         if let Some(pos) = to_cell(n.x, n.y) {
@@ -410,7 +426,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     let value = |s: String| Span::styled(s, Style::default().fg(GREEN));
     let hp = g.tank_health();
     let hp_color = if hp > 0.5 { GREEN } else if hp > 0.25 { AMBER } else { Color::Rgb(235, 70, 55) };
-    let line1 = Line::from(vec![
+    let mut line1 = Line::from(vec![
         Span::styled(" CALVARY ", Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD)),
         // a recording film blinks its dot, like a camera
         if g.recording {
@@ -456,6 +472,11 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
             None => Span::raw(""),
         },
     ]);
+    for (team, _, _, _, secs, held) in w.sites() {
+        let (who, color) = if team == Team::Player { ("HOLD", AMBER) } else { ("ENEMY HOLD", team_color(Team::Enemy)) };
+        let text = if held >= secs { format!("  {who} done") } else { format!("  {who} {:.0}/{secs:.0}s", held.floor()) };
+        line1.spans.push(Span::styled(text, Style::default().fg(color).add_modifier(Modifier::BOLD)));
+    }
     let slots = g.build_slots();
     let mut build = if slots.is_empty() { vec![label(" no factory: supertank only")] } else { vec![label(" BUILD ")] };
     for (i, kind) in BUILDABLE.iter().enumerate().filter(|(i, _)| slots.contains(i)) {

@@ -11,7 +11,15 @@
 //! ```toml
 //! win = ["no_units 2"]          # player_has_no_units: nothing of player 2 left
 //! lose = ["no mainbasepad 1"]   # get_object_of_player is nil
+//! win = ["hold 1 55 42 4 90"]   # player 1 holds 4 cells round (55, 42) for 90 s
 //! ```
+//!
+//! Holding follows the original's trigger objects (`trigger_vars` in
+//! `scheme/classes.scm`: a range round a point, which team and which units
+//! set it off) and the `tick` every win and lose function was given: the
+//! clock runs while the player has ground units or a supertank inside and
+//! the other side has none, pauses while both are there or neither, and
+//! starts over when only the other side is. Once run out it stays won.
 //!
 //! The map is lost as soon as any `lose` condition holds, and won when every
 //! `win` condition holds. Losing the last supertank always loses (the
@@ -27,6 +35,9 @@ pub enum Cond {
     NoUnits(u8),
     /// `no KIND P`: player P has no KIND left (`get_object_of_player` is nil).
     No(String, u8),
+    /// `hold P X Y R SECS`: player P has held the ground within R of
+    /// (X, Y) for SECS seconds.
+    Hold { player: u8, x: f32, y: f32, r: f32, secs: f32 },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,7 +59,11 @@ impl Cond {
         match words.as_slice() {
             ["no_units", p] => Ok(Cond::NoUnits(player(p)?)),
             ["no", kind, p] => Ok(Cond::No(kind.to_string(), player(p)?)),
-            _ => Err(format!("condition {text:?}: want `no_units PLAYER` or `no KIND PLAYER`")),
+            ["hold", p, x, y, r, secs] => {
+                let num = |w: &str| w.parse::<f32>().map_err(|_| format!("condition {text:?}: bad number {w:?}"));
+                Ok(Cond::Hold { player: player(p)?, x: num(x)?, y: num(y)?, r: num(r)?, secs: num(secs)? })
+            }
+            _ => Err(format!("condition {text:?}: want `no_units PLAYER`, `no KIND PLAYER` or `hold PLAYER X Y RADIUS SECONDS`")),
         }
     }
 
@@ -56,6 +71,7 @@ impl Cond {
         match self {
             Cond::NoUnits(p) => format!("no_units {p}"),
             Cond::No(kind, p) => format!("no {kind} {p}"),
+            Cond::Hold { player, x, y, r, secs } => format!("hold {player} {x} {y} {r} {secs}"),
         }
     }
 
@@ -70,6 +86,7 @@ impl Cond {
                 let owned = owned(*p);
                 !w.entities.iter().any(|e| owned(e) && e.kind == *kind)
             }
+            Cond::Hold { secs, .. } => w.held_for(self) >= *secs,
         }
     }
 
@@ -83,6 +100,8 @@ impl Cond {
         match self {
             Cond::NoUnits(1) => "Nothing of ours is left on the field.".into(),
             Cond::NoUnits(_) => "Every enemy unit and tower is destroyed.".into(),
+            Cond::Hold { player: 1, .. } => "We held the site.".into(),
+            Cond::Hold { .. } => "The enemy held the site.".into(),
             Cond::No(kind, p) => {
                 let s = format!("{} {} is destroyed.", side(*p), name(kind));
                 let mut c = s.chars();
@@ -118,6 +137,8 @@ mod tests {
         assert!(Cond::parse("no_units").is_err());
         assert!(Cond::parse("no mainbasepad x").is_err());
         assert!(Cond::parse("hold 60").is_err());
+        assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap(), Cond::Hold { player: 1, x: 55.5, y: 42.0, r: 4.0, secs: 90.0 });
+        assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap().text(), "hold 1 55.5 42 4 90");
         assert!(Rules::parse(&[], &[]).unwrap().is_default());
     }
 

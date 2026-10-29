@@ -333,6 +333,10 @@ pub struct World {
     rules: crate::rules::Rules,
     /// What the factories may build (None: everything).
     build: Option<Vec<String>>,
+    /// Seconds each `hold` condition has been held, by its text, and who
+    /// was last on the site (for the radio messages).
+    hold_time: HashMap<String, f32>,
+    hold_side: HashMap<String, Option<Team>>,
     /// Blocking cells (the tile flag), row major, `width` wide: units under
     /// orders stop at them; routes are trusted as the map maker drew them.
     blocked: Vec<bool>,
@@ -449,6 +453,8 @@ impl World {
             verdict: String::new(),
             rules: level.rules.clone(),
             build: level.build.clone(),
+            hold_time: HashMap::new(),
+            hold_side: HashMap::new(),
             blocked,
             width: level.width,
             route_choice: HashMap::new(),
@@ -674,7 +680,74 @@ impl World {
         for e in &mut self.entities {
             e.flash = (e.flash - dt).max(0.0);
         }
+        self.step_holds(dt);
         self.check_rules();
+    }
+
+    /// Seconds a `hold` condition has been held so far.
+    pub fn held_for(&self, c: &crate::rules::Cond) -> f32 {
+        self.hold_time.get(&c.text()).copied().unwrap_or(0.0)
+    }
+
+    /// The map's sites to hold: (holder's team, x, y, radius, seconds
+    /// needed, seconds held).
+    pub fn sites(&self) -> Vec<(Team, f32, f32, f32, f32, f32)> {
+        self.rules
+            .win
+            .iter()
+            .chain(&self.rules.lose)
+            .filter_map(|c| match *c {
+                crate::rules::Cond::Hold { player, x, y, r, secs } => Some((Team::from_player(player), x, y, r, secs, self.held_for(c))),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Run the hold clocks: on while only the holder's ground units or
+    /// supertank are on the site, paused while both sides or neither are,
+    /// back to zero while only the other side is.
+    fn step_holds(&mut self, dt: f32) {
+        let conds: Vec<crate::rules::Cond> = self.rules.win.iter().chain(&self.rules.lose).filter(|c| matches!(c, crate::rules::Cond::Hold { .. })).cloned().collect();
+        for c in conds {
+            let crate::rules::Cond::Hold { player, x, y, r, secs } = c else { continue };
+            let key = c.text();
+            let t = self.held_for(&c);
+            if t >= secs {
+                continue;
+            }
+            let holder = Team::from_player(player);
+            let on_site = |team: Team| {
+                self.entities.iter().any(|e| {
+                    e.alive
+                        && e.team == team
+                        && matches!(e.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank)
+                        && !flies(&e.kind)
+                        && (e.x - x).hypot(e.y - y) <= r
+                })
+            };
+            let other = if holder == Team::Player { Team::Enemy } else { Team::Player };
+            let (ours, theirs) = (on_site(holder), on_site(other));
+            let side = match (ours, theirs) {
+                (true, false) => Some(holder),
+                (false, true) => Some(other),
+                _ => self.hold_side.get(&key).copied().flatten(),
+            };
+            let t = match (ours, theirs) {
+                (true, false) => t + dt,
+                (false, true) => 0.0,
+                _ => t,
+            };
+            self.hold_time.insert(key.clone(), t);
+            if self.hold_side.get(&key).copied().flatten() != side {
+                self.hold_side.insert(key, side);
+                match (side == Some(Team::Player), holder == Team::Player) {
+                    (true, true) => self.say(format!("We hold the site: {secs:.0} seconds to go")),
+                    (false, true) => self.say("The enemy is on the site: the clock is back to zero"),
+                    (true, false) => self.say("We have retaken the site"),
+                    (false, false) => self.say(format!("The enemy holds the site: {secs:.0} seconds and it is theirs")),
+                }
+            }
+        }
     }
 
     /// The map's conditions, losing first as in the original.
@@ -703,6 +776,15 @@ impl World {
             .map(|(i, _)| i)
     }
 
+    fn random_bank(&mut self, team: Team) -> Option<usize> {
+        let banks: Vec<usize> = (0..self.entities.len()).filter(|&b| self.entities[b].alive && self.entities[b].class == Class::Bank && self.entities[b].team == team).collect();
+        if banks.is_empty() {
+            return None;
+        }
+        let k = (self.rand() * banks.len() as f32) as usize;
+        Some(banks[k.min(banks.len() - 1)])
+    }
+
     /// Banks fill a crate every 500 ticks (up to 10, `crate_capacity`); the
     /// money only arrives when a money plane flies it to the HQ.
     fn economy(&mut self, dt: f32) {
@@ -729,8 +811,7 @@ impl World {
         let speed = balance::unit("moneyplane").map_or(0.2, |s| s.speed) * ORIGINAL_HZ;
         let bank = self.entities[i].bank.filter(|&b| self.entities[b].alive && self.entities[b].team == team);
         if bank.is_none() {
-            let (x, y) = (self.entities[i].x, self.entities[i].y);
-            self.entities[i].bank = self.nearest_bank(x, y, team);
+            self.entities[i].bank = self.random_bank(team);
         }
         let carrying = self.entities[i].crates > 0;
         let goal = if carrying { self.find(Class::Hq, team) } else { self.entities[i].bank };
@@ -750,6 +831,10 @@ impl World {
             let amount = e.crates;
             e.crates = 0;
             self.money[team.index()] += amount;
+            // the next trip goes to any bank of ours, picked at random as the
+            // original's plane does (`objs/moneyplane.cpp`), so captured
+            // banks pay too
+            self.entities[i].bank = self.random_bank(team);
             if team == Team::Player {
                 self.say(format!("Money received: ${amount}"));
                 self.radio("narrative/money_received_22khz.mp3");
@@ -1514,6 +1599,10 @@ mod rules {
 
     /// A river across a small map, one bridge spot on the road over it.
     fn river_map() -> World {
+        river_map_with("")
+    }
+
+    fn river_map_with(header: &str) -> World {
         let mut tiles = String::new();
         for y in 0..30 {
             tiles.push_str(&(if y == 15 { "w" } else { "g" }).repeat(12));
@@ -1530,9 +1619,47 @@ mod rules {
         }
         let q = "'''";
         let text = format!(
-            "name = 'river'\nwidth = 12\nheight = 30\nbuild = ['peon_tank', 'bridger']\nlegend = {q}\ng 0 grassfull\nw 6 egyptwater1\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
+            "name = 'river'\nwidth = 12\nheight = 30\n{header}build = ['peon_tank', 'bridger']\nlegend = {q}\ng 0 grassfull\nw 6 egyptwater1\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
         );
         World::from_level(&crate::cmap::parse(&text).unwrap().0)
+    }
+
+    #[test]
+    fn holding_a_site_runs_its_clock() {
+        let mut w = river_map_with("win = ['hold 1 6 22 3 10']\n");
+        let tick = |w: &mut World, secs: f32| {
+            for _ in 0..(secs * 30.0) as usize {
+                w.step(1.0 / 30.0);
+            }
+        };
+        let unit = |w: &mut World, team: Team, x: f32, y: f32| {
+            let mut e = Entity::shown("peon_tank", Class::Vehicle, team, 50.0);
+            (e.x, e.y, e.order) = (x, y, Order::Hold);
+            // unarmed for the test: nothing shoots
+            e.kind = "bridger".into();
+            w.entities.push(e);
+            w.entities.len() - 1
+        };
+        tick(&mut w, 2.0);
+        assert_eq!(w.sites()[0].5, 0.0, "nobody on the site");
+        let ours = unit(&mut w, Team::Player, 6.0, 21.0);
+        tick(&mut w, 4.0);
+        assert!((w.sites()[0].5 - 4.0).abs() < 0.2);
+        // both there: paused
+        let theirs = unit(&mut w, Team::Enemy, 7.0, 23.0);
+        tick(&mut w, 3.0);
+        assert!((w.sites()[0].5 - 4.0).abs() < 0.2);
+        // only theirs: back to zero
+        w.entities[ours].alive = false;
+        tick(&mut w, 1.0);
+        assert_eq!(w.sites()[0].5, 0.0);
+        w.entities[theirs].alive = false;
+        unit(&mut w, Team::Player, 6.0, 22.0);
+        tick(&mut w, 9.0);
+        assert_eq!(w.outcome, Outcome::Playing);
+        tick(&mut w, 1.5);
+        assert_eq!(w.outcome, Outcome::Won);
+        assert_eq!(w.verdict, "We held the site.");
     }
 
     #[test]

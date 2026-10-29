@@ -12,7 +12,8 @@ French castle, cathedral beams, Swiss skiers).
 
 Status: draft for discussion. Built: the campaign runner (briefings,
 result screens, saved progress, per-map win and lose rules), mission 1,
-Al Basrah, and mission 2, Shatt al-Arab, with the bridger (2026-10-29).
+Al Basrah, mission 2, Shatt al-Arab, with the bridger, and mission 3, Ur,
+with holding a site (2026-10-29).
 Three more missions reuse existing maps (marked **existing map**).
 
 ## The story
@@ -191,7 +192,7 @@ globe of the original's opening, and the stars.*
 
 - Three missions reuse the existing maps (12 Cairo, 15 Piraeus,
   23 Zurich); 37 need new maps, in the `.cmap` format with the map editor
-  (both built). Missions 1 and 2 are built.
+  (both built). Missions 1 to 3 are built.
 - The bridger (missions 2, 11, 31) is built: our maps mark bridgeable path
   nodes in the `.cmap` (`bridge`), so it needs no Lisp decoding; the
   original's own levels still carry theirs in undecoded Lisp variables.

@@ -210,6 +210,15 @@ data: `win = ["no_units 2"]`, `lose = ["no mainbasepad 1"]` (conditions:
 together win; the last supertank lost always loses. Left out, a map plays
 as before (lose your HQ, destroy theirs), and a condition already true
 when the battle starts is dropped, so sandbox maps without HQs never end.
+A third condition, `hold P X Y R SECS` (`win = ["hold 1 56 52 4 90"]`),
+follows the original's trigger objects (`trigger_vars` in
+`scheme/classes.scm`: a range round a point, which team and which units
+set it off) and the `tick` each win/lose function was given: the clock
+runs while P has ground units or a supertank within R and the other side
+has none, pauses while both or neither are there, and goes back to zero
+while only the other side is; once run out it stays. Sites show as a ring
+of posts that fills clockwise (a dotted ring on the map) and as `HOLD
+34/90s` in the HUD, with radio lines when the site changes hands.
 `build = ["peon_tank", "bridger"]` limits what the factories offer on that
 map (the original kept a `can_build` list on each garage), for both sides;
 the HUD lists only what is on offer, or "no factory: supertank only". A
@@ -316,7 +325,8 @@ object rotation, a tile-transition helper for coastlines.
    Money as in the original: banks fill a crate every 500 ticks (up to
    10), and the money planes placed at each bank in the level fly the
    crates to the HQ, where they pay out; planes can be shot down, and
-   with no HQ nothing arrives.
+   with no HQ nothing arrives. Each trip goes to one of the side's banks at
+   random (`objs/moneyplane.cpp`), so banks taken by engineers pay too.
 4. **Strategy layer (started).** Build bar in the HUD, J switches the
    route at the junction nearest the supertank, the strategy map draws the
    path network (chosen branches bright) and icons for every structure and
@@ -366,7 +376,8 @@ object rotation, a tile-transition helper for coastlines.
    following the original premise and music from Iraq through Egypt,
    Greece, Italy, the Alps, France, Germany and Austria to Scandinavia and
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
-   the campaign runner and missions 1 and 2, Al Basrah and Shatt al-Arab. Three missions reuse the
+   the campaign runner and missions 1 to 3, Al Basrah, Shatt al-Arab and
+   Ur. Three missions reuse the
    existing maps; the rest are new `.cmap` maps.
 9. **Follow mode (done) and first person (next)** (see Rendering).
 
@@ -559,12 +570,26 @@ junction by our base and cross every channel at a one-cell narrows: six
 bridge spots. Builds: peon tanks and bridgers only, for both sides. Towers
 hold the far banks of the middle and last channels; the enemy's convoys
 mass behind the last unbridged gap of their lane. Win: their HQ; lose:
-ours. Balance probe: `cargo test --release shatt_al_arab_report --
+ours. Balance probe: `MISSION=2 cargo test --release mission_report --
 --ignored --nocapture` (`SUPERTANK=1` stands in for the supertank's work
-by clearing towers and armour each minute; then the west causeway is
-bridged and the base falls at about 6 minutes). The channels were
+by clearing towers and armour each minute and parking it on the site to
+hold, if any; on Shatt al-Arab the west causeway is then bridged and the
+base falls at about 6 minutes). The channels were
 checked with a flood fill when the map was made: no way round, and a way
 through either causeway once bridged.
+
+Mission 3, **Ur** (`maps/ur.cmap`, 110x100, from `tools/gen_ur.py`, seed
+1922 for Woolley's first season there): desert and ruined walls round the
+ziggurat, three mud-brick terraces whose edges (about two cells of rise a
+cell) stop the supertank, with a stair up the south face it can climb.
+Calloway's dig, tents and trenches at the stair's foot. Our camp
+south-west, theirs north-east, each with a bank and money plane; three
+neutral banks along the two roads (west, and past the dig and the east
+side) for engineers. Builds: peon tanks, rocket tanks, engineers. Two
+turrets on the first terrace cover the dig. Win: `hold 1 56 52 4 90`;
+lose: our HQ. The probe (`MISSION=3 SUPERTANK=1`) wins at about 4
+minutes; without the supertank the enemy reaches 15 to 20 units and the
+dig is never held.
 
 ## Films (`src/film.rs`)
 
@@ -633,11 +658,11 @@ has one complete battle (`test`, the Greek coast) and the first campaign
 mission, so its store page would still have to sell a story the player can
 barely start. Write the store page and README once Act 1 plays.
 
-Act I, what is left (2026-10-29): missions 3 to 7 (Ur, Nakhayb, Babylon,
-the Euphrates line, Nineveh), each a new map; new win conditions (hold a
-site for a time, capture, convoy defence); a second hostile army for
-Nineveh (`Team` has one enemy today). Missions 1 and 2 are built but not
-yet played through by a person.
+Act I, what is left (2026-10-29): missions 4 to 7 (Nakhayb, Babylon, the
+Euphrates line, Nineveh), each a new map; capture and convoy-defence
+conditions; a second hostile army for Nineveh (`Team` has one enemy
+today). Missions 1 to 3 are built but not yet played through by a
+person.
 
 As of 2026-10-04: opening and title (textured Earth, regions per battle,
 credits), a full battle on `test` with units, economy, air, upgrades,

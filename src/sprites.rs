@@ -466,6 +466,26 @@ fn paint_deck(layer: &mut PixelLayer, cx: f32, cy: f32, dir: f32, hl: f32, hw: f
     });
 }
 
+/// A site to hold: a ring of marker posts round it, the share held so far
+/// (clockwise from north) in the holder's colour, the rest dim.
+pub fn paint_site(layer: &mut PixelLayer, cx: f32, cy: f32, r: f32, held: f32, team: Team) {
+    let lit = palette(team).body;
+    let posts = (r * 6.0).round().max(8.0);
+    let size = (layer.pixel_size() * 1.2).max(0.14);
+    layer.paint(cx, cy, r + size, |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        if (dx.hypot(dy) - r).abs() > size {
+            return None;
+        }
+        // angle clockwise from north, 0..1
+        let a = (dx.atan2(-dy) / std::f32::consts::TAU).rem_euclid(1.0);
+        if ((a * posts).fract() - 0.5).abs() > 0.3 {
+            return None;
+        }
+        Some((if a < held { lit } else { (70, 66, 58) }, false))
+    });
+}
+
 /// A gap waiting for a bridger: a blinking dashed outline of the deck.
 pub fn paint_gap(layer: &mut PixelLayer, cx: f32, cy: f32, dir: f32, time: f32) {
     if (time * 2.0).fract() > 0.7 {

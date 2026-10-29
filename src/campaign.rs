@@ -75,6 +75,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bridge the channels and destroy the enemy HQ. Keep ours standing.",
     },
+    Mission {
+        act: 0,
+        number: 3,
+        title: "Ur",
+        map: include_str!("../maps/ur.cmap"),
+        briefing: &[
+            "Commander, this is Ur. Dr. Calloway's first dig is at the foot of the",
+            "ziggurat, and Command wants it in our hands before anyone else goes",
+            "through her trenches. Hold the dig for ninety seconds with nothing of",
+            "theirs on it. There are banks along both roads: an engineer takes one,",
+            "and our money planes fly its crates home. Their engineers know that too.",
+            "Guns on the ziggurat's first terrace cover the dig. Mind them, sir.",
+        ],
+        objective: "Hold Calloway's dig for 90 seconds. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -378,27 +393,34 @@ mod tests {
         assert_eq!(w.outcome, Outcome::Playing);
     }
 
-    /// Balance probe for Shatt al-Arab: `cargo test --release
-    /// shatt_al_arab_report -- --ignored --nocapture`. A scripted player
-    /// orders a bridger a minute and a peon every 20 s; with
-    /// `SUPERTANK=1` the enemy towers and armour are cleared every minute
-    /// from 2:00, standing in for the supertank's work.
+    /// Balance probe for a mission: `MISSION=3 cargo test --release
+    /// mission_report -- --ignored --nocapture` (default mission 2). A
+    /// scripted player orders a bridger a minute where the map offers them,
+    /// and every 20 s the next of the map's other units; with `SUPERTANK=1`
+    /// the enemy towers and armour are cleared every minute from 2:00 and
+    /// the supertank parks on the map's site to hold, standing in for the
+    /// supertank's work.
     #[test]
     #[ignore]
-    fn shatt_al_arab_report() {
-        let (level, _, _) = map(&MISSIONS[1]).unwrap();
+    fn mission_report() {
+        let n: usize = std::env::var("MISSION").ok().and_then(|m| m.parse().ok()).unwrap_or(2);
+        let (level, _, _) = map(&MISSIONS[n - 1]).unwrap();
         let mut w = World::from_level(&level);
         let supertank = std::env::var("SUPERTANK").is_ok();
+        let units: Vec<&'static str> = crate::world::BUILDABLE.iter().copied().filter(|k| *k != "bridger" && w.offers(Team::Player, k)).collect();
         for s in 0..900 {
             if s % 60 == 5 {
                 w.order(Team::Player, "bridger");
             }
-            if s % 20 == 0 {
-                w.order(Team::Player, "peon_tank");
+            if s % 20 == 0 && !units.is_empty() {
+                w.order(Team::Player, units[(s / 20) % units.len()]);
             }
             if supertank && s >= 120 && s % 60 == 0 {
                 for e in w.entities.iter_mut().filter(|e| e.team == Team::Enemy && matches!(e.class, Class::Tower | Class::Vehicle)) {
                     e.alive = false;
+                }
+                if let (Some(t), Some(site)) = (w.player_tank, w.sites().first().copied()) {
+                    (w.entities[t].x, w.entities[t].y) = (site.1, site.2);
                 }
             }
             for _ in 0..30 {
@@ -406,9 +428,20 @@ mod tests {
             }
             if s % 60 == 59 {
                 let units = |t: Team| w.entities.iter().filter(|e| e.alive && e.class == Class::Vehicle && e.team == t).count();
+                let banks = |t: Team| w.entities.iter().filter(|e| e.alive && e.class == Class::Bank && e.team == t).count();
                 let gaps = (0..w.nodes.len()).filter(|&n| w.gap(n)).count();
                 let towers = w.entities.iter().filter(|e| e.alive && e.class == Class::Tower).count();
-                println!("{:>3}s ours {:>2} theirs {:>2} gaps {gaps} towers {towers} money {:?} {:?}", s + 1, units(Team::Player), units(Team::Enemy), w.money, w.outcome);
+                let held: Vec<String> = w.sites().iter().map(|s| format!("{:.0}/{:.0}", s.5, s.4)).collect();
+                println!(
+                    "{:>3}s ours {:>2} theirs {:>2} banks {}/{} gaps {gaps} towers {towers} held {held:?} money {:?} {:?}",
+                    s + 1,
+                    units(Team::Player),
+                    units(Team::Enemy),
+                    banks(Team::Player),
+                    banks(Team::Enemy),
+                    w.money,
+                    w.outcome
+                );
             }
         }
     }
