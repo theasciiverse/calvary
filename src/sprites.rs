@@ -260,6 +260,7 @@ pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
         Class::PlayerTank => {}
         Class::Plane => paint_plane(layer, e, pal),
         Class::Prop => paint_prop(layer, e),
+        Class::Relic => paint_relic(layer, e, time),
         _ if !e.alive => paint_rubble(layer, e),
         _ => paint_structure(layer, e, pal, time),
     }
@@ -645,6 +646,30 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         // roof ridge / deck line
         let c = if w.abs() < hw * 0.18 { shade(color, 0.78) } else if w > 0.0 { shade(color, 0.9) } else { color };
         Some((c, false))
+    });
+}
+
+pub const RELIC_GOLD: Rgb = (214, 168, 58);
+pub const RELIC_GLOW: Rgb = (255, 238, 170);
+
+/// A relic (Calvary's own): a small gilded casket. Lying on the ground it
+/// glows in a slow pulse so it can be found; carried, it rides on its
+/// carrier.
+fn paint_relic(layer: &mut PixelLayer, e: &Entity, time: f32) {
+    let (cx, cy) = if e.carrier.is_some() { (e.x, e.y - 0.55) } else { (e.x, e.y) };
+    let pulse = 0.5 + 0.5 * (time * 2.5).sin();
+    let lying = e.carrier.is_none();
+    layer.paint(cx, cy, 1.0, |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        if dx.abs() <= 0.3 && dy.abs() <= 0.2 {
+            let c = if dy < -0.08 { RELIC_GLOW } else if dx.abs() > 0.22 { shade(RELIC_GOLD, 0.75) } else { RELIC_GOLD };
+            return Some((c, true));
+        }
+        let r = dx.hypot(dy);
+        if lying && (0.62..=0.62 + 0.18 * pulse + 0.06).contains(&r) {
+            return Some((mix(RELIC_GOLD, RELIC_GLOW, pulse), false));
+        }
+        None
     });
 }
 

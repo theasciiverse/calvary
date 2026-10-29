@@ -90,7 +90,7 @@ class Map:
     def roads(self, roads):
         self.objects += roads.lines(len(self.objects))
 
-    def write(self, path, legend, tiles, heights, music, win, lose, build=None, money=None):
+    def write(self, path, legend, tiles, heights, music, win, lose, build=None, money=None, night=False):
         """`tiles(x, y)` gives a legend character per cell, `heights(vx, vy)`
         a height byte per vertex."""
         grid = ["".join(tiles(x, y) for x in range(self.w)) for y in range(self.h)]
@@ -101,6 +101,8 @@ class Map:
             head.append(f"build = {q(build)}")
         if money:
             head.append(f"money = [{', '.join(map(str, money))}]")
+        if night:
+            head.append("night = true")
         legend_text = "\n".join(f"{c} {f} {n}" for c, f, n in legend)
         nl = "\n"
         text = "\n".join(head) + f"\nlegend = '''\n{legend_text}\n'''\ntiles = '''\n{nl.join(grid)}\n'''\nheights = '''\n{nl.join(hrows)}\n'''\nobjects = '''\n{nl.join(self.objects)}\n'''\n"

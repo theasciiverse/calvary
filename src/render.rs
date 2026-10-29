@@ -221,16 +221,16 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
                 Class::Prop | Class::Bridge | Class::Pad => 0,
                 Class::Vehicle if flies(&e.kind) => 3,
                 Class::Vehicle | Class::EnemyTank | Class::PlayerTank => 2,
-                Class::Plane => 3,
+                Class::Plane | Class::Relic => 3,
                 _ => 1,
             };
-            if p == pass && (e.alive || p == 1) {
+            if p == pass && (e.alive || p == 1) && w.seen(e) {
                 sprites::paint_entity(&mut layer, e, g.time);
             }
         }
     }
     for e in &w.entities {
-        if e.class != Class::PlayerTank {
+        if e.class != Class::PlayerTank && w.seen(e) {
             sprites::paint_health(&mut layer, e);
         }
     }
@@ -248,12 +248,69 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
         sprites::paint_vehicle(&mut layer, sprites::SUPERTANK, sprites::PLAYER, pose);
     }
     layer.flush(f.buffer_mut(), &g.terrain);
+    night(f.buffer_mut(), area, g);
     if let Some(pos) = g.crosshair {
         if let Some(cell) = f.buffer_mut().cell_mut(pos) {
             cell.set_char('╋').set_fg(AMBER);
         }
     }
     draw_messages(f, area, g);
+}
+
+/// A map fought at night (`night = true`): the ground dark and cold, lit
+/// round our own units, buildings and the supertank, while fire, lava and
+/// shots keep glowing. The follow view, which has no way back from a screen
+/// cell to the ground, is dimmed evenly.
+pub fn night(buf: &mut ratatui::buffer::Buffer, area: Rect, g: &Game) {
+    if !g.world.night {
+        return;
+    }
+    let mut lights: Vec<(f32, f32, f32)> = g
+        .world
+        .entities
+        .iter()
+        .filter(|e| e.alive && e.team == Team::Player && !matches!(e.class, Class::Prop | Class::Relic | Class::PlayerTank))
+        .map(|e| (e.x, e.y, if e.class == Class::Vehicle { 4.0 } else { 5.0 + e.radius() }))
+        .collect();
+    lights.push((g.tank.x, g.tank.y, 7.0));
+    let ground = |col: u16, row: u16| -> Option<(f32, f32)> {
+        let (c, r) = ((col - area.x) as f32 + 0.5, (row - area.y) as f32 + 0.5);
+        match g.view {
+            View::Tactical => {
+                let cols = ZOOMS[g.zoom];
+                let o = g.camera?;
+                Some((o.0 + c / cols, o.1 + r * 2.0 / cols))
+            }
+            View::Strategy => {
+                let (s, ox, oy) = strategy_fit(area, &g.terrain);
+                Some((c * s - ox, r * 2.0 * s - oy))
+            }
+            View::Chase => None,
+        }
+    };
+    let glows = |(r, _, b): (u8, u8, u8)| (r >= 190 && r as i32 - b as i32 >= 90) || (b >= 230 && r < 180);
+    let dim = |c: Color, l: f32| match c {
+        Color::Rgb(r, gg, b) if !glows((r, gg, b)) => {
+            let k = |v: u8, m: f32| (v as f32 * l * m).min(255.0) as u8;
+            Color::Rgb(k(r, 0.8), k(gg, 0.88), (b as f32 * l + 22.0 * (1.0 - l)).min(255.0) as u8)
+        }
+        c => c,
+    };
+    for row in area.y..area.y + area.height {
+        for col in area.x..area.x + area.width {
+            let l = match ground(col, row) {
+                Some((x, y)) => {
+                    let lit = lights.iter().map(|&(lx, ly, r)| (1.0 - (x - lx).hypot(y - ly) / r).clamp(0.0, 1.0)).fold(0.0f32, f32::max);
+                    0.36 + 0.64 * lit * lit * (3.0 - 2.0 * lit)
+                }
+                None => 0.45,
+            };
+            if let Some(cell) = buf.cell_mut((col, row)) {
+                let (fg, bg) = (dim(cell.fg, l), dim(cell.bg, l));
+                cell.set_fg(fg).set_bg(bg);
+            }
+        }
+    }
 }
 
 /// Shots lobbed high on an arc, with the radius they hit when they land.
@@ -347,6 +404,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
+    night(buf, area, g);
     let to_cell = |x: f32, y: f32| {
         let (c, r) = ((x + ox) / s, (y + oy) / s / 2.0);
         (c >= 0.0 && r >= 0.0 && (c as u16) < area.width && (r as u16) < area.height).then(|| (area.x + c as u16, area.y + r as u16))
@@ -424,7 +482,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             }
         }
     }
-    for e in w.entities.iter().filter(|e| e.alive && e.class != Class::Prop) {
+    for e in w.entities.iter().filter(|e| e.alive && e.class != Class::Prop && w.seen(e)) {
         let glyph = match e.class {
             Class::Hq => 'H',
             Class::Garage => 'G',
@@ -436,6 +494,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             Class::Plane => '+',
             Class::Bridge => '=',
             Class::Pad => 'P',
+            Class::Relic => '◈',
             Class::Vehicle if flies(&e.kind) => '+',
             _ => '•',
         };
@@ -443,6 +502,12 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             if let Some(cell) = buf.cell_mut(pos) {
                 cell.set_char(glyph).set_fg(team_color(e.team)).set_bg(Color::Black);
             }
+        }
+    }
+    // relics last, in gold, over whoever carries them
+    for e in w.entities.iter().filter(|e| e.alive && e.class == Class::Relic) {
+        if let Some(cell) = to_cell(e.x, e.y).and_then(|pos| buf.cell_mut(pos)) {
+            cell.set_char('◈').set_fg(Color::Rgb(255, 214, 90)).set_bg(Color::Black);
         }
     }
     for &i in &g.selected {
@@ -589,6 +654,7 @@ pub fn draw_view(f: &mut Frame, area: Rect, g: &Game) {
         View::Strategy => draw_strategy(f, area, g),
         View::Chase => {
             crate::chase::draw(f.buffer_mut(), area, g);
+            night(f.buffer_mut(), area, g);
             draw_messages(f, area, g);
         }
     }
@@ -681,6 +747,7 @@ pub fn draw(f: &mut Frame, g: &Game) {
         View::Strategy => draw_strategy(f, map, g),
         View::Chase => {
             crate::chase::draw(f.buffer_mut(), map, g);
+            night(f.buffer_mut(), map, g);
             if let Some(pos) = g.crosshair {
                 if let Some(cell) = f.buffer_mut().cell_mut(pos) {
                     cell.set_char('╋').set_fg(AMBER);

@@ -69,6 +69,9 @@ pub struct Level {
     /// Starting money for players 1, 2, 5 and 6 (`.cmap` only; the original's
     /// `start.scm` gives everyone 10000). None: that.
     pub money: Option<[i32; 4]>,
+    /// Fought at night (`.cmap` only): dark ground, enemies seen only near
+    /// our own.
+    pub night: bool,
 }
 
 /// One object from the level: the base fields every Golgotha object saves.
@@ -298,7 +301,7 @@ impl Level {
             Err(_) => Vec::new(),
         };
 
-        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects, rules: Default::default(), build: None, money: None })
+        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects, rules: Default::default(), build: None, money: None, night: false })
     }
 
     pub fn tile(&self, cx: usize, cy: usize) -> &TileInfo {

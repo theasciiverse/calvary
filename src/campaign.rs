@@ -320,6 +320,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Hold the dig at Herculaneum for two minutes. Keep the HQ standing.",
     },
+    Mission {
+        act: 2,
+        number: 19,
+        title: "Pompeii",
+        map: include_str!("../maps/pompeii.cmap"),
+        briefing: &[
+            "Commander, Reid. Pompeii, and it is dark, and the ash is still coming",
+            "down. In 2047 Calloway found a bronze casket under the Villa of the",
+            "Mysteries, outside the Herculaneum Gate, and had it walled back in. The",
+            "Europeans have her report. They are camped south-west of the town and",
+            "they will go for it tonight. Whoever reaches it carries it; whoever",
+            "kills the carrier can pick it up. We see nothing past our own lights.",
+        ],
+        objective: "Bring the casket from the Villa of the Mysteries to our HQ. Do not let the Europeans take it to theirs.",
+    },
 ];
 
 /// The mission's map, parsed.

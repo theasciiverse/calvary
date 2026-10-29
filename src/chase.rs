@@ -210,7 +210,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
     };
 
     for e in &g.world.entities {
-        if e.class == Class::PlayerTank {
+        if e.class == Class::PlayerTank || !g.world.seen(e) {
             continue;
         }
         // nothing standing between the camera and the tank: it would hide it
@@ -235,6 +235,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Plane => (0.5, 0.25, 3.0, pal.body, pal.front),
             Class::Bridge => (0.5, 0.1, 0.0, sprites::BRIDGE_SIDE, sprites::BRIDGE_TOP),
             Class::Pad => (0.9, 0.12, 0.0, (120, 118, 112), pal.body),
+            Class::Relic => (0.3, 0.35, if e.carrier.is_some() { 0.7 } else { 0.0 }, sprites::RELIC_GOLD, sprites::RELIC_GLOW),
             Class::Vehicle if flies(k) => (0.5, 0.3, 3.0, pal.body, pal.front),
             Class::Vehicle | Class::EnemyTank => (e.radius() * 0.9, 0.55, 0.0, pal.body, pal.turret),
             Class::Prop if k == "giant_skull" => (0.9, 0.8, 0.0, (196, 186, 162), sprites::BONE),

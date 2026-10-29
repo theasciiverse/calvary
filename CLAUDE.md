@@ -272,7 +272,7 @@ turrets, tents and reed huts), B makes the path node under the cursor a
 bridge spot (shown as a blinking dashed deck, ╳ on the map), L whose
 roads the path tool draws (ours, which the enemy also drives back along;
 the rival's, `R:`; the enemy's own, forward; drawn white, blue and red),
-I the map's rules in a prompt (win, lose, build, money, music; Tab steps
+I the map's rules in a prompt (win, lose, build, money, music, night; Tab steps
 through them, Enter sets one, a mistake is shown and nothing changes),
 F5 test-play the map as it stands (F6: the supertank at the cursor; Esc
 or even Ctrl+C comes back to the editor, unsaved work kept), U undo, Tab map view, +/- zoom, F2 save, Esc

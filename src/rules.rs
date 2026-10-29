@@ -148,6 +148,8 @@ impl Cond {
             Cond::Time(_) => "We held out long enough.".into(),
             Cond::Hold { player: 1, .. } => "We held the site.".into(),
             Cond::Hold { .. } => "The enemy held the site.".into(),
+            Cond::Reach { player: 1, kind, n: 1, .. } => format!("The {} is ours.", name(kind)),
+            Cond::Reach { kind, n: 1, .. } => format!("The enemy took the {} home.", name(kind)),
             Cond::Reach { player: 1, kind, n, .. } => format!("{n} {}s got through.", name(kind)),
             Cond::Reach { kind, n, .. } => format!("{n} enemy {}s got through.", name(kind)),
             Cond::Lost { player: 1, kind, n } => format!("We lost {n} {}s: too few can get through.", name(kind)),

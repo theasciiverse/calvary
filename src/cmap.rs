@@ -12,6 +12,7 @@
 //! lose = ["no mainbasepad 1"]   # their HQ, lose ours)
 //! build = ["peon_tank", "bridger"]   # optional: what the factories offer
 //! money = [10000, 5000, 5000]   # optional: starting money, players 1, 2, 5 (and 6)
+//! night = true                  # optional: fought at night
 //!
 //! # one printable character per tile type used on the map
 //! legend = '''
@@ -62,6 +63,8 @@ struct File {
     build: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     money: Option<Vec<i32>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    night: bool,
     legend: String,
     tiles: String,
     heights: String,
@@ -132,7 +135,7 @@ pub fn export(level: &Level, name: &str, music: Option<&str>, name_of: impl Fn(&
     } else {
         (level.rules.win.iter().map(|c| c.text()).collect(), level.rules.lose.iter().map(|c| c.text()).collect())
     };
-    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, build: level.build.clone(), money: level.money.map(|m| if m[3] == crate::world::START_MONEY { m[..3].to_vec() } else { m.to_vec() }), legend, tiles, heights, objects };
+    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, build: level.build.clone(), money: level.money.map(|m| if m[3] == crate::world::START_MONEY { m[..3].to_vec() } else { m.to_vec() }), night: level.night, legend, tiles, heights, objects };
     toml::to_string(&file).map_err(|e| e.to_string())
 }
 
@@ -228,7 +231,7 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
         Some([a, b, c, d]) => Some([*a, *b, *c, *d]),
         Some(_) => return Err("money: three amounts (players 1, 2, 5) or four (and 6)".into()),
     };
-    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules, build: f.build, money };
+    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules, build: f.build, money, night: f.night };
     Ok((level, f.name, f.music))
 }
 

@@ -31,7 +31,7 @@ use flate2::write::GzEncoder;
 use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 
-const CLASSES: [(Class, &str); 12] = [
+const CLASSES: [(Class, &str); 13] = [
     (Class::Hq, "hq"),
     (Class::Garage, "garage"),
     (Class::Airbase, "airbase"),
@@ -43,6 +43,7 @@ const CLASSES: [(Class, &str); 12] = [
     (Class::Plane, "plane"),
     (Class::Bridge, "bridge"),
     (Class::Pad, "pad"),
+    (Class::Relic, "relic"),
     (Class::Prop, "prop"),
 ];
 const TEAMS: [(Team, &str); 6] = [(Team::Player, "p"), (Team::Enemy, "e"), (Team::Rival, "r"), (Team::Watchers, "w"), (Team::Neutral, "n"), (Team::Scenery, "s")];

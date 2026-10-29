@@ -66,6 +66,11 @@ const LAVA_DPS: f32 = 10.0;
 const VOLCANO_RANGE: f32 = 14.0;
 const LAVA_BOMB_DAMAGE: f32 = 60.0;
 const LAVA_BOMB_RADIUS: f32 = 1.5;
+/// A relic is picked up from this close, and draws route units from this far.
+const RELIC_REACH: f32 = 1.5;
+const RELIC_LURE: f32 = 8.0;
+/// At night an enemy vehicle shows only this close to something of ours.
+pub const NIGHT_SIGHT: f32 = 9.0;
 
 /// What the garage (keys 1-8, V) and the airbase (9, 0, B) offer, in the
 /// order the HUD lists them.
@@ -167,6 +172,9 @@ pub enum Class {
     /// turret for its new side; nobody can take it while that turret stands.
     /// It cannot be shot itself.
     Pad,
+    /// A relic (Calvary's own): it cannot be shot; a ground unit or a
+    /// supertank that reaches it carries it, and drops it where it dies.
+    Relic,
     Prop,
 }
 
@@ -221,6 +229,8 @@ pub struct Entity {
     pub held: bool,
     pub order: Order,
     home: (f32, f32),
+    /// A relic: the unit carrying it.
+    pub carrier: Option<usize>,
 }
 
 impl Entity {
@@ -247,6 +257,7 @@ impl Entity {
             held: false,
             order: Order::Route,
             home: (0.0, 0.0),
+            carrier: None,
         }
     }
 
@@ -260,12 +271,13 @@ impl Entity {
             Class::Plane => 0.45,
             Class::Bridge => 0.5,
             Class::Pad => 1.0,
+            Class::Relic => 0.4,
             Class::Prop => 0.5,
         }
     }
 
     pub fn is_target(&self) -> bool {
-        self.alive && !matches!(self.class, Class::Prop | Class::Pad)
+        self.alive && !matches!(self.class, Class::Prop | Class::Pad | Class::Relic)
     }
 
     fn stats(&self) -> Option<&'static balance::UnitStats> {
@@ -387,6 +399,8 @@ pub struct World {
     lava: Vec<bool>,
     /// Volcano craters, and the time to each one's next bomb.
     pub volcanoes: Vec<(f32, f32, f32)>,
+    /// Fought at night: enemy vehicles are seen only near our own.
+    pub night: bool,
     width: usize,
     /// Junction choices: path node -> which of its links new units take.
     pub route_choice: HashMap<usize, usize>,
@@ -466,6 +480,7 @@ impl World {
                 "airbase" => Class::Airbase,
                 "bank" => Class::Bank,
                 "takeover_pad" => Class::Pad,
+                "relic" => Class::Relic,
                 "tower_electric" | "tower_missile" | "turret" | "popup_turret" | "verybiggun" | "supergun" | "gunport" | "base_launcher" => Class::Tower,
                 "stank" if team == Team::Player => {
                     if player_tank.is_some() {
@@ -482,7 +497,11 @@ impl World {
             entities.push(Entity {
                 kind: o.kind.clone(),
                 class,
-                team: if class == Class::Prop { Team::Scenery } else { team },
+                team: match class {
+                    Class::Prop => Team::Scenery,
+                    Class::Relic => Team::Neutral,
+                    _ => team,
+                },
                 x: o.x,
                 y: o.y,
                 heading: o.theta,
@@ -500,6 +519,7 @@ impl World {
                 held: false,
                 order: Order::Route,
                 home: (o.x, o.y),
+                carrier: None,
             });
         }
         let mut w = World {
@@ -521,6 +541,7 @@ impl World {
             blocked,
             lava,
             volcanoes,
+            night: level.night,
             width: level.width,
             route_choice: HashMap::new(),
             points: 0,
@@ -747,6 +768,7 @@ impl World {
             }
         }
         self.step_lava(dt);
+        self.step_relics();
         self.step_bolts(dt);
         self.step_burns(dt);
         for e in &mut self.entities {
@@ -1049,6 +1071,7 @@ impl World {
                 held: false,
                 order: Order::Route,
                 home: (gx, gy),
+                carrier: None,
             });
             self.deploy_timer[t] = DEPLOY_INTERVAL;
             if team != Team::Player {
@@ -1429,6 +1452,68 @@ impl World {
         }
     }
 
+    /// Relics (Calvary's own): picked up by the first ground unit or supertank
+    /// to reach one, carried home, dropped where the carrier dies. Route
+    /// units passing near one lying on the ground go and get it.
+    fn step_relics(&mut self) {
+        for r in 0..self.entities.len() {
+            if self.entities[r].class != Class::Relic || !self.entities[r].alive {
+                continue;
+            }
+            if let Some(c) = self.entities[r].carrier {
+                if self.entities[c].alive {
+                    (self.entities[r].x, self.entities[r].y) = (self.entities[c].x, self.entities[c].y);
+                } else {
+                    (self.entities[r].carrier, self.entities[r].team) = (None, Team::Neutral);
+                }
+                continue;
+            }
+            let (rx, ry) = (self.entities[r].x, self.entities[r].y);
+            let carrier = (0..self.entities.len()).find(|&j| {
+                let e = &self.entities[j];
+                e.alive && e.team.fights() && matches!(e.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank) && !flies(&e.kind) && (e.x - rx).hypot(e.y - ry) <= RELIC_REACH
+            });
+            if let Some(c) = carrier {
+                let team = self.entities[c].team;
+                (self.entities[r].carrier, self.entities[r].team) = (Some(c), team);
+                if team == Team::Player {
+                    self.radio("narrative/building_captured_22khz.mp3");
+                }
+                self.say(if team == Team::Player { "We have the relic! Bring it home" } else { "The enemy has the relic!" });
+                // the carrier heads home; whoever else was going for it goes back to its road
+                if self.entities[c].class == Class::Vehicle {
+                    let home = self.find(Class::Hq, team).or_else(|| self.find(Class::Garage, team)).map(|h| (self.entities[h].x, self.entities[h].y));
+                    if let Some((hx, hy)) = home {
+                        self.entities[c].order = Order::Move(hx, hy);
+                    }
+                }
+                for j in 0..self.entities.len() {
+                    if j != c && self.entities[j].order == Order::Move(rx, ry) {
+                        let (x, y, team) = (self.entities[j].x, self.entities[j].y, self.entities[j].team);
+                        self.entities[j].order = Order::Route;
+                        self.entities[j].next_node = self.nearest_node(x, y, team, true);
+                    }
+                }
+                continue;
+            }
+            for j in 0..self.entities.len() {
+                let e = &self.entities[j];
+                if e.alive && e.class == Class::Vehicle && e.order == Order::Route && !e.held && !flies(&e.kind) && e.team.fights() && (e.x - rx).hypot(e.y - ry) <= RELIC_LURE {
+                    self.entities[j].order = Order::Move(rx, ry);
+                }
+            }
+        }
+    }
+
+    /// Whether the player can see `e`: always, except an enemy vehicle at
+    /// night with nothing of ours near it.
+    pub fn seen(&self, e: &Entity) -> bool {
+        if !self.night || !e.team.hostile(Team::Player) || !matches!(e.class, Class::Vehicle | Class::EnemyTank | Class::Plane) {
+            return true;
+        }
+        self.entities.iter().any(|o| o.alive && o.team == Team::Player && o.class != Class::Relic && (o.x - e.x).hypot(o.y - e.y) <= NIGHT_SIGHT)
+    }
+
     /// A volcanic bomb comes down: it hurts every side alike.
     fn lava_bomb(&mut self, x: f32, y: f32) {
         for j in 0..self.entities.len() {
@@ -1536,8 +1621,18 @@ impl World {
             return;
         }
         let (class, team, kind, x, y, r) = (e.class, e.team, e.kind.clone(), e.x, e.y, e.radius());
+        // a relic falls where its carrier does (a supertank respawns, so
+        // waiting for it to be gone would carry the relic home)
+        for k in 0..self.entities.len() {
+            if self.entities[k].class == Class::Relic && self.entities[k].carrier == Some(j) {
+                let relic = &mut self.entities[k];
+                (relic.carrier, relic.team, relic.x, relic.y) = (None, Team::Neutral, x, y);
+                self.say(if team == Team::Player { "We lost the relic: it is on the ground" } else { "The enemy dropped the relic" });
+            }
+        }
         if class == Class::PlayerTank {
             // the supertank respawns at the HQ while lives remain
+            let e = &mut self.entities[j];
             e.hp = e.max_hp;
             self.blasts.push(Blast { x, y, power: 2.5 });
             self.sound("explosion/generic.mp3", Some((x, y)), 1.0);
@@ -1553,7 +1648,7 @@ impl World {
             }
             return;
         }
-        e.alive = false;
+        self.entities[j].alive = false;
         self.blasts.push(Blast { x, y, power: 1.0 + r });
         let boom = if matches!(class, Class::Vehicle | Class::EnemyTank | Class::Plane) { "explosion/ground_vehicle.mp3" } else { "explosion/generic.mp3" };
         self.sound(boom, Some((x, y)), 1.0);
@@ -1796,6 +1891,56 @@ mod rules {
             "name = 'river'\nwidth = 12\nheight = 30\n{header}build = ['peon_tank', 'bridger']\nlegend = {q}\ng 0 grassfull\nw 6 egyptwater1\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
         );
         World::from_level(&crate::cmap::parse(&text).unwrap().0)
+    }
+
+    #[test]
+    fn relics_are_carried_home_and_dropped_where_the_carrier_dies() {
+        let tiles = format!("{}\n", "g".repeat(30)).repeat(30);
+        let heights = format!("{}\n", "05".repeat(31)).repeat(31);
+        let q = "'''";
+        let objects = "mainbasepad 1 5 25 0 4000\nmainbasepad 2 25 5 0 4000\nrelic 0 15 15 0 100\n";
+        let text = format!(
+            "name = 'relic'\nwidth = 30\nheight = 30\nnight = true\nwin = ['reach 1 relic 5 25 3 1']\nlegend = {q}\ng 0 grassfull\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
+        );
+        let mut w = World::from_level(&crate::cmap::parse(&text).unwrap().0);
+        let relic = w.entities.iter().position(|e| e.class == Class::Relic).unwrap();
+        assert!(!w.entities[relic].is_target(), "a relic cannot be shot");
+        let unit = |w: &mut World, team: Team, x: f32, y: f32| {
+            // unarmed: nothing shoots
+            let mut e = Entity::shown("bridger", Class::Vehicle, team, 50.0);
+            (e.x, e.y, e.order) = (x, y, Order::Route);
+            w.entities.push(e);
+            w.entities.len() - 1
+        };
+        let theirs = unit(&mut w, Team::Enemy, 15.0, 22.0);
+        assert!(!w.seen(&w.entities[theirs]), "at night, nothing of ours near it");
+        let ours = unit(&mut w, Team::Player, 15.0, 22.0);
+        assert!(w.seen(&w.entities[theirs]));
+        w.entities[theirs].alive = false;
+        w.step(1.0 / 30.0);
+        assert_eq!(w.entities[ours].order, Order::Move(15.0, 15.0), "a route unit nearby goes for it");
+        for _ in 0..(15 * 30) {
+            w.step(1.0 / 30.0);
+            if w.entities[relic].carrier.is_some() {
+                break;
+            }
+        }
+        assert_eq!((w.entities[relic].carrier, w.entities[relic].team), (Some(ours), Team::Player));
+        assert_eq!(w.entities[ours].order, Order::Move(5.0, 25.0), "and takes it home");
+        for _ in 0..(3 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        let at = (w.entities[ours].x, w.entities[ours].y);
+        w.hurt_inner(ours, 1000.0);
+        assert_eq!((w.entities[relic].carrier, w.entities[relic].team), (None, Team::Neutral));
+        assert_eq!((w.entities[relic].x, w.entities[relic].y), at, "dropped where the carrier died");
+        // a fresh carrier brings it in: the map is won
+        let again = unit(&mut w, Team::Player, at.0, at.1);
+        for _ in 0..(40 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!(w.entities[relic].carrier, Some(again));
+        assert_eq!(w.outcome, Outcome::Won);
     }
 
     #[test]
