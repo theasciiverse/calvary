@@ -276,6 +276,19 @@ its levels used, are measured from their `.gmod` (3.7 by 1.4 and 2.3 by
 1.15 cells at the 0.1 model scale; these two stand Y-up): the carrier is
 an airbase at sea, the battleship a gun on the gunport row (b120mm, 500
 health).
+Holy sites (`world::holy`: the original's `jerustemple1` and
+`templebigfull3x4`, drawn as a domed house of prayer and the Temple Mount
+with its golden dome, and the cathedral) cannot be destroyed, but every
+shot landing on one counts against whoever fired it; `harm P N` holds
+once player P has hit them N times (the HUD shows `HOLY n/N`). Our units
+and our allies' hold fire when their shot would land on one, so the rule
+mostly tests the player's own aim (the original had no such zones).
+Rubble (`rubble`, Calvary's own) blocks a road and anything that drives,
+the supertank included, 1.8 cells round, until an engineer of any side
+comes up and clears it; units on a road wait at it. The keyhole
+(`keyhole`, Calvary's own, player 6 on our map, 5000 health, a structure
+units do not take on by themselves) raises an awake Nephilim beside it
+every 40 s, up to six, while it stands.
 A second hostile army (`Team::Rival`, steel blue) is player 5 in a
 `.cmap` (the original levels use players 3 and 4 for scenery, so those
 stay scenery); it follows its own path links, `R:` beside `A:` and `E:`
@@ -307,7 +320,8 @@ crom, lava, marsh, castle, temple, rock, alien), F tile flags (ground,
 water, blocking), P owner (the place tool also has takeover pads,
 turrets, tents and reed huts, superguns, volcanoes, cornices, relics,
 the cathedral and the original's `francecastle`, the original's carrier
-and battleship, Nephilim and reindeer; owners include the allies), B makes the path node under the cursor a
+and battleship, Nephilim and reindeer, the Jerusalem temples and wall
+pieces, rubble and the keyhole; owners include the allies), B makes the path node under the cursor a
 bridge spot (shown as a blinking dashed deck, ╳ on the map), L whose
 roads the path tool draws (ours, which the enemy also drives back along;
 the rival's, `R:`; the enemy's own, forward; drawn white, blue and red),
@@ -486,8 +500,10 @@ object rotation, a tile-transition helper for coastlines.
    back to Jerusalem: see `CAMPAIGN.md` and "Campaign" below. Built:
    the campaign runner, Act I (missions 1 to 7, Iraq), Act II
    (missions 8 to 14, the Levant and Egypt), Act III (missions 15 to
-   27, Greece to Vienna) and Act IV (missions 28 to 35, Berlin to
-   Jotunheimen). Cairo, Piraeus and Zurich are the original's
+   27, Greece to Vienna), Act IV (missions 28 to 35, Berlin to
+   Jotunheimen) and Act V (missions 36 to 40, Cyprus to the keyhole
+   under Golgotha), then the epilogue and the credits: the campaign is
+   complete. Cairo, Piraeus and Zurich are the original's
    own levels; the rest are new `.cmap` maps, made by `tools/gen_*.py`
    (from Act II on, on the shared `tools/mapgen.py`) and checked with
    `tools/check_map.py` (reachability over non-blocking ground, nothing
@@ -908,6 +924,35 @@ again: unchanged but Alexandria (now `CLEAR_FROM=60`).
   `SPARE=nephilim` its parked supertank is stamped flat, as a driven one
   need not be).
 
+Act V, **Golgotha** (2026-10-29), Cyprus to the keyhole, all but Cyprus
+on the Jerusalem track:
+
+- 36, **Cyprus** (`gen_cyprus.py`): the Americans hold Limassol, Akrotiri
+  and Kolossi castle (the `francecastle`); we land at Paphos with the
+  Finns. Their HQ. Stalemate alone; won at 5.
+- 37, **Jaffa** (`gen_jaffa.py`): the landing under the old town, the
+  three armies from the north, south and east; take the old town and
+  hold it two minutes. Lost at 14; won at 4.
+- 38, **The walls of Jerusalem** (`gen_walls.py`): the Old City in the
+  original's Jerusalem tiles and wall pieces, the Temple Mount and four
+  churches, every army at a gate. Hold seven minutes; `harm 1 3` loses.
+  Lost at 4; held.
+- 39, **The dig** (`gen_dig.py`): Calloway's trench zigzagging into the
+  hill, five falls of rubble, each checked to close the way alone, the
+  Order's guns in side cuts; the supertank to the chamber
+  (`reach 1 stank`). Lost at 5; won at 6 (the stand-in drives the
+  supertank down once no rubble is left).
+- 40, **Beneath the place of the skull** (`gen_skull.py`): alien-crust
+  caverns in the dark, three tunnels to the great hall and the keyhole,
+  giants sealed in the rock beside the tunnels. Destroy the keyhole. Lost
+  at 3; the army takes it at 4 (`SPARE=keyhole`: the stand-in's clearing
+  would otherwise take the keyhole with the towers).
+
+After the last win: the epilogue (`campaign::epilogue`), the press
+conference of the original's Act 1 Scene 1 answered by Kruese over the
+turning globe to the splash theme, then the credits to Jerusalem
+(`title::Start::Credits`).
+
 ## Films (`src/film.rs`)
 
 F12 in a battle starts and stops recording a film (a blinking REC in the
@@ -971,7 +1016,7 @@ if not already done.)
 
 **Not at launch (David, 2026-10-27):** Calvary is held back from the
 Asciiverse launch until at least the campaign's first act is built. As of
-2026-10-29 Acts I to IV (35 missions) are built, but not yet played through by
+2026-10-29 the whole campaign (five acts, 40 missions, and the epilogue) is built, but not yet played through by
 a person. README.md, LICENSE (MIT, as the other Asciiverse titles), the
 store page and manifest (`hub/catalog/calvary.md`, `.toml`; year 1998, the
 original's, so neither OLD! nor NEW!) and the 100x30 preview
@@ -980,7 +1025,7 @@ with hub's `tools/castrec.py`) were written 2026-10-29, at David's
 request. Smallest playable size: 100x30 (at 80 columns the battle HUD
 loses the ammunition counts).
 
-Acts I to IV are built (2026-10-29): missions 1 to 35, each with its
+All five acts are built (2026-10-29): missions 1 to 40, each with its
 own map, rules and briefing. None has been played through by a person
 yet; the balance comes from the mission probe only.
 

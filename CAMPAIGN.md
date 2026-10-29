@@ -22,8 +22,10 @@ missions 15 to 27, with superguns, bombers, lava and a volcano, a night
 battle, relic races, avalanches and the Order's own chateau and
 factories; and all of Act IV, missions 28 to 35, with sea ice that
 breaks, a carrier, the Finns as allies, fog of war, reindeer, the
-Order's supertank and the Nephilim themselves (2026-10-29). Three
-missions use the original's own levels
+Order's supertank and the Nephilim themselves; and all of Act V,
+missions 36 to 40, with holy places as no-fire zones, rubble only
+engineers clear, the keyhole, and the epilogue (2026-10-29): the
+campaign is complete. Three missions use the original's own levels
 (marked **existing map**).
 
 ## The story
@@ -187,34 +189,38 @@ were never graves. They were beds."*
 *Transmission: "You want to know what we found? We found that she was
 right."*
 
-36. **Cyprus**: Greek coast; Greece. Staging for the last voyage;
-   rebuild the army with everything saved so far.
+36. **Cyprus**: Greek coast; Greece. Staging for the last voyage: take
+   Limassol harbour from the Americans, with the Finns and everything
+   saved so far in the holds.
 37. **Jaffa**: sand + coast; Jerusalem. Landing under fire from all
-   three sides.
-38. **The walls of Jerusalem**: Jerusalem walls + temple models;
-   Jerusalem. Hold the city's walls, do not damage them (holy sites are
-   no-fire zones: a scoring rule, not a gimmick).
-39. **The dig**: `jerusdig` model, temple; Jerusalem. Calloway's trench
-   under Golgotha; engineers clear the way down.
-40. **Beneath the place of the skull**: alien crust + moon set;
-   Jerusalem, then the splash theme. The keyhole. Close it.
+   three sides; take the old town and hold it.
+38. **The walls of Jerusalem**: the original's Jerusalem tiles, wall
+   pieces and temples; Jerusalem. Hold the Old City seven minutes; the
+   holy places are no-fire zones, three hits of ours and it is lost.
+39. **The dig**: Jerusalem rock; Jerusalem. Calloway's trench under
+   Golgotha, five falls of rubble that only engineers clear; get the
+   supertank to the chamber.
+40. **Beneath the place of the skull**: alien crust + moon; Jerusalem.
+   The caverns in the dark and the keyhole the forty sites locked; the
+   Nephilim rise from it until it is destroyed.
 
 *Epilogue: the press conference. "What really happened at the Golgotha
-site, Lieutenant?" Kruese looks into the cameras. Fade to the spinning
-globe of the original's opening, and the stars.*
+site, Lieutenant?" Kruese answers, over the turning globe, to the splash
+theme; then the credits.*
 
 ## Build notes
 
 - Three missions reuse the existing maps (12 Cairo, 15 Piraeus,
   23 Zurich); 37 need new maps, in the `.cmap` format with the map editor
-  (both built). Acts I to IV, missions 1 to 35, are built.
+  (both built). All five acts, missions 1 to 40, are built.
 - The bridger (missions 2, 11, 31) is built: our maps mark bridgeable path
   nodes in the `.cmap` (`bridge`), so it needs no Lisp decoding; the
   original's own levels still carry theirs in undecoded Lisp variables.
   Lava damage, a volcano, night, avalanches and the relic races are built
   (Act III); sea ice, allies, fog of war, the carrier and battleship, the
-  Nephilim and reindeer too (Act IV); holy-site no-fire zones are not.
+  Nephilim and reindeer too (Act IV); holy-site no-fire zones, rubble
+  and the keyhole (Act V).
 - Briefings: Kruese's transmission fragments open each act, Reid's radio
   lines frame each mission; the original radio voice clips cover the
   battle barks.
-- Music: 14 of the 15 tracks are placed; the splash theme closes the game.
+- Music: all 15 tracks are placed; the splash theme plays the epilogue.
