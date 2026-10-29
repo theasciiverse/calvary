@@ -263,10 +263,11 @@ pub fn paint_entity(layer: &mut PixelLayer, e: &Entity, time: f32) {
         Class::Bridge => paint_deck(layer, e.x, e.y, e.heading, BRIDGE_HALF_LEN, BRIDGE_HALF_WID, e.flash > 0.0),
         Class::PlayerTank => {}
         Class::Plane => paint_plane(layer, e, pal),
-        Class::Prop => paint_prop(layer, e),
+        Class::Prop => paint_prop(layer, e, time),
         Class::Relic => paint_relic(layer, e, time),
         _ if !e.alive => paint_rubble(layer, e),
         _ if matches!(e.kind.as_str(), "aircraftcarrier" | "battleship") => paint_warship(layer, e, pal),
+        _ if e.kind == "keyhole" => paint_keyhole(layer, e, time),
         _ => paint_structure(layer, e, pal, time),
     }
 }
@@ -587,7 +588,7 @@ fn paint_rubble(layer: &mut PixelLayer, e: &Entity) {
 }
 
 /// Scenery from the level, by the model name.
-fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
+fn paint_prop(layer: &mut PixelLayer, e: &Entity, time: f32) {
     let k = e.kind.as_str();
     let (cx, cy, th) = (e.x, e.y, e.heading);
     let has = |s: &str| k.contains(s);
@@ -597,6 +598,10 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
     }
     if k == "reindeer" {
         paint_reindeer(layer, e);
+        return;
+    }
+    if k == "jerustemple1" || k == "templebigfull3x4" || k == "rubble" {
+        paint_jerusalem(layer, e, time);
         return;
     }
     if k == "francecastle" {
@@ -686,6 +691,9 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         (1.1, 0.38, (92, 98, 110), true)
     } else if has("greecehouses") {
         (0.5, 0.42, (204, 98, 72), false)
+    } else if k.starts_with("jeruswall") {
+        // the original's Jerusalem wall pieces, 2 cells long at its 0.1 scale
+        (1.0, 0.33, (188, 162, 120), true)
     } else if has("wall") {
         (0.9, 0.22, (172, 124, 98), true)
     } else if has("tent") {
@@ -819,6 +827,94 @@ fn paint_reindeer(layer: &mut PixelLayer, e: &Entity) {
         // antlers, a thin fork either side of the head
         let antler = (0.24..0.38).contains(&a) && (c.abs() - (a - 0.24) * 1.4).abs() < 0.04;
         antler.then_some(((196, 180, 150), true))
+    });
+}
+
+/// Jerusalem's holy places and the dig's rubble. The original's
+/// `jerustemple1` (one cell at its 0.1 scale): a stone house of prayer under
+/// a grey dome. Its `templebigfull3x4` (3 by 4 cells) drawn as the Temple
+/// Mount: a pale stone esplanade, the octagon in blue tile, the golden
+/// dome. Holy sites flash when a shot lands on them. Rubble (Calvary's
+/// own): a pile of broken stone.
+fn paint_jerusalem(layer: &mut PixelLayer, e: &Entity, time: f32) {
+    let (cx, cy, th) = (e.x, e.y, e.heading);
+    let (hx, hy) = (th.cos(), th.sin());
+    let hit = e.flash > 0.0 && (time * 12.0).sin() > 0.0;
+    let lit = move |c: Rgb| if hit { mix(c, (255, 80, 60), 0.6) } else { c };
+    match e.kind.as_str() {
+        "jerustemple1" => layer.paint(cx, cy, 0.75, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let (a, c) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+            if a.abs() > 0.5 || c.abs() > 0.5 {
+                return None;
+            }
+            let r = a.hypot(c);
+            let col = if r < 0.06 {
+                (226, 222, 210)
+            } else if r < 0.3 {
+                if dx + dy < 0.0 { (150, 150, 146) } else { (112, 112, 110) }
+            } else if a.abs() > 0.42 || c.abs() > 0.42 {
+                (150, 128, 96)
+            } else {
+                (198, 176, 136)
+            };
+            Some((lit(col), false))
+        }),
+        "templebigfull3x4" => layer.paint(cx, cy, 2.6, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let (a, c) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+            if a.abs() > 2.0 || c.abs() > 1.5 {
+                return None;
+            }
+            let r = a.hypot(c);
+            // an octagon: the larger of the box and its diagonal box
+            let oct = a.abs().max(c.abs()).max((a.abs() + c.abs()) / std::f32::consts::SQRT_2);
+            let col = if r < 0.42 {
+                if (dx - dy) < -0.1 { (255, 226, 120) } else { (214, 168, 58) }
+            } else if oct < 0.72 {
+                (70, 110, 168)
+            } else if oct < 0.8 {
+                (226, 220, 200)
+            } else if a.abs() > 1.85 || c.abs() > 1.35 {
+                (160, 140, 108)
+            } else {
+                (212, 200, 172)
+            };
+            Some((lit(col), false))
+        }),
+        _ => layer.paint(cx, cy, 1.1, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let r = dx.hypot(dy) + (hash2(x * 3.0, y * 3.0) % 7) as f32 * 0.03;
+            if r > 1.0 {
+                return None;
+            }
+            let h = hash2(x * 2.0, y * 2.0) % 4;
+            Some(([(150, 132, 108), (120, 104, 86), (186, 168, 140), (96, 84, 70)][h as usize], false))
+        }),
+    }
+}
+
+/// The keyhole (Calvary's own): a pit under Golgotha, black, with a slot of
+/// light the shape of a keyhole, and a glow that breathes.
+fn paint_keyhole(layer: &mut PixelLayer, e: &Entity, time: f32) {
+    let (cx, cy) = (e.x, e.y);
+    let pulse = 0.5 + 0.5 * (time * 1.7).sin();
+    let hit = e.flash > 0.0;
+    layer.paint(cx, cy, 1.8, |x, y| {
+        let (dx, dy) = (x - cx, y - cy);
+        let r = dx.hypot(dy);
+        if r > 1.7 {
+            return None;
+        }
+        let slot = (dx.hypot(dy + 0.25) < 0.32) || (dx.abs() < 0.14 && (-0.1..0.75).contains(&dy));
+        let col = if slot {
+            mix((150, 40, 200), (255, 210, 255), pulse)
+        } else if r > 1.4 {
+            mix((60, 20, 50), (170, 40, 90), pulse * 0.8)
+        } else {
+            (8, 6, 10)
+        };
+        Some((if hit { mix(col, (255, 255, 255), 0.5) } else { col }, false))
     });
 }
 

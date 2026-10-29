@@ -49,6 +49,9 @@ pub enum Cond {
     /// `hold P X Y R SECS`: player P has held the ground within R of
     /// (X, Y) for SECS seconds.
     Hold { player: u8, x: f32, y: f32, r: f32, secs: f32 },
+    /// `harm P N`: player P's fire has landed on holy sites N times (a
+    /// lose condition: holy sites are no-fire zones).
+    Harm { player: u8, n: u32 },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -78,12 +81,13 @@ impl Cond {
                 let n = n.parse().map_err(|_| format!("condition {text:?}: bad count {n:?}"))?;
                 Ok(Cond::Reach { player: player(p)?, kind: kind.to_string(), x: num(x)?, y: num(y)?, r: num(r)?, n })
             }
+            ["harm", p, n] => Ok(Cond::Harm { player: player(p)?, n: n.parse().map_err(|_| format!("condition {text:?}: bad count {n:?}"))? }),
             ["lost", p, kind, n] => Ok(Cond::Lost { player: player(p)?, kind: kind.to_string(), n: n.parse().map_err(|_| format!("condition {text:?}: bad count {n:?}"))? }),
             ["hold", p, x, y, r, secs] => {
                 let num = |w: &str| w.parse::<f32>().map_err(|_| format!("condition {text:?}: bad number {w:?}"));
                 Ok(Cond::Hold { player: player(p)?, x: num(x)?, y: num(y)?, r: num(r)?, secs: num(secs)? })
             }
-            _ => Err(format!("condition {text:?}: want `no_units PLAYER`, `no KIND PLAYER`, `own KIND PLAYER [COUNT]`, `time SECONDS`, `hold PLAYER X Y RADIUS SECONDS`, `reach PLAYER KIND X Y RADIUS COUNT` or `lost PLAYER KIND COUNT`")),
+            _ => Err(format!("condition {text:?}: want `no_units PLAYER`, `no KIND PLAYER`, `own KIND PLAYER [COUNT]`, `time SECONDS`, `hold PLAYER X Y RADIUS SECONDS`, `reach PLAYER KIND X Y RADIUS COUNT`, `lost PLAYER KIND COUNT` or `harm PLAYER COUNT`")),
         }
     }
 
@@ -97,6 +101,7 @@ impl Cond {
             Cond::Hold { player, x, y, r, secs } => format!("hold {player} {x} {y} {r} {secs}"),
             Cond::Reach { player, kind, x, y, r, n } => format!("reach {player} {kind} {x} {y} {r} {n}"),
             Cond::Lost { player, kind, n } => format!("lost {player} {kind} {n}"),
+            Cond::Harm { player, n } => format!("harm {player} {n}"),
         }
     }
 
@@ -125,6 +130,7 @@ impl Cond {
                 let team = Team::from_player(*player);
                 w.entities.iter().filter(|e| !e.alive && e.team == team && e.kind == *kind).count() >= *n
             }
+            Cond::Harm { player, n } => w.holy_hits[Team::from_player(*player).index()] >= *n,
         }
     }
 
@@ -154,6 +160,8 @@ impl Cond {
             Cond::Reach { kind, n, .. } => format!("{n} enemy {}s got through.", name(kind)),
             Cond::Lost { player: 1, kind, n } => format!("We lost {n} {}s: too few can get through.", name(kind)),
             Cond::Lost { kind, n, .. } => format!("The enemy lost {n} {}s.", name(kind)),
+            Cond::Harm { player: 1, .. } => "We fired on the holy places.".into(),
+            Cond::Harm { .. } => "The enemy fired on the holy places.".into(),
             Cond::No(kind, 2) if kind != "mainbasepad" => format!("Every enemy {} is destroyed.", name(kind)),
             Cond::No(kind, 1) if kind != "mainbasepad" => format!("We have lost every {}.", name(kind)),
             Cond::No(kind, p) => {
@@ -196,6 +204,7 @@ mod tests {
         assert_eq!(Cond::parse("time 300").unwrap(), Cond::Time(300.0));
         assert_eq!(Cond::parse("reach 1 car 104 48 5 4").unwrap().text(), "reach 1 car 104 48 5 4");
         assert_eq!(Cond::parse("lost 1 car 3").unwrap().text(), "lost 1 car 3");
+        assert_eq!(Cond::parse("harm 1 3").unwrap(), Cond::Harm { player: 1, n: 3 });
         assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap(), Cond::Hold { player: 1, x: 55.5, y: 42.0, r: 4.0, secs: 90.0 });
         assert_eq!(Cond::parse("hold 1 55.5 42 4 90").unwrap().text(), "hold 1 55.5 42 4 90");
         assert!(Rules::parse(&[], &[]).unwrap().is_default());

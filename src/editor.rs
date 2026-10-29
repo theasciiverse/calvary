@@ -58,7 +58,7 @@ const TILE_SETS: [&str; 16] =
 
 /// What the place tool can put down: structures, the supertank start, money
 /// planes, and the commoner pieces of scenery from the original levels.
-const OBJECT_KINDS: [&str; 40] = [
+const OBJECT_KINDS: [&str; 45] = [
     "mainbasepad",
     "garage",
     "airbase",
@@ -98,6 +98,11 @@ const OBJECT_KINDS: [&str; 40] = [
     "battleship",
     "nephilim",
     "reindeer",
+    "jerustemple1",
+    "templebigfull3x4",
+    "jeruswallfull1",
+    "rubble",
+    "keyhole",
     "greclighthouse",
 ];
 
@@ -171,6 +176,7 @@ fn default_health(kind: &str) -> i16 {
     match kind {
         "mainbasepad" | "garage" | "airbase" | "bank" | "aircraftcarrier" => 4000,
         "nephilim" => crate::world::NEPHILIM_HEALTH as i16,
+        "keyhole" => crate::world::KEYHOLE_HEALTH as i16,
         "stank" => 1000,
         _ => crate::balance::unit(kind).map_or(100, |s| s.health.max(1) as i16),
     }
@@ -349,7 +355,7 @@ impl Editor {
                     || kind.starts_with("greecehouses")
                     || kind.starts_with("ruins")
                     || kind.starts_with("giant_")
-                    || kind == "brickwall" || kind == "reindeer"
+                    || kind == "brickwall" || kind == "reindeer" || kind == "rubble" || kind.starts_with("jerus") || kind == "templebigfull3x4"
                 {
                     4
                 } else {

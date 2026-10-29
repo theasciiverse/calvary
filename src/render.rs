@@ -505,6 +505,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             Class::Airbase => 'A',
             Class::Bank => '$',
             Class::Tower if e.kind == "supergun" => 'S',
+            Class::Tower if e.kind == "keyhole" => '⊙',
             Class::Tower => 'T',
             Class::EnemyTank | Class::PlayerTank => '◆',
             Class::Plane => '+',
@@ -603,6 +604,12 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     if let Some(left) = w.time_left() {
         let s = left.ceil() as u32;
         line1.spans.push(Span::styled(format!("  HOLD OUT {}:{:02}", s / 60, s % 60), Style::default().fg(AMBER).add_modifier(Modifier::BOLD)));
+    }
+    // holy sites are no-fire zones: how many hits of ours the map allows
+    if let Some(n) = w.holy_limit() {
+        let hits = w.holy_hits[0];
+        let color = if hits == 0 { DIM } else { Color::Rgb(235, 70, 55) };
+        line1.spans.push(Span::styled(format!("  HOLY {hits}/{n}"), Style::default().fg(color).add_modifier(Modifier::BOLD)));
     }
     for (team, _, _, _, secs, held) in w.sites() {
         let (who, color) = if team == Team::Player { ("HOLD", AMBER) } else { ("ENEMY HOLD", team_color(Team::Enemy)) };

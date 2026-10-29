@@ -235,6 +235,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Vehicle if k == "nephilim" => (0.55, 2.5, 0.0, (134, 126, 118), (154, 146, 136)),
             Class::Garage | Class::Airbase => (1.1, 1.0, 0.0, pal.body, pal.front),
             Class::Bank => (1.0, 1.2, 0.0, (226, 220, 204), (236, 194, 58)),
+            Class::Tower if k == "keyhole" => (1.5, 0.15, 0.0, (20, 14, 22), (150, 40, 200)),
             Class::Tower if k == "supergun" => (0.8, 1.1, 0.0, pal.body, pal.turret),
             Class::Tower => (0.35, 1.8, 0.0, pal.body, pal.turret),
             Class::Plane => (0.5, 0.25, 3.0, pal.body, pal.front),
@@ -244,6 +245,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Vehicle if flies(k) => (0.5, 0.3, 3.0, pal.body, pal.front),
             Class::Vehicle | Class::EnemyTank => (e.radius() * 0.9, 0.55, 0.0, pal.body, pal.turret),
             Class::Prop if k == "giant_skull" => (0.9, 0.8, 0.0, (196, 186, 162), sprites::BONE),
+            Class::Prop if k == "jerustemple1" => (0.5, 1.0, 0.0, (176, 154, 116), (198, 176, 136)),
+            Class::Prop if k == "templebigfull3x4" => (1.8, 0.45, 0.0, (176, 160, 128), (212, 200, 172)),
+            Class::Prop if k == "rubble" => (0.9, 0.5, 0.0, (120, 104, 86), (150, 132, 108)),
+            Class::Prop if k.starts_with("jeruswall") => (1.0, 1.5, 0.0, (170, 146, 108), (196, 172, 130)),
             Class::Prop if k == "reindeer" => (0.22, 0.4, 0.0, (112, 84, 58), (150, 120, 90)),
             Class::Prop if k.starts_with("giant_") => (0.12, 1.9, 0.0, (196, 186, 162), sprites::BONE),
             Class::Prop if k == "francecastle" => (1.45, 1.6, 0.0, (226, 222, 208), (92, 102, 120)),
@@ -260,7 +265,15 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Prop => (0.3, 0.35, 0.0, (150, 150, 140), (176, 176, 166)),
         };
         let (front, top) = if e.flash > 0.0 { (shade(front, 1.6), shade(top, 1.6)) } else { (front, top) };
-        if k == "nephilim" && alive {
+        if k == "templebigfull3x4" {
+            // the esplanade, the octagon, and the golden dome on it
+            boxed(&mut f, e.x, e.y, 0.0, half, tall, front, top);
+            boxed(&mut f, e.x, e.y, tall, 0.75, 0.9, (70, 110, 168), (90, 130, 190));
+            boxed(&mut f, e.x, e.y, tall + 0.9, 0.42, 0.5, (214, 168, 58), (255, 226, 120));
+        } else if k == "jerustemple1" {
+            boxed(&mut f, e.x, e.y, 0.0, half, tall, front, top);
+            boxed(&mut f, e.x, e.y, tall, 0.28, 0.35, (128, 128, 124), (150, 150, 146));
+        } else if k == "nephilim" && alive {
             // a giant: the body, and the pale skull on top
             boxed(&mut f, e.x, e.y, 0.0, half, tall, front, top);
             boxed(&mut f, e.x, e.y, tall, 0.3, 0.55, sprites::BONE, sprites::BONE);

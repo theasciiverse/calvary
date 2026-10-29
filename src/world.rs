@@ -104,6 +104,20 @@ const HERD_FRIGHT: f32 = 5.0;
 const HERD_RUN: f32 = 1.8;
 const HERD_GRAZE: f32 = 0.12;
 const HERD_RANGE: f32 = 6.0;
+/// Holy sites (Act V; the original's Jerusalem temple models, and the
+/// cathedral): scenery nothing can destroy, but every shot that lands on one
+/// is counted against whoever fired it, for a map's `harm` rule.
+pub fn holy(kind: &str) -> bool {
+    matches!(kind, "jerustemple1" | "templebigfull3x4" | "cathedral")
+}
+/// Rubble (Calvary's own, for the dig): it blocks a road and anything that
+/// drives, until an engineer of any side comes this close and clears it.
+const RUBBLE_CLEAR: f32 = 1.4;
+/// The keyhole (Calvary's own, under Golgotha): while it stands a Nephilim
+/// rises beside it this often, up to this many awake at once.
+const KEYHOLE_EVERY: f32 = 40.0;
+const KEYHOLE_GIANTS: usize = 6;
+pub const KEYHOLE_HEALTH: f32 = 5000.0;
 /// Sea ice (an `*icepatch*` tile): the damage a cell takes before it breaks
 /// into open water. A supergun shell opens a hole at once, a few rockets or
 /// bombs crack through, tank guns hardly mark it. Nothing in the original
@@ -187,7 +201,7 @@ impl Team {
         self != other && self.fights() && other.fights() && !(self.friendly() && other.friendly())
     }
 
-    fn index(self) -> usize {
+    pub fn index(self) -> usize {
         match self {
             Team::Player => 0,
             Team::Rival => 2,
@@ -332,7 +346,13 @@ impl Entity {
             Class::Bridge => 0.5,
             Class::Pad => 1.0,
             Class::Relic => 0.4,
-            Class::Prop => 0.5,
+            Class::Prop => match self.kind.as_str() {
+                "rubble" => 1.0,
+                "templebigfull3x4" => 1.9,
+                "jerustemple1" => 0.6,
+                "cathedral" => 3.0,
+                _ => 0.5,
+            },
         }
     }
 
@@ -342,7 +362,7 @@ impl Entity {
     /// `bridger.cpp`): they fall to the supertank, to bomb trucks and to
     /// attack orders (`g1_map_piece_class::find_target`).
     pub fn dangerous(&self) -> bool {
-        matches!(self.class, Class::Vehicle | Class::EnemyTank | Class::PlayerTank | Class::Tower | Class::Plane)
+        matches!(self.class, Class::Vehicle | Class::EnemyTank | Class::PlayerTank | Class::Tower | Class::Plane) && self.kind != "keyhole"
     }
 
     /// The original's `SPECIALTARGETS`: kinds that go for anything, dangerous
@@ -532,6 +552,9 @@ pub struct World {
     /// Set when the fog lifts somewhere, for the renderers to copy it.
     pub fog_changed: bool,
     fog_clock: f32,
+    /// Shots each army has landed on holy sites (by `Team::index`).
+    pub holy_hits: [u32; 5],
+    keyhole_clock: f32,
     /// Strength left in each sea-ice cell: 0 where there is none, -1 where
     /// it broke through.
     ice: Vec<f32>,
@@ -628,6 +651,7 @@ impl World {
                 // the original's carrier model, unused in its levels: an
                 // airbase at sea
                 "aircraftcarrier" => Class::Airbase,
+                "keyhole" if team.fights() => Class::Tower,
                 "nephilim" if team.fights() => Class::Vehicle,
                 "stank" if team == Team::Player => {
                     if player_tank.is_some() {
@@ -643,6 +667,7 @@ impl World {
             let max_hp = match o.kind.as_str() {
                 _ if o.health > 0 => o.health as f32,
                 "nephilim" => NEPHILIM_HEALTH,
+                "keyhole" => KEYHOLE_HEALTH,
                 "battleship" => balance::unit("gunport").map_or(500.0, |s| s.health as f32),
                 k => balance::unit(k).map_or(100.0, |s| s.health as f32),
             };
@@ -701,6 +726,8 @@ impl World {
             fog: level.fog.then(|| vec![true; level.width * level.height]),
             fog_changed: level.fog,
             fog_clock: 0.0,
+            holy_hits: [0; 5],
+            keyhole_clock: KEYHOLE_EVERY,
             ice,
             ice_hits: Vec::new(),
             width: level.width,
@@ -846,7 +873,76 @@ impl World {
         if cx >= self.width || cy * self.width + cx >= self.blocked.len() {
             return false;
         }
-        !self.blocked[cy * self.width + cx] || self.on_bridge(x, y)
+        (!self.blocked[cy * self.width + cx] || self.on_bridge(x, y)) && !self.rubble_at(x, y, 0.0)
+    }
+
+    /// Rubble standing within `r` of (x, y), past its own size.
+    fn rubble_at(&self, x: f32, y: f32, r: f32) -> bool {
+        self.entities.iter().any(|e| e.alive && e.kind == "rubble" && (e.x - x).hypot(e.y - y) <= e.radius() + r)
+    }
+
+    /// Whether rubble lies on the way from (x, y) toward (tx, ty) within
+    /// the next cell or so.
+    fn rubble_ahead(&self, x: f32, y: f32, tx: f32, ty: f32) -> bool {
+        let d = (tx - x).hypot(ty - y).max(0.01);
+        self.rubble_at(x + (tx - x) / d * 0.8, y + (ty - y) / d * 0.8, 0.7)
+    }
+
+    /// A shot landing on a holy site counts against whoever fired it.
+    fn strike_holy(&mut self, x: f32, y: f32, radius: f32, team: Team) {
+        let r = radius.max(0.3);
+        let mut hit = false;
+        for e in &mut self.entities {
+            if e.alive && holy(&e.kind) && (e.x - x).hypot(e.y - y) <= e.radius() + r {
+                e.flash = 0.3;
+                hit = true;
+            }
+        }
+        if hit && team.fights() {
+            self.holy_hits[team.index()] += 1;
+            log::info!("{team:?} fired on a holy site ({} hits)", self.holy_hits[team.index()]);
+            if team == Team::Player {
+                self.say(format!("We hit a holy site! ({})", self.holy_hits[0]));
+            }
+        }
+    }
+
+    /// An engineer of any side clears rubble it comes up to.
+    fn try_clear(&mut self, i: usize) -> bool {
+        let (x, y) = (self.entities[i].x, self.entities[i].y);
+        let Some(r) = self.entities.iter().position(|e| e.alive && e.kind == "rubble" && (e.x - x).hypot(e.y - y) <= RUBBLE_CLEAR + e.radius() * 0.5) else {
+            return false;
+        };
+        self.entities[r].alive = false;
+        let team = self.entities[i].team;
+        let (rx, ry) = (self.entities[r].x, self.entities[r].y);
+        log::info!("{team:?} engineer cleared rubble at ({rx:.1},{ry:.1})");
+        self.blasts.push(Blast { x: rx, y: ry, power: 0.8, snow: false });
+        self.say(if team == Team::Player { "Rubble cleared" } else { "The enemy cleared rubble" });
+        true
+    }
+
+    /// While a keyhole stands, Nephilim rise beside it.
+    fn step_keyholes(&mut self, dt: f32) {
+        let Some(k) = self.entities.iter().position(|e| e.alive && e.kind == "keyhole") else { return };
+        self.keyhole_clock -= dt;
+        if self.keyhole_clock > 0.0 {
+            return;
+        }
+        self.keyhole_clock = KEYHOLE_EVERY;
+        if self.entities.iter().filter(|e| e.alive && e.kind == "nephilim" && !e.asleep).count() >= KEYHOLE_GIANTS {
+            return;
+        }
+        let (kx, ky, team) = (self.entities[k].x, self.entities[k].y, self.entities[k].team);
+        let a = self.rand() * std::f32::consts::TAU;
+        let (gx, gy) = (kx + a.cos() * 2.6, ky + a.sin() * 2.6);
+        let mut g = Entity::shown("nephilim", Class::Vehicle, team, NEPHILIM_HEALTH);
+        (g.x, g.y, g.heading, g.order, g.home) = (gx, gy, a, Order::Hold, (gx, gy));
+        g.cooldown = STOMP_DELAY;
+        self.entities.push(g);
+        self.blasts.push(Blast { x: gx, y: gy, power: 2.2, snow: false });
+        self.sound("explosion/generic.mp3", Some((kx, ky)), 1.0);
+        self.say("A Nephilim comes up out of the keyhole!");
     }
 
     /// The bridger `i` parks over gap `node` and becomes its bridge, as the
@@ -930,6 +1026,7 @@ impl World {
         }
         self.step_lava(dt);
         self.step_herds(dt);
+        self.step_keyholes(dt);
         self.step_fog(dt);
         self.step_avalanches(dt);
         self.step_relics();
@@ -952,6 +1049,14 @@ impl World {
     pub fn time_left(&self) -> Option<f32> {
         self.rules.win.iter().find_map(|c| match c {
             crate::rules::Cond::Time(secs) => Some((secs - self.time).max(0.0)),
+            _ => None,
+        })
+    }
+
+    /// How many hits on holy sites lose us the map, if it has that rule.
+    pub fn holy_limit(&self) -> Option<u32> {
+        self.rules.lose.iter().find_map(|c| match c {
+            crate::rules::Cond::Harm { player: 1, n } => Some(*n),
             _ => None,
         })
     }
@@ -1315,7 +1420,7 @@ impl World {
         let kind = self.entities[i].kind.clone();
         // specials: engineers capture, trikes and bomb trucks ram, bridgers
         // become a bridge over the first gap they reach
-        if class == Class::Vehicle && kind == "engineer" && self.try_capture(i) {
+        if class == Class::Vehicle && kind == "engineer" && (self.try_capture(i) || self.try_clear(i)) {
             return;
         }
         if class == Class::Vehicle && kind == "bridger" {
@@ -1529,6 +1634,10 @@ impl World {
         if self.gap(node) && e.kind != "bridger" && !flies(&e.kind) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT {
             return;
         }
+        // rubble on the road stops everything but the engineer that clears it
+        if e.kind != "engineer" && !flies(&e.kind) && self.rubble_ahead(e.x, e.y, nx, ny) {
+            return;
+        }
         // and open water where the ice on the road broke closes the road:
         // back to the last junction before it and on by another branch, or
         // wait if every way is closed
@@ -1580,7 +1689,7 @@ impl World {
         self.entities[i].next_node = Some(node);
         let (nx, ny) = (self.nodes[node].x, self.nodes[node].y);
         let e = &self.entities[i];
-        if self.gap(node) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT || self.water_ahead(e.x, e.y, nx, ny) {
+        if self.gap(node) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT || self.water_ahead(e.x, e.y, nx, ny) || (e.kind != "engineer" && self.rubble_ahead(e.x, e.y, nx, ny)) {
             return;
         }
         if !self.drive_towards(i, nx, ny, dt) {
@@ -2186,6 +2295,7 @@ impl World {
         let Some(w) = balance::weapon(weapon) else { return };
         self.shake_cornices(x, y, w.radius);
         self.crack_ice(x, y, w.radius, w.damage);
+        self.strike_holy(x, y, w.radius, team);
         let victims: Vec<usize> = if w.area {
             (0..self.entities.len())
                 .filter(|&j| {
@@ -2360,7 +2470,7 @@ impl World {
     /// A standing structure overlapping a vehicle of radius `r` at (x, y).
     pub fn blocks(&self, x: f32, y: f32, r: f32) -> bool {
         self.entities.iter().any(|e| {
-            e.alive && matches!(e.class, Class::Hq | Class::Garage | Class::Airbase | Class::Bank | Class::Tower) && (e.x - x).hypot(e.y - y) < e.radius() + r
+            e.alive && (matches!(e.class, Class::Hq | Class::Garage | Class::Airbase | Class::Bank | Class::Tower) || e.kind == "rubble") && (e.x - x).hypot(e.y - y) < e.radius() + r
         })
     }
 
@@ -2725,6 +2835,65 @@ mod rules {
         }
         let e = &w.entities[peon];
         assert!(e.alive && e.y < 12.0, "back to the fork and round by the east road: at ({:.1},{:.1})", e.x, e.y);
+    }
+
+    #[test]
+    fn holy_sites_count_the_shots_that_land_on_them() {
+        let mut w = ice_map("lose = ['harm 1 2', 'no mainbasepad 1']\n", "jerustemple1 4 6 15 0 100\n");
+        assert_eq!(w.holy_limit(), Some(2));
+        w.damage_by("b120mm", 9.0, 15.0, None, Team::Player, true);
+        assert_eq!(w.holy_hits[0], 0, "a miss by three cells");
+        w.damage_by("b120mm", 6.4, 15.2, None, Team::Player, true);
+        w.damage_by("guided_missile", 6.0, 16.5, None, Team::Enemy, false);
+        assert_eq!((w.holy_hits[0], w.holy_hits[Team::Enemy.index()]), (1, 1));
+        assert!(w.entities.iter().any(|e| e.kind == "jerustemple1" && e.alive), "nothing destroys it");
+        w.damage_by("b120mm", 6.0, 14.8, None, Team::Player, true);
+        w.step(1.0 / 30.0);
+        assert_eq!(w.outcome, Outcome::Lost);
+        assert_eq!(w.verdict, "We fired on the holy places.");
+    }
+
+    #[test]
+    fn rubble_stops_the_road_until_an_engineer_clears_it() {
+        let roads = "path_object 1 6 24 0 100 A:5\npath_object 1 6 5 0 100\n";
+        let mut w = ice_map("", &format!("peon_tank 1 6 25 0 0\nrubble 4 6 15 0 100\n{roads}"));
+        w.ai_timer = [f32::MAX; 5];
+        let peon = w.entities.iter().position(|e| e.kind == "peon_tank").unwrap();
+        for _ in 0..(20 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert!(w.entities[peon].y > 15.5, "waits short of the rubble: at {:.1}", w.entities[peon].y);
+        assert!(w.blocks(6.0, 15.0, 0.6) && !w.ground_free(6.0, 15.0), "and nothing drives through it");
+        let mut eng = Entity::shown("engineer", Class::Vehicle, Team::Player, 300.0);
+        (eng.x, eng.y, eng.order) = (6.0, 13.8, Order::Hold);
+        w.entities.push(eng);
+        w.step(1.0 / 30.0);
+        assert!(!w.entities.iter().any(|e| e.kind == "rubble" && e.alive), "an engineer clears it");
+        for _ in 0..(20 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert!(w.entities[peon].y < 12.0, "on down the road");
+    }
+
+    #[test]
+    fn nephilim_come_up_out_of_the_keyhole_while_it_stands() {
+        let mut w = ice_map("", "keyhole 6 6 6 0 0\n");
+        w.ai_timer = [f32::MAX; 5];
+        let k = w.entities.iter().position(|e| e.kind == "keyhole").unwrap();
+        assert_eq!((w.entities[k].class, w.entities[k].max_hp, w.entities[k].dangerous()), (Class::Tower, KEYHOLE_HEALTH, false));
+        let giants = |w: &World| w.entities.iter().filter(|e| e.kind == "nephilim" && e.alive).count();
+        for _ in 0..((KEYHOLE_EVERY as usize + 1) * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!(giants(&w), 1);
+        w.entities[k].alive = false;
+        for e in w.entities.iter_mut().filter(|e| e.kind == "nephilim") {
+            e.alive = false;
+        }
+        for _ in 0..((KEYHOLE_EVERY as usize + 1) * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!(giants(&w), 0, "closed, nothing more comes up");
     }
 
     #[test]
