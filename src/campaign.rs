@@ -440,6 +440,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the Order's three factories at Allach and Moosach. Keep the HQ standing.",
     },
+    Mission {
+        act: 2,
+        number: 27,
+        title: "Vienna",
+        map: include_str!("../maps/vienna.cmap"),
+        briefing: &[
+            "Commander, Reid. Vienna. The Holy Lance is in the treasury of the",
+            "Hofburg, in the old city inside the Ring, and this time everyone knows",
+            "it. The Order is coming in from the west, the Europeans hold the north",
+            "over the canal and have guns on the Ring. We are in the Prater. It is a",
+            "race, sir: whoever gets the Lance out of the old city and home keeps it.",
+            "After this one, Calloway's notebook goes north.",
+        ],
+        objective: "Bring the Holy Lance from the Hofburg treasury to our HQ. Nobody else may carry it home.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -763,6 +778,8 @@ mod tests {
         let mut w = World::from_level(&level);
         let supertank = std::env::var("SUPERTANK").is_ok();
         let every: usize = std::env::var("CLEAR_EVERY").ok().and_then(|m| m.parse().ok()).unwrap_or(60);
+        // when the stand-in starts (a race is decided before two minutes)
+        let from: usize = std::env::var("CLEAR_FROM").ok().and_then(|m| m.parse().ok()).unwrap_or(120);
         // structures the stand-in leaves for the army to take (`SPARE=supergun`)
         let spare: Vec<String> = std::env::var("SPARE").map(|s| s.split(',').map(str::to_string).collect()).unwrap_or_default();
         let units: Vec<&'static str> = crate::world::BUILDABLE.iter().copied().filter(|k| *k != "bridger" && w.offers(Team::Player, k)).collect();
@@ -781,7 +798,7 @@ mod tests {
             if supertank && s == 121 {
                 w.command(&trucks, crate::world::Command::Resume);
             }
-            if supertank && s >= 120 && s % every == 0 {
+            if supertank && s >= from && s % every == 0 {
                 for e in w.entities.iter_mut().filter(|e| e.team.hostile(Team::Player) && matches!(e.class, Class::Tower | Class::Vehicle) && !spare.contains(&e.kind)) {
                     e.alive = false;
                 }
