@@ -8,6 +8,8 @@
 //! width = 100
 //! height = 150
 //! music = "Greece.mp3"          # optional, a file from data/music
+//! win = ["no_units 2"]          # optional, see `rules.rs` (default: destroy
+//! lose = ["no mainbasepad 1"]   # their HQ, lose ours)
 //!
 //! # one printable character per tile type used on the map
 //! legend = '''
@@ -46,6 +48,10 @@ struct File {
     height: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     music: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    win: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    lose: Vec<String>,
     legend: String,
     tiles: String,
     heights: String,
@@ -102,7 +108,12 @@ pub fn export(level: &Level, name: &str, music: Option<&str>, name_of: impl Fn(&
         }
         objects.push('\n');
     }
-    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), legend, tiles, heights, objects };
+    let (win, lose) = if level.rules.is_default() {
+        (Vec::new(), Vec::new())
+    } else {
+        (level.rules.win.iter().map(|c| c.text()).collect(), level.rules.lose.iter().map(|c| c.text()).collect())
+    };
+    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, legend, tiles, heights, objects };
     toml::to_string(&file).map_err(|e| e.to_string())
 }
 
@@ -179,7 +190,8 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
         return Err(format!("objects: link to line {bad}, but there are {count} lines"));
     }
 
-    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects };
+    let rules = crate::rules::Rules::parse(&f.win, &f.lose)?;
+    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules };
     Ok((level, f.name, f.music))
 }
 
@@ -219,5 +231,12 @@ mod tests {
         assert!(parse(&ok.replace("\naa\n", "\nab\n")).unwrap_err().contains("not in the legend"));
         assert!(parse(&ok.replace("050505\n050505", "0505\n0505")).unwrap_err().contains("heights"));
         assert!(parse(&ok.replace("4000\n", "4000 A:7\n")).unwrap_err().contains("link to line 7"));
+        assert!(parse(&ok.replace("height = 1\n", "height = 1\nwin = ['hold 60']\n")).unwrap_err().contains("hold 60"));
+        // rules survive a save
+        let (mut level, _, _) = parse(&ok.replace("height = 1\n", "height = 1\nwin = ['no_units 2']\n")).unwrap();
+        assert_eq!(level.rules.win, vec![crate::rules::Cond::NoUnits(2)]);
+        level.rules.lose.clear();
+        let (back, _, _) = parse(&export(&level, "m", None, |_| None).unwrap()).unwrap();
+        assert_eq!(back.rules.win, level.rules.win);
     }
 }

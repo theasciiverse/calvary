@@ -7,6 +7,7 @@
 //! people who made Golgotha, as Crack dot Com published them.
 
 use crate::audio::Audio;
+use crate::campaign;
 use crate::game::LEVELS;
 use crate::input::Input;
 use crate::render;
@@ -79,20 +80,23 @@ const PLACES: &[(&str, &str, f32, f32)] = &[
 ];
 
 /// Golgotha itself, where the menu turns when nothing else is picked.
-const GOLGOTHA: (&str, f32, f32) = ("Golgotha, Jerusalem", 31.78, 35.23);
+pub(crate) const GOLGOTHA: (&str, f32, f32) = ("Golgotha, Jerusalem", 31.78, 35.23);
 
-fn place_of(name: &str) -> Option<(&'static str, f32, f32)> {
+pub(crate) fn place_of(name: &str) -> Option<(&'static str, f32, f32)> {
     let n = name.to_lowercase();
     PLACES.iter().find(|p| n == p.0 || n.contains(p.0) && p.0.len() > 3).map(|p| (p.1, p.2, p.3))
 }
 
 pub enum Choice {
+    /// The campaign, from this mission (an index into `campaign::MISSIONS`).
+    Campaign(usize),
     Level(usize),
     Map(String),
     Quit,
 }
 
 enum Item {
+    Campaign,
     Level(usize, &'static str),
     Map(String),
     Controls,
@@ -102,8 +106,9 @@ enum Item {
 
 impl Item {
     /// The place on the globe this entry stands for.
-    fn place(&self) -> (&'static str, f32, f32) {
+    fn place(&self, mission: usize) -> (&'static str, f32, f32) {
         let found = match self {
+            Item::Campaign => Some(campaign::place(&campaign::MISSIONS[mission])),
             Item::Level(i, _) => place_of(LEVELS[*i].name),
             Item::Map(p) => place_of(p.trim_start_matches("maps/").trim_end_matches(".cmap")),
             _ => None,
@@ -111,8 +116,14 @@ impl Item {
         found.unwrap_or(GOLGOTHA)
     }
 
-    fn label(&self) -> String {
+    fn label(&self, mission: usize) -> String {
         match self {
+            Item::Campaign => {
+                let m = &campaign::MISSIONS[mission];
+                // left and right pick among the missions reached
+                let (l, r) = (if mission > 0 { "◂ " } else { "" }, if mission + 1 < campaign::reached() { " ▸" } else { "" });
+                format!("{l}Campaign: mission {}, {}{r}", m.number, m.title)
+            }
             Item::Level(_, l) => l.to_string(),
             Item::Map(p) => format!("Map: {}", p.trim_start_matches("maps/").trim_end_matches(".cmap")),
             Item::Controls => "Controls".into(),
@@ -129,7 +140,8 @@ fn menu() -> Vec<Item> {
         "egypt2" => "Sandbox: the walled town (Egypt)",
         _ => "Level",
     };
-    let mut items: Vec<Item> = LEVELS.iter().enumerate().map(|(i, l)| Item::Level(i, names(l.name))).collect();
+    let mut items = vec![Item::Campaign];
+    items.extend(LEVELS.iter().enumerate().map(|(i, l)| Item::Level(i, names(l.name))));
     if let Ok(dir) = std::fs::read_dir("maps") {
         let mut maps: Vec<String> = dir.flatten().map(|e| e.path().display().to_string()).filter(|p| p.ends_with(".cmap")).collect();
         maps.sort();
@@ -153,6 +165,8 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
     let mut start = if skip_intro { skipped() } else { Instant::now() };
     let items = menu();
     let mut pick = 0usize;
+    // the campaign entry offers the furthest mission reached
+    let mut mission = campaign::reached() - 1;
     let mut page = Page::Main;
     // globe orientation (spin = longitude facing us, tilt = latitude), eased
     // toward the selected entry's place once the title is up
@@ -166,7 +180,7 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
         if t < GLOBE_END {
             view = (((t - EPIGRAPH_END).max(0.0) * 0.3 - 1.2), 0.25);
         } else {
-            let (_, lat, lon) = items[pick].place();
+            let (_, lat, lon) = items[pick].place(mission);
             let (want_spin, want_tilt) = (lon.to_radians(), (lat * 0.8).to_radians());
             let d = (want_spin - view.0 + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
             let k = (dt * 2.5).min(1.0);
@@ -175,7 +189,7 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
         }
         let mut rows: Vec<Rect> = Vec::new();
         terminal.draw(|f| {
-            rows = draw(f, t, &items, pick, &page, view, credits_at.elapsed().as_secs_f32());
+            rows = draw(f, t, &items, pick, mission, &page, view, credits_at.elapsed().as_secs_f32());
         })?;
         input.poll_pad();
         // the pad: d-pad up/down move, A or Start picks, B backs out
@@ -199,6 +213,10 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
                     match k.code {
                         KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') => moves += 1,
                         KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') => moves -= 1,
+                        KeyCode::Left | KeyCode::Char('a') | KeyCode::Char('h') if matches!(items[pick], Item::Campaign) => mission = mission.saturating_sub(1),
+                        KeyCode::Right | KeyCode::Char('d') | KeyCode::Char('l') if matches!(items[pick], Item::Campaign) => {
+                            mission = (mission + 1).min(campaign::reached() - 1)
+                        }
                         KeyCode::Enter | KeyCode::Char(' ') => confirm = true,
                         KeyCode::Esc | KeyCode::Char('q') => back = true,
                         _ => {}
@@ -243,6 +261,7 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
         }
         if confirm {
             match &items[pick] {
+                Item::Campaign => return Ok(Choice::Campaign(mission)),
                 Item::Level(i, _) => return Ok(Choice::Level(*i)),
                 Item::Map(p) => return Ok(Choice::Map(p.clone())),
                 Item::Controls => page = Page::Controls,
@@ -258,7 +277,8 @@ pub fn run(terminal: &mut DefaultTerminal, audio: &mut Audio, input: &mut Input,
     }
 }
 
-fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (f32, f32), credits_t: f32) -> Vec<Rect> {
+#[allow(clippy::too_many_arguments)]
+fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, mission: usize, page: &Page, view: (f32, f32), credits_t: f32) -> Vec<Rect> {
     let area = f.area();
     f.render_widget(Block::default().style(Style::default().bg(Color::Black)), area);
     if *page == Page::Credits && t >= GLOBE_END {
@@ -280,7 +300,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
         return Vec::new();
     }
     // the title: the globe keeps turning behind it, dimmed
-    let place = (*page == Page::Main).then(|| items[pick].place());
+    let place = (*page == Page::Main).then(|| items[pick].place(mission));
     // the Earth fills the screen, centred, as in the opening
     draw_globe(f.buffer_mut(), area, area.height, t - EPIGRAPH_END, 0.45, view, place.map(|p| (p.1, p.2)));
     // breathing room above the title, more on taller windows
@@ -317,7 +337,7 @@ fn draw(f: &mut Frame, t: f32, items: &[Item], pick: usize, page: &Page, view: (
                 line(f, y.saturating_sub(2), Line::from(Span::styled(caption, Style::default().fg(AMBER))));
             }
             for (i, item) in items.iter().enumerate() {
-                let label = item.label();
+                let label = item.label(mission);
                 let selected = i == pick;
                 let text = if selected { format!("> {label} <") } else { label.clone() };
                 let style = if selected { Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD) } else { Style::default().fg(GREEN) };
@@ -368,7 +388,7 @@ static EARTH: &[u8] = include_bytes!("../data/earth.ppm");
 
 /// The texture's pixels (RGB) and width/height, parsed once.
 /// "P6\n<w> <h>\n255\n" then RGB bytes.
-fn parse_ppm(bytes: &[u8]) -> (Vec<u8>, usize, usize) {
+pub(crate) fn parse_ppm(bytes: &[u8]) -> (Vec<u8>, usize, usize) {
     let mut fields = Vec::new();
     let mut pos = 0;
     while fields.len() < 4 {
@@ -428,7 +448,7 @@ fn hash(x: u32, y: u32) -> u32 {
 /// the terminal's real cell shape.
 /// `band` is how many rows from the top the globe may use (the stars fill
 /// the whole area): the title keeps the globe above the dedication.
-fn draw_globe(buf: &mut Buffer, area: Rect, band: u16, t: f32, bright: f32, view: (f32, f32), marker: Option<(f32, f32)>) {
+pub(crate) fn draw_globe(buf: &mut Buffer, area: Rect, band: u16, t: f32, bright: f32, view: (f32, f32), marker: Option<(f32, f32)>) {
     let (w, h) = (area.width as usize, area.height as usize);
     let bh = band.min(area.height) as f32 * 2.0;
     let (pw, ph) = (w, h * 2);
@@ -1069,14 +1089,21 @@ fn faded(c: (u8, u8, u8), k: f32) -> Color {
 
 /// The team photo in half-block pixels, fitted into `area`'s top part.
 fn draw_photo(buf: &mut Buffer, area: Rect, bright: f32) -> Rect {
-    let (px, iw, ih) = team();
+    draw_picture(buf, area, team(), bright, (0.72, 0.62, 0.08))
+}
+
+/// A picture in half-block pixels, centred across `area`: `fit` is the
+/// largest share of the width and height it may take, and where its top
+/// sits, as fractions of the area.
+pub(crate) fn draw_picture(buf: &mut Buffer, area: Rect, img: &(Vec<u8>, usize, usize), bright: f32, fit: (f32, f32, f32)) -> Rect {
+    let (px, iw, ih) = img;
     // a half-block pixel is about square: one column wide, half a row tall
-    let max_w = (area.width as f32 * 0.72) as usize;
-    let max_h = (area.height as f32 * 0.62) as usize * 2;
+    let max_w = (area.width as f32 * fit.0) as usize;
+    let max_h = (area.height as f32 * fit.1) as usize * 2;
     let scale = (max_w as f32 / *iw as f32).min(max_h as f32 / *ih as f32);
     let (w, h) = ((*iw as f32 * scale) as usize, (*ih as f32 * scale) as usize / 2 * 2);
     let x0 = area.x + (area.width - w as u16) / 2;
-    let y0 = area.y + (area.height as f32 * 0.08) as u16;
+    let y0 = area.y + (area.height as f32 * fit.2) as u16;
     let at = |x: usize, y: usize| {
         let (sx, sy) = (((x as f32 + 0.5) / scale) as usize, ((y as f32 + 0.5) / scale) as usize);
         let i = (sy.min(ih - 1) * iw + sx.min(iw - 1)) * 3;

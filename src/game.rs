@@ -107,6 +107,8 @@ pub struct Game {
     pub last_blasts: Vec<crate::world::Blast>,
     /// A film is being recorded (F12): the HUD says so.
     pub recording: bool,
+    /// A campaign mission: no level keys, and the battle ends by itself.
+    pub campaign: bool,
     /// Distance to the mouse aim point: shells land there.
     aim_range: Option<f32>,
     pub shots: Vec<Shot>,
@@ -162,6 +164,7 @@ impl Game {
             show_aim: true,
             last_blasts: Vec::new(),
             recording: false,
+            campaign: false,
             aim_range: None,
             shots: Vec::new(),
             particles: Vec::new(),

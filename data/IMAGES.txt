@@ -11,3 +11,9 @@ data/team.ppm: the Golgotha team photo, assembled from the four
 (golgotha-textures.tar.gz), which Crack dot Com put into the public domain
 with the game's graphics. They used it as a billboard in the game's movie
 level; Calvary shows it in the credits.
+
+data/youwin.ppm, data/youlose.ppm: the original's mission screens,
+golg/bitmaps/youwin.jpg ("MISSION COMPLETED!") and youlose.jpg from the 1998
+source release (golgotha-src.tar.gz), downscaled to 320x240. Public domain
+with the rest of the game's graphics. Calvary shows them after each
+campaign mission, as the original did after a level.

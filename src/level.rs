@@ -60,6 +60,9 @@ pub struct Level {
     /// Every saved object in save order; references between objects (path
     /// links) are indexes into this list.
     pub objects: Vec<ObjectRec>,
+    /// How the map is won and lost (`.cmap` only; the original kept this in
+    /// the level's `.scm`, which Calvary does not read).
+    pub rules: crate::rules::Rules,
 }
 
 /// One object from the level: the base fields every Golgotha object saves.
@@ -282,7 +285,7 @@ impl Level {
             Err(_) => Vec::new(),
         };
 
-        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects })
+        Ok(Level { width, height, vert_heights, cell_tiles, tiles, object_types, objects, rules: Default::default() })
     }
 
     pub fn tile(&self, cx: usize, cy: usize) -> &TileInfo {

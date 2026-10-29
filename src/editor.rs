@@ -160,6 +160,7 @@ impl Editor {
             ],
             object_types: Vec::new(),
             objects: Vec::new(),
+            rules: Default::default(),
         }
     }
 

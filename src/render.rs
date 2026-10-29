@@ -478,10 +478,11 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
     f.render_widget(Paragraph::new(vec![line1, Line::from(build), line3]).style(Style::default().bg(Color::Black)), area);
 
     if w.outcome != Outcome::Playing {
-        let (title, text, color) = match w.outcome {
-            Outcome::Won => (" VICTORY ", "The enemy base is destroyed.", AMBER),
-            _ => (" DEFEAT ", "The battle is lost.", Color::Rgb(235, 70, 55)),
+        let (title, color) = match w.outcome {
+            Outcome::Won => (" VICTORY ", AMBER),
+            _ => (" DEFEAT ", Color::Rgb(235, 70, 55)),
         };
+        let text = if w.verdict.is_empty() { "The battle is decided." } else { w.verdict.as_str() };
         let full = f.area();
         let (bw, bh) = (44.min(full.width), 5.min(full.height));
         let r = Rect { x: full.x + (full.width - bw) / 2, y: full.y + (full.height - bh) / 2, width: bw, height: bh };
@@ -490,7 +491,7 @@ fn draw_hud(f: &mut Frame, area: Rect, g: &Game) {
             .border_style(Style::default().fg(color))
             .title(Span::styled(title, Style::default().fg(Color::Black).bg(color).add_modifier(Modifier::BOLD)))
             .style(Style::default().bg(Color::Black));
-        let body = vec![Line::from(Span::styled(format!(" {text}"), Style::default().fg(GREEN))), Line::from(label(" [ ] next level, Esc quit"))];
+        let body = vec![Line::from(Span::styled(format!(" {text}"), Style::default().fg(GREEN))), Line::from(label(if g.campaign { " Esc: on" } else { " [ ] next level, Esc quit" }))];
         f.render_widget(Clear, r);
         f.render_widget(Paragraph::new(body).block(block), r);
     }

@@ -10,8 +10,10 @@ industrial "crom", lava, castle, temple, a small alien/moon set) and the
 landmark models (Jerusalem walls, temple and dig site, the Giza pyramids, a
 French castle, cathedral beams, Swiss skiers).
 
-Status: draft for discussion. Nothing here is built yet except the three
-existing maps it reuses (marked **existing map**).
+Status: draft for discussion. Built: the campaign runner (briefings,
+result screens, saved progress, per-map win and lose rules) and mission 1,
+Al Basrah (2026-10-29). Three more missions reuse existing maps (marked
+**existing map**).
 
 ## The story
 
@@ -188,9 +190,8 @@ globe of the original's opening, and the stars.*
 ## Build notes
 
 - Three missions reuse the existing maps (12 Cairo, 15 Piraeus,
-  23 Zurich); 37 need new maps. That needs a terrain format of our own
-  (heightmap + tile names, readable by the same renderer) and a small
-  terminal map editor, both still to design.
+  23 Zurich); 37 need new maps, in the `.cmap` format with the map editor
+  (both built). Mission 1, Al Basrah, is the first.
 - The bridger (missions 2, 11, 31) depends on decoding the original's Lisp
   variables (bridgeable path nodes). Lava damage, avalanches, holy-site
   no-fire zones and the relic races are new mechanics to design.

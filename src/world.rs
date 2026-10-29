@@ -91,7 +91,7 @@ pub enum Team {
 }
 
 impl Team {
-    fn from_player(p: u8) -> Team {
+    pub fn from_player(p: u8) -> Team {
         match p {
             1 => Team::Player,
             2 => Team::Enemy,
@@ -313,6 +313,10 @@ pub struct World {
     pub player_tank: Option<usize>,
     pub messages: VecDeque<(f32, String)>,
     pub outcome: Outcome,
+    /// Why the battle was won or lost, once it is.
+    pub verdict: String,
+    /// The map's win and lose conditions.
+    rules: crate::rules::Rules,
     /// Junction choices: path node -> which of its links new units take.
     pub route_choice: HashMap<usize, usize>,
     /// The player's supertank kills, scored at the victim's cost as the
@@ -409,6 +413,8 @@ impl World {
             player_tank,
             messages: VecDeque::new(),
             outcome: Outcome::Playing,
+            verdict: String::new(),
+            rules: level.rules.clone(),
             route_choice: HashMap::new(),
             points: 0,
             burns: Vec::new(),
@@ -436,6 +442,12 @@ impl World {
                 w.entities[i].next_node = w.nearest_node(e.x, e.y, e.team, true);
             }
         }
+        // a condition already true before the battle starts cannot be what the
+        // map means (no HQ to lose on a sandbox map): drop it
+        let rules = std::mem::take(&mut w.rules);
+        let (win, lose) = (rules.win.into_iter().filter(|c| !c.holds(&w)).collect(), rules.lose.into_iter().filter(|c| !c.holds(&w)).collect());
+        w.rules = crate::rules::Rules { win, lose };
+        log::info!("rules: win {:?} lose {:?}", w.rules.win, w.rules.lose);
         log::info!(
             "world: {} entities, {} path nodes, player tank {:?}",
             w.entities.len(),
@@ -565,6 +577,24 @@ impl World {
         for e in &mut self.entities {
             e.flash = (e.flash - dt).max(0.0);
         }
+        self.check_rules();
+    }
+
+    /// The map's conditions, losing first as in the original.
+    fn check_rules(&mut self) {
+        if self.outcome != Outcome::Playing {
+            return;
+        }
+        if let Some(c) = self.rules.lose.iter().find(|c| c.holds(self)) {
+            self.verdict = c.describe();
+            self.outcome = Outcome::Lost;
+        } else if !self.rules.win.is_empty() && self.rules.win.iter().all(|c| c.holds(self)) {
+            self.verdict = self.rules.win.first().map_or(String::new(), |c| c.describe());
+            self.outcome = Outcome::Won;
+        } else {
+            return;
+        }
+        log::info!("outcome {:?}: {}", self.outcome, self.verdict);
     }
 
     fn nearest_bank(&self, x: f32, y: f32, team: Team) -> Option<usize> {
@@ -1130,6 +1160,7 @@ impl World {
             if self.lives == 0 {
                 self.entities[j].alive = false;
                 self.outcome = Outcome::Lost;
+                self.verdict = "No supertanks left.".into();
                 self.say("Supertank lost. No supertanks left.");
             } else {
                 self.say(format!("Supertank lost. {} left.", self.lives));
@@ -1148,15 +1179,10 @@ impl World {
             _ => {}
         }
         log::info!("destroyed {team:?} {kind}");
+        // whether that decides the battle is the map's rules' call (`check_rules`)
         match (class, team) {
-            (Class::Hq, Team::Enemy) => {
-                self.outcome = Outcome::Won;
-                self.say("Enemy base destroyed!");
-            }
-            (Class::Hq, Team::Player) => {
-                self.outcome = Outcome::Lost;
-                self.say("Our base has been destroyed.");
-            }
+            (Class::Hq, Team::Enemy) => self.say("Enemy base destroyed!"),
+            (Class::Hq, Team::Player) => self.say("Our base has been destroyed."),
             (Class::EnemyTank, _) => self.say("Enemy supertank destroyed!"),
             (_, Team::Enemy) if class != Class::Vehicle => self.say(format!("Destroyed enemy {}", kind.replace('_', " "))),
             (_, Team::Player) if class != Class::Vehicle => self.say(format!("Lost our {}", kind.replace('_', " "))),

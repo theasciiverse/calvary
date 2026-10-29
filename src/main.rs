@@ -1,4 +1,5 @@
 mod audio;
+mod campaign;
 mod balance;
 mod chase;
 mod cmap;
@@ -8,6 +9,7 @@ mod game;
 mod input;
 mod level;
 mod render;
+mod rules;
 mod sprites;
 mod tank;
 mod terrain;
@@ -119,16 +121,17 @@ fn main() -> io::Result<()> {
     // directly; otherwise the title, and back to it after each battle
     let direct = map.is_some() || at.is_some() || args.iter().any(|a| LEVELS.iter().any(|l| l.name == *a));
     let result = if direct {
-        run(&mut terminal, &mut audio, &mut input, start, map, at)
+        run(&mut terminal, &mut audio, &mut input, start, map, at, false).map(|_| ())
     } else {
         let mut first = !args.iter().any(|a| a == "--no-intro");
         loop {
             let choice = title::run(&mut terminal, &mut audio, &mut input, !first);
             first = false;
             let r = match choice {
-                Ok(title::Choice::Level(i)) => run(&mut terminal, &mut audio, &mut input, i, None, None),
+                Ok(title::Choice::Campaign(i)) => play_campaign(&mut terminal, &mut audio, &mut input, i),
+                Ok(title::Choice::Level(i)) => run(&mut terminal, &mut audio, &mut input, i, None, None, false).map(|_| ()),
                 Ok(title::Choice::Map(path)) => match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| cmap::parse(&t)) {
-                    Ok(m) => run(&mut terminal, &mut audio, &mut input, 0, Some(m), None),
+                    Ok(m) => run(&mut terminal, &mut audio, &mut input, 0, Some(m), None, false).map(|_| ()),
                     Err(e) => Err(io::Error::other(format!("{path}: {e}"))),
                 },
                 Ok(title::Choice::Quit) => break Ok(()),
@@ -149,6 +152,43 @@ fn main() -> io::Result<()> {
     result
 }
 
+/// The campaign from mission `index`: briefing, battle, the result screen,
+/// then the next mission or another try, until the player backs out.
+fn play_campaign(terminal: &mut DefaultTerminal, audio: &mut audio::Audio, input: &mut Input, mut index: usize) -> io::Result<()> {
+    loop {
+        if campaign::briefing(terminal, audio, input, index)? == campaign::Pick::Back || input.exit_app {
+            return Ok(());
+        }
+        loop {
+            let m = &campaign::MISSIONS[index];
+            log::info!("campaign: mission {} {}", m.number, m.title);
+            let map = campaign::map(m).map_err(io::Error::other)?;
+            let (outcome, verdict) = run(terminal, audio, input, 0, Some(map), None, true)?;
+            input.quit = false;
+            input.escape = false;
+            if outcome == world::Outcome::Playing || input.exit_app {
+                // left mid-battle
+                return Ok(());
+            }
+            let won = outcome == world::Outcome::Won;
+            if won {
+                campaign::unlock_after(index);
+            }
+            audio.play_music(if won { "Splash_Screen_Opus.mp3" } else { "Norway_Nephelim_Battle.mp3" });
+            if campaign::result(terminal, input, index, won, &verdict)? == campaign::Pick::Back || input.exit_app {
+                return Ok(());
+            }
+            if won {
+                index += 1;
+                break;
+            }
+        }
+    }
+}
+
+/// One battle. Returns how it ended (`Playing` when left before the end) and
+/// why. In the campaign the level keys are off, and a decided battle ends on
+/// its own a few seconds later.
 fn run(
     terminal: &mut DefaultTerminal,
     audio: &mut audio::Audio,
@@ -156,7 +196,8 @@ fn run(
     start: usize,
     map: Option<(level::Level, String, Option<String>)>,
     at: Option<(f32, f32)>,
-) -> io::Result<()> {
+    campaign: bool,
+) -> io::Result<(world::Outcome, String)> {
     let mut game = match &map {
         Some((level, name, music)) => {
             audio.play_music(music.as_deref().unwrap_or(audio::track_for_level(name)));
@@ -171,6 +212,12 @@ fn run(
         game.tank.x = x;
         game.tank.y = y;
     }
+    game.campaign = campaign;
+    // the briefing has said what to do; the help window stays for F1
+    if campaign {
+        game.help = false;
+    }
+    let mut decided: Option<Instant> = None;
     // F12 records a film of the battle (see `film.rs`)
     let mut recorder: Option<film::Recorder> = None;
     let save_film = |rec: film::Recorder, game: &mut Game| {
@@ -195,6 +242,12 @@ fn run(
     let mut next = Instant::now() + tick;
     let mut next_snapshot = Instant::now();
     while !input.quit {
+        if campaign && game.world.outcome != world::Outcome::Playing {
+            let at = *decided.get_or_insert_with(Instant::now);
+            if at.elapsed() > Duration::from_secs(5) {
+                break;
+            }
+        }
         render::follow_camera(&mut game, terminal.size()?.into());
         input.poll_pad();
         input.menu_moves = 0;
@@ -230,6 +283,9 @@ fn run(
             } else {
                 input.quit = true;
             }
+        }
+        if campaign {
+            input.level_step = 0;
         }
         if std::mem::take(&mut input.toggle_lock) && !game.help {
             game.toggle_lock();
@@ -354,7 +410,7 @@ fn run(
     if let Some(rec) = recorder.take() {
         save_film(rec, &mut game);
     }
-    Ok(())
+    Ok((game.world.outcome, game.world.verdict.clone()))
 }
 
 /// Play a film full screen in the follow view, looping; any key ends it.
