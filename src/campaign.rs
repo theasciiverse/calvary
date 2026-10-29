@@ -47,6 +47,7 @@ pub const ACTS: &[Act] = &[
     Act { name: "Act II: The Desertion", transmission: &["After Nineveh we had no flag.", "We had a notebook and a sergeant who could read it."] },
     Act { name: "Act III: The European War", transmission: &["Europe was not fighting America.", "Europe was fighting on schedule."] },
     Act { name: "Act IV: The North", transmission: &["Svalbard is where we stopped calling them sites.", "They were never graves. They were beds."] },
+    Act { name: "Act V: Golgotha", transmission: &["You want to know what we found?", "We found that she was right."] },
 ];
 
 pub const MISSIONS: &[Mission] = &[
@@ -575,6 +576,51 @@ pub const MISSIONS: &[Mission] = &[
             "then the ice takes them back. Hold the south shore until it does.",
         ],
         objective: "Hold the south shore for seven minutes, until the ice breaks. Keep the HQ standing.",
+    },
+    Mission {
+        act: 4,
+        number: 36,
+        title: "Cyprus",
+        map: include_str!("../maps/cyprus.cmap"),
+        briefing: &[
+            "Commander, Reid. Cyprus, sir, the last stop before Jerusalem. The Finns",
+            "sailed with us, and everything we have kept since Basrah is in the",
+            "holds: the Shroud, the Veil, the Lance, her letters. The Americans are",
+            "still hunting us. They hold Limassol harbour, the airbase on Akrotiri",
+            "and guns at Kolossi castle. We need that harbour to sail from. Take it",
+            "and we go home, to where she started.",
+        ],
+        objective: "Destroy the Americans' HQ at Limassol harbour. Keep ours standing.",
+    },
+    Mission {
+        act: 4,
+        number: 37,
+        title: "Jaffa",
+        map: include_str!("../maps/jaffa.cmap"),
+        briefing: &[
+            "Commander, Reid. Jaffa. We go ashore on the beach under the old town,",
+            "and they are all here, sir: the Europeans in Tel Aviv to the north, the",
+            "Americans to the south, and the Order down the Jerusalem road, with a",
+            "garrison in the old town itself. They know where we are going. Take",
+            "the old town and hold it two minutes, and the road to Jerusalem is",
+            "ours.",
+        ],
+        objective: "Take Jaffa's old town and hold it for two minutes. Keep the HQ on the beach standing.",
+    },
+    Mission {
+        act: 4,
+        number: 38,
+        title: "The walls of Jerusalem",
+        map: include_str!("../maps/walls.cmap"),
+        briefing: &[
+            "Commander, Reid. We are inside the walls, sir, and everyone is coming:",
+            "the Europeans to the Damascus Gate, the Americans to the Jaffa Gate, the",
+            "Order down off the Mount of Olives to the Lions' Gate. Seven minutes and",
+            "the dig is ready for us. One thing, and it is not a small one: the holy",
+            "places are not targets. Not the Sepulchre, not the Temple Mount, not any",
+            "of them. Three of our shots on them and we are no better than the Order.",
+        ],
+        objective: "Hold the Old City for seven minutes. Do not fire on the holy places: three hits and it is lost.",
     },
 ];
 

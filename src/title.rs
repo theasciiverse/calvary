@@ -87,6 +87,9 @@ const PLACES: &[(&str, &str, f32, f32)] = &[
     ("norway", "Norway", 62.00, 7.00),
     ("cyprus", "Cyprus", 35.13, 33.43),
     ("jaffa", "Jaffa", 32.05, 34.75),
+    ("walls", "The walls of Jerusalem", 31.778, 35.234),
+    ("the dig", "Calloway's dig, Jerusalem", 31.778, 35.229),
+    ("skull", "Beneath the place of the skull", 31.778, 35.229),
     ("jerusalem", "Jerusalem", 31.78, 35.23),
 ];
 

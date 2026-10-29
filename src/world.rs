@@ -888,6 +888,11 @@ impl World {
         self.rubble_at(x + (tx - x) / d * 0.8, y + (ty - y) / d * 0.8, 0.7)
     }
 
+    /// Whether a shot landing at (x, y) with this blast would reach a holy site.
+    fn near_holy(&self, x: f32, y: f32, radius: f32) -> bool {
+        self.entities.iter().any(|e| e.alive && holy(&e.kind) && (e.x - x).hypot(e.y - y) <= e.radius() + radius.max(0.3) + 0.3)
+    }
+
     /// A shot landing on a holy site counts against whoever fired it.
     fn strike_holy(&mut self, x: f32, y: f32, radius: f32, team: Team) {
         let r = radius.max(0.3);
@@ -1454,6 +1459,12 @@ impl World {
             }
             if let Some(w) = weapon {
                 if d <= wrange {
+                    // our side and our allies keep the holy places a no-fire
+                    // zone: a shot that would land on one is not fired
+                    let blast = balance::weapon(w).map_or(0.0, |s| s.radius);
+                    if team.friendly() && self.near_holy(tx, ty, blast) {
+                        return;
+                    }
                     if self.entities[i].cooldown == 0.0 {
                         // the supertank row has fire delay 0; give the computer's
                         // supertank the player's own 120mm reload instead
@@ -2851,6 +2862,26 @@ mod rules {
         w.step(1.0 / 30.0);
         assert_eq!(w.outcome, Outcome::Lost);
         assert_eq!(w.verdict, "We fired on the holy places.");
+    }
+
+    #[test]
+    fn our_units_hold_fire_on_what_stands_by_a_holy_place() {
+        let mut w = ice_map("", "jerustemple1 4 6 15 0 100\npeon_tank 1 6 19.5 0 0\npeon_tank 2 6.5 16.0 0 0\n");
+        w.ai_timer = [f32::MAX; 5];
+        for e in w.entities.iter_mut().filter(|e| e.kind == "peon_tank") {
+            e.order = Order::Hold;
+        }
+        let theirs = w.entities.iter().position(|e| e.kind == "peon_tank" && e.team == Team::Enemy).unwrap();
+        for _ in 0..(5 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert_eq!(w.entities[theirs].hp, w.entities[theirs].max_hp, "not shot at, standing at the temple");
+        assert_eq!(w.holy_hits[0], 0);
+        w.entities[theirs].y = 21.5;
+        for _ in 0..(5 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert!(w.entities[theirs].hp < w.entities[theirs].max_hp, "away from it, fair game");
     }
 
     #[test]
