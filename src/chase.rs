@@ -240,6 +240,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
             Class::Vehicle | Class::EnemyTank => (e.radius() * 0.9, 0.55, 0.0, pal.body, pal.turret),
             Class::Prop if k == "giant_skull" => (0.9, 0.8, 0.0, (196, 186, 162), sprites::BONE),
             Class::Prop if k.starts_with("giant_") => (0.12, 1.9, 0.0, (196, 186, 162), sprites::BONE),
+            Class::Prop if k == "cornice" => (1.6, 0.5, 0.8, (196, 208, 222), (246, 249, 252)),
             Class::Prop if k.contains("wall") => (0.6, 0.7, 0.0, (150, 106, 84), (172, 124, 98)),
             Class::Prop if k.contains("palm") || k.contains("tree") => (0.3, 1.6, 0.0, (52, 120, 56), (80, 160, 70)),
             Class::Prop if k.contains("house") || k.contains("build") => (0.5, 0.8, 0.0, (222, 212, 192), (204, 98, 72)),
@@ -342,7 +343,13 @@ pub fn draw(buf: &mut Buffer, area: Rect, g: &Game) {
         let kk = p.life / p.max_life;
         let ground = g.terrain.height(p.x, p.y) * RELIEF + (1.0 - kk) * 1.2;
         if let Some((sx, sy, z)) = project(p.x, p.y, ground) {
-            let c = if p.hot { (255, (90.0 + 165.0 * kk) as u8, (40.0 * kk) as u8) } else { shade((150, 150, 150), 0.5 + kk * 0.5) };
+            let c = if p.hot {
+                (255, (90.0 + 165.0 * kk) as u8, (40.0 * kk) as u8)
+            } else if p.snow {
+                shade((244, 248, 252), 0.75 + kk * 0.25)
+            } else {
+                shade((150, 150, 150), 0.5 + kk * 0.5)
+            };
             let r = (0.12 * focal / z).clamp(0.0, 2.0) as i32;
             for dy in -r..=r {
                 for dx in -r..=r {

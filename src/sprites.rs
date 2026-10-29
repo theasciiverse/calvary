@@ -590,6 +590,21 @@ fn paint_prop(layer: &mut PixelLayer, e: &Entity) {
         paint_bones(layer, k, cx, cy, th);
         return;
     }
+    if k == "cornice" {
+        // a snow cornice (Calvary's own): a heavy white lip of snow across
+        // the slope, its shadowed underside on the downhill side
+        let (hx, hy) = (th.cos(), th.sin());
+        layer.paint(cx, cy, 1.8, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let (along, across) = (dx * hx + dy * hy, -dx * hy + dy * hx);
+            let half = 1.6 * (1.0 - (across / 1.7).powi(2)).max(0.0).sqrt();
+            if across.abs() > 1.7 || !(-0.45..=0.35 * half / 1.6 + 0.1).contains(&along) {
+                return None;
+            }
+            Some((if along > 0.05 { (176, 190, 206) } else { (246, 249, 252) }, false))
+        });
+        return;
+    }
     if has("palm") || has("tree") {
         layer.paint(cx, cy, 0.45, |x, y| {
             let r = (x - cx).hypot(y - cy);

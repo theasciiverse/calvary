@@ -365,6 +365,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Take the Shroud from the Order's truck and bring it to our HQ, before it leaves by the Alpine road.",
     },
+    Mission {
+        act: 2,
+        number: 22,
+        title: "The Gotthard Pass",
+        map: include_str!("../maps/gotthard.cmap"),
+        briefing: &[
+            "Commander, Reid. The Shroud is safe and going north with us, over the",
+            "Gotthard: six trucks, up the Tremola from Airolo, over the pass, down",
+            "through Andermatt, where the Europeans are dug in, and out through the",
+            "gorge. Sir, the snow up there is hanging over the road in cornices.",
+            "One shell near one and the whole slope comes down on whatever is below.",
+            "Theirs or ours. Use that, and watch where they are shooting.",
+        ],
+        objective: "Get four of the six supply trucks out through the Schollenen gorge. Lose three and it fails.",
+    },
 ];
 
 /// The mission's map, parsed.

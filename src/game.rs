@@ -74,6 +74,8 @@ pub struct Particle {
     pub life: f32,
     pub max_life: f32,
     pub hot: bool,
+    /// Powder snow from an avalanche.
+    pub snow: bool,
 }
 
 pub struct Game {
@@ -425,14 +427,15 @@ impl Game {
         self.refill_at_base();
         self.last_blasts = std::mem::take(&mut self.world.blasts);
         for b in self.last_blasts.clone() {
-            self.blast(b.x, b.y, b.power);
+            self.blast(b.x, b.y, b.power, b.snow);
         }
         self.step_particles();
     }
 
-    /// An explosion's particles, sized by its power.
-    pub fn blast(&mut self, x: f32, y: f32, power: f32) {
-        self.explode(x, y, (14.0 * power) as usize + 4, power);
+    /// An explosion's particles, sized by its power (or a burst of powder
+    /// snow, for an avalanche).
+    pub fn blast(&mut self, x: f32, y: f32, power: f32, snow: bool) {
+        self.explode(x, y, (14.0 * power) as usize + 4, power, snow);
     }
 
     /// A new supertank rolls out next to the HQ.
@@ -546,17 +549,17 @@ impl Game {
                 ShotKind::Missile => (60, 1.8),
                 ShotKind::Bullet => (2, 0.25),
             };
-            self.explode(x, y, n, power);
+            self.explode(x, y, n, power, false);
         }
     }
 
-    fn explode(&mut self, x: f32, y: f32, n: usize, power: f32) {
+    fn explode(&mut self, x: f32, y: f32, n: usize, power: f32, snow: bool) {
         for _ in 0..n {
             let a = self.rand() * std::f32::consts::TAU;
             let v = (0.3 + self.rand()) * 3.0 * power;
             let life = (0.3 + self.rand() * 0.7) * power.max(0.4);
-            let hot = self.rand() < 0.6;
-            self.particles.push(Particle { x, y, vx: a.cos() * v, vy: a.sin() * v, life, max_life: life, hot });
+            let hot = !snow && self.rand() < 0.6;
+            self.particles.push(Particle { x, y, vx: a.cos() * v, vy: a.sin() * v, life, max_life: life, hot, snow });
         }
     }
 

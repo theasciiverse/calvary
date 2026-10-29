@@ -171,6 +171,8 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
         let k = p.life / p.max_life;
         let color = if p.hot {
             (255, (90.0 + 165.0 * k) as u8, (40.0 * k) as u8)
+        } else if p.snow {
+            scale((244, 248, 252), 0.75 + k * 0.25)
         } else {
             scale((150, 150, 150), 0.5 + k * 0.5)
         };

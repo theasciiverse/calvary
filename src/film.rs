@@ -123,7 +123,8 @@ impl Recorder {
             self.text.push('\n');
         }
         for b in &g.last_blasts {
-            let _ = writeln!(self.text, "x {} {} {}", q(b.x), q(b.y), q(b.power));
+            // powder snow is written as a negative power
+            let _ = writeln!(self.text, "x {} {} {}", q(b.x), q(b.y), q(if b.snow { -b.power } else { b.power }));
         }
         self.ticks += 1;
     }
@@ -286,7 +287,7 @@ impl Film {
         g.shots = t.shots.iter().map(|&(x, y, z)| crate::game::Shot::shown(x, y, z)).collect();
         g.world.bolts = t.bolts.iter().map(|&(x, y)| crate::world::Bolt::shown(x, y)).collect();
         for &(x, y, power) in &t.blasts {
-            g.blast(x, y, power);
+            g.blast(x, y, power.abs(), power < 0.0);
         }
         g.step_particles();
     }

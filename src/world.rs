@@ -66,6 +66,14 @@ const LAVA_DPS: f32 = 10.0;
 const VOLCANO_RANGE: f32 = 14.0;
 const LAVA_BOMB_DAMAGE: f32 = 60.0;
 const LAVA_BOMB_RADIUS: f32 = 1.5;
+/// A snow cornice (Calvary's own) comes down when a shot lands this close,
+/// and the avalanche runs this far downhill at this speed, this wide,
+/// doing this much to everything on the ground it meets.
+const CORNICE_TRIGGER: f32 = 1.6;
+const AVALANCHE_RUN: f32 = 12.0;
+const AVALANCHE_SPEED: f32 = 6.0;
+const AVALANCHE_WIDTH: f32 = 2.2;
+const AVALANCHE_DAMAGE: f32 = 250.0;
 /// A relic is picked up from this close, and draws route units from this far.
 const RELIC_REACH: f32 = 1.5;
 const RELIC_LURE: f32 = 8.0;
@@ -353,6 +361,19 @@ pub struct Blast {
     pub x: f32,
     pub y: f32,
     pub power: f32,
+    /// Powder snow (an avalanche), not fire.
+    pub snow: bool,
+}
+
+/// An avalanche running downhill from a fallen cornice.
+#[derive(Clone, Debug)]
+pub struct Avalanche {
+    pub x: f32,
+    pub y: f32,
+    pub dir: f32,
+    run: f32,
+    puff: f32,
+    hit: Vec<usize>,
 }
 
 /// A sound for the audio layer: a file from `audio::SFX`, where it happened
@@ -401,6 +422,7 @@ pub struct World {
     lava: Vec<bool>,
     /// Volcano craters, and the time to each one's next bomb.
     pub volcanoes: Vec<(f32, f32, f32)>,
+    pub avalanches: Vec<Avalanche>,
     /// Fought at night: enemy vehicles are seen only near our own.
     pub night: bool,
     width: usize,
@@ -543,6 +565,7 @@ impl World {
             blocked,
             lava,
             volcanoes,
+            avalanches: Vec::new(),
             night: level.night,
             width: level.width,
             route_choice: HashMap::new(),
@@ -770,6 +793,7 @@ impl World {
             }
         }
         self.step_lava(dt);
+        self.step_avalanches(dt);
         self.step_relics();
         self.step_bolts(dt);
         self.step_burns(dt);
@@ -1166,7 +1190,7 @@ impl World {
                     let (x, y) = (e.x, e.y);
                     e.alive = false;
                     self.damage(w, x, y, Some(t), team);
-                    self.blasts.push(Blast { x, y, power: 2.0 });
+                    self.blasts.push(Blast { x, y, power: 2.0, snow: false });
                     return;
                 }
                 self.drive_off_route(i, tx, ty, dt);
@@ -1476,7 +1500,7 @@ impl World {
             let direct = target.filter(|&t| (self.entities[t].x - x).hypot(self.entities[t].y - y) <= self.entities[t].radius() + 0.4);
             self.damage(w, x, y, direct, team);
             let power = balance::weapon(w).map_or(0.4, |s| if s.area { 0.6 + s.radius * 0.3 } else { 0.4 });
-            self.blasts.push(Blast { x, y, power });
+            self.blasts.push(Blast { x, y, power, snow: false });
         }
     }
 
@@ -1578,6 +1602,47 @@ impl World {
         self.entities.iter().any(|o| o.alive && o.team == Team::Player && o.class != Class::Relic && (o.x - e.x).hypot(o.y - e.y) <= NIGHT_SIGHT)
     }
 
+    /// A shot landing near a snow cornice brings it down, whoever fired.
+    fn shake_cornices(&mut self, x: f32, y: f32, radius: f32) {
+        for c in 0..self.entities.len() {
+            let e = &self.entities[c];
+            if e.alive && e.kind == "cornice" && (e.x - x).hypot(e.y - y) <= CORNICE_TRIGGER + radius {
+                let (cx, cy, dir) = (e.x, e.y, e.heading);
+                self.entities[c].alive = false;
+                self.avalanches.push(Avalanche { x: cx, y: cy, dir, run: 0.0, puff: 0.0, hit: Vec::new() });
+                self.sound("explosion/generic.mp3", Some((cx, cy)), 1.0);
+                self.say("Avalanche!");
+            }
+        }
+    }
+
+    /// Avalanches run downhill along their cornice's heading and sweep
+    /// everything on the ground in their way, every side alike.
+    fn step_avalanches(&mut self, dt: f32) {
+        let mut runs = std::mem::take(&mut self.avalanches);
+        for a in &mut runs {
+            let step = AVALANCHE_SPEED * dt;
+            a.run += step;
+            (a.x, a.y) = (a.x + a.dir.cos() * step, a.y + a.dir.sin() * step);
+            for j in 0..self.entities.len() {
+                let e = &self.entities[j];
+                if e.is_target() && !flies(&e.kind) && !a.hit.contains(&j) && (e.x - a.x).hypot(e.y - a.y) <= AVALANCHE_WIDTH + e.radius() {
+                    a.hit.push(j);
+                    self.hurt_by(j, AVALANCHE_DAMAGE, false);
+                }
+            }
+            a.puff -= dt;
+            if a.puff <= 0.0 {
+                a.puff = 0.08;
+                let side = (self.rand() - 0.5) * 2.0 * AVALANCHE_WIDTH;
+                let (px, py) = (a.x - a.dir.sin() * side, a.y + a.dir.cos() * side);
+                self.blasts.push(Blast { x: px, y: py, power: 0.9, snow: true });
+            }
+        }
+        runs.retain(|a| a.run < AVALANCHE_RUN);
+        self.avalanches = runs;
+    }
+
     /// A volcanic bomb comes down: it hurts every side alike.
     fn lava_bomb(&mut self, x: f32, y: f32) {
         for j in 0..self.entities.len() {
@@ -1586,7 +1651,7 @@ impl World {
                 self.hurt_by(j, LAVA_BOMB_DAMAGE, false);
             }
         }
-        self.blasts.push(Blast { x, y, power: 1.1 });
+        self.blasts.push(Blast { x, y, power: 1.1, snow: false });
         self.sound("explosion/generic.mp3", Some((x, y)), 0.6);
     }
 
@@ -1634,6 +1699,7 @@ impl World {
     /// does its damage once per original tick for that many ticks.
     pub fn damage_by(&mut self, weapon: &str, x: f32, y: f32, direct: Option<usize>, team: Team, by_stank: bool) {
         let Some(w) = balance::weapon(weapon) else { return };
+        self.shake_cornices(x, y, w.radius);
         let victims: Vec<usize> = if w.area {
             (0..self.entities.len())
                 .filter(|&j| {
@@ -1698,7 +1764,7 @@ impl World {
             // the supertank respawns at the HQ while lives remain
             let e = &mut self.entities[j];
             e.hp = e.max_hp;
-            self.blasts.push(Blast { x, y, power: 2.5 });
+            self.blasts.push(Blast { x, y, power: 2.5, snow: false });
             self.sound("explosion/generic.mp3", Some((x, y)), 1.0);
             self.radio("narrative/supertank_lost_22khz.mp3");
             self.lives = self.lives.saturating_sub(1);
@@ -1713,7 +1779,7 @@ impl World {
             return;
         }
         self.entities[j].alive = false;
-        self.blasts.push(Blast { x, y, power: 1.0 + r });
+        self.blasts.push(Blast { x, y, power: 1.0 + r, snow: false });
         let boom = if matches!(class, Class::Vehicle | Class::EnemyTank | Class::Plane) { "explosion/ground_vehicle.mp3" } else { "explosion/generic.mp3" };
         self.sound(boom, Some((x, y)), 1.0);
         match (class, team) {
@@ -2005,6 +2071,37 @@ mod rules {
         }
         assert_eq!(w.entities[relic].carrier, Some(again));
         assert_eq!(w.outcome, Outcome::Won);
+    }
+
+    #[test]
+    fn a_shot_near_a_cornice_sends_an_avalanche_downhill() {
+        let tiles = format!("{}\n", "g".repeat(30)).repeat(30);
+        let heights = format!("{}\n", "05".repeat(31)).repeat(31);
+        let q = "'''";
+        // the cornice at (15, 5) slides south (heading pi/2)
+        let objects = "mainbasepad 1 5 28 0 4000\nmainbasepad 2 25 2 0 4000\ncornice 0 15 5 1.5708 100\n";
+        let text = format!(
+            "name = 'snow'\nwidth = 30\nheight = 30\nlegend = {q}\ng 0 grassfull\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
+        );
+        let mut w = World::from_level(&crate::cmap::parse(&text).unwrap().0);
+        let unit = |w: &mut World, team: Team, x: f32, y: f32| {
+            let mut e = Entity::shown("bridger", Class::Vehicle, team, 50.0);
+            (e.x, e.y, e.order) = (x, y, Order::Hold);
+            w.entities.push(e);
+            w.entities.len() - 1
+        };
+        let below = unit(&mut w, Team::Enemy, 15.0, 12.0);
+        let beside = unit(&mut w, Team::Player, 22.0, 12.0);
+        w.damage("b120mm", 25.0, 25.0, None, Team::Player);
+        assert!(w.avalanches.is_empty(), "a shot far off does nothing");
+        w.damage("b120mm", 15.5, 5.5, None, Team::Player);
+        assert_eq!(w.avalanches.len(), 1);
+        for _ in 0..(4 * 30) {
+            w.step(1.0 / 30.0);
+        }
+        assert!(w.avalanches.is_empty(), "it runs out");
+        assert!(!w.entities[below].alive, "what is below it is swept away");
+        assert!(w.entities[beside].alive, "what is beside it is not");
     }
 
     #[test]
