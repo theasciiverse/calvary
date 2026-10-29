@@ -39,10 +39,13 @@ pub struct Mission {
     pub objective: &'static str,
 }
 
-pub const ACTS: &[Act] = &[Act {
-    name: "Act I: The Incursion",
-    transmission: &["We went in because they told us an American was dead.", "She was. They lied about who killed her."],
-}];
+pub const ACTS: &[Act] = &[
+    Act {
+        name: "Act I: The Incursion",
+        transmission: &["We went in because they told us an American was dead.", "She was. They lied about who killed her."],
+    },
+    Act { name: "Act II: The Desertion", transmission: &["After Nineveh we had no flag.", "We had a notebook and a sergeant who could read it."] },
+];
 
 pub const MISSIONS: &[Mission] = &[
     Mission {
@@ -150,6 +153,21 @@ pub const MISSIONS: &[Mission] = &[
             "minutes with nothing of theirs on it, sir. Then we are deserters.",
         ],
         objective: "Hold the site for two minutes against both armies. Keep the HQ standing.",
+    },
+    Mission {
+        act: 1,
+        number: 8,
+        title: "Palmyra",
+        map: include_str!("../maps/palmyra.cmap"),
+        briefing: &[
+            "Commander, Reid. The column is through Palmyra and strung out on the",
+            "road west, trucks and wounded first. The Americans are an hour behind",
+            "us and closing: three roads into the old city, and every one of them",
+            "ends at our camp by the colonnade. Five minutes, sir. Hold them in the",
+            "ruins for five minutes and the column is clear. Her notebook says the",
+            "Temple of Bel was built on something older. We have no time to look.",
+        ],
+        objective: "Hold out for five minutes. Keep the HQ standing.",
     },
 ];
 
