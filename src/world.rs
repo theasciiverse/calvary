@@ -57,8 +57,10 @@ const GAP_WAIT: f32 = 1.4;
 const CAPTURE_RANGE: f32 = 2.0;
 /// Instant weapons (speed 0 in the table) draw their beam this long.
 const BEAM_TIME: f32 = 0.15;
-/// Lava (a `lava*` tile with the wave flag: the original animates it like
-/// water and nothing more) burns whatever stands in it, this much a second.
+/// Lava (a `lava*` tile with the wave flag) burns whatever stands in it,
+/// this much a second. The original animates lava like water; its tiles carry
+/// a `damage` value (`tile.h`, set in the editor's tile dialog, saved with
+/// the level) that no code ever applied and no tile ever set.
 const LAVA_DPS: f32 = 10.0;
 /// A `volcano` throws a bomb onto its cone every few seconds, this far out.
 const VOLCANO_RANGE: f32 = 14.0;
@@ -1403,7 +1405,7 @@ impl World {
     }
 
     /// Lava burns what drives into it, and volcanoes throw bombs onto their
-    /// cones (Calvary's own: the original's lava was only a picture).
+    /// cones (Calvary's own; see `LAVA_DPS`).
     fn step_lava(&mut self, dt: f32) {
         for j in 0..self.entities.len() {
             let e = &self.entities[j];
