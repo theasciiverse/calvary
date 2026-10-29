@@ -11,8 +11,9 @@
 //! win = ["no_units 2"]          # optional, see `rules.rs` (default: destroy
 //! lose = ["no mainbasepad 1"]   # their HQ, lose ours)
 //! build = ["peon_tank", "bridger"]   # optional: what the factories offer
-//! money = [10000, 5000, 5000]   # optional: starting money, players 1, 2, 5 (and 6)
+//! money = [10000, 5000, 5000]   # optional: starting money, players 1, 2, 5 (and 6, 7)
 //! night = true                  # optional: fought at night
+//! fog = true                    # optional: fog of war, ground unseen until our side has been near
 //!
 //! # one printable character per tile type used on the map
 //! legend = '''
@@ -65,6 +66,8 @@ struct File {
     money: Option<Vec<i32>>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     night: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    fog: bool,
     legend: String,
     tiles: String,
     heights: String,
@@ -135,7 +138,7 @@ pub fn export(level: &Level, name: &str, music: Option<&str>, name_of: impl Fn(&
     } else {
         (level.rules.win.iter().map(|c| c.text()).collect(), level.rules.lose.iter().map(|c| c.text()).collect())
     };
-    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, build: level.build.clone(), money: level.money.map(|m| if m[3] == crate::world::START_MONEY { m[..3].to_vec() } else { m.to_vec() }), night: level.night, legend, tiles, heights, objects };
+    let file = File { name: name.to_string(), width: level.width, height: level.height, music: music.map(str::to_string), win, lose, build: level.build.clone(), money: level.money.map(|m| m[..(3..5).rev().find(|&k| m[k] != crate::world::START_MONEY).map_or(3, |k| k + 1)].to_vec()), night: level.night, fog: level.fog, legend, tiles, heights, objects };
     toml::to_string(&file).map_err(|e| e.to_string())
 }
 
@@ -227,11 +230,14 @@ pub fn parse(text: &str) -> Result<(Level, String, Option<String>), String> {
     }
     let money = match f.money.as_deref() {
         None => None,
-        Some([a, b, c]) => Some([*a, *b, *c, crate::world::START_MONEY]),
-        Some([a, b, c, d]) => Some([*a, *b, *c, *d]),
-        Some(_) => return Err("money: three amounts (players 1, 2, 5) or four (and 6)".into()),
+        Some(m @ [_, _, _, ..]) if m.len() <= 5 => {
+            let mut all = [crate::world::START_MONEY; 5];
+            all[..m.len()].copy_from_slice(m);
+            Some(all)
+        }
+        Some(_) => return Err("money: three amounts (players 1, 2, 5), four (and 6) or five (and 7)".into()),
     };
-    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules, build: f.build, money, night: f.night };
+    let level = Level { width: w, height: h, vert_heights, cell_tiles, tiles, object_types: Vec::new(), objects, rules, build: f.build, money, night: f.night, fog: f.fog };
     Ok((level, f.name, f.music))
 }
 

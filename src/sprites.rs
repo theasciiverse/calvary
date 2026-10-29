@@ -143,6 +143,8 @@ pub const ENEMY: Palette = Palette { body: (150, 50, 42), front: (214, 96, 76), 
 pub const RIVAL: Palette = Palette { body: (52, 84, 140), front: (104, 146, 214), turret: (76, 112, 180), rim: (28, 44, 80), barrel: (176, 204, 240) };
 /// The Watchers' Order: black hulls with a bone-white band.
 pub const WATCHERS: Palette = Palette { body: (34, 32, 34), front: (210, 198, 168), turret: (52, 48, 50), rim: (210, 198, 168), barrel: (120, 112, 100) };
+/// Our allies, the Finns: snow-white hulls with a blue band.
+pub const ALLIES: Palette = Palette { body: (222, 226, 230), front: (40, 84, 170), turret: (200, 206, 212), rim: (40, 84, 170), barrel: (150, 160, 172) };
 pub const NEUTRAL: Palette = Palette { body: (150, 150, 144), front: (196, 196, 188), turret: (178, 178, 170), rim: (90, 90, 86), barrel: (220, 220, 212) };
 
 pub fn palette(team: Team) -> Palette {
@@ -151,6 +153,7 @@ pub fn palette(team: Team) -> Palette {
         Team::Enemy => ENEMY,
         Team::Rival => RIVAL,
         Team::Watchers => WATCHERS,
+        Team::Allies => ALLIES,
         _ => NEUTRAL,
     }
 }

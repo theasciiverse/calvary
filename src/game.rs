@@ -4,6 +4,9 @@
 use crate::level::Level;
 use crate::tank::{self, Controls, Tank, CHAIN_RELOAD};
 use crate::terrain::Terrain;
+
+/// Open water where sea ice broke: the original's `seawaterfull2`.
+const ICE_WATER: crate::terrain::Rgb = (25, 98, 140);
 use crate::world::{Class, Command, Outcome, Team, World, BUILDABLE};
 
 pub const DT: f32 = 1.0 / 30.0;
@@ -424,12 +427,29 @@ impl Game {
         if self.world.lives < lives && self.world.outcome == Outcome::Playing {
             self.respawn();
         }
+        self.sync_terrain();
         self.refill_at_base();
         self.last_blasts = std::mem::take(&mut self.world.blasts);
         for b in self.last_blasts.clone() {
             self.blast(b.x, b.y, b.power, b.snow);
         }
         self.step_particles();
+    }
+
+    /// Carry what changed on the ground into the terrain the views draw:
+    /// the fog lifting, and sea ice cracking and breaking.
+    pub fn sync_terrain(&mut self) {
+        if self.world.fog_changed {
+            self.world.fog_changed = false;
+            self.terrain.set_fog(self.world.fog.as_deref().unwrap_or(&[]));
+        }
+        for (i, left) in std::mem::take(&mut self.world.ice_hits) {
+            if left <= 0.0 {
+                self.terrain.break_ice(i, ICE_WATER);
+            } else {
+                self.terrain.crack(i, left);
+            }
+        }
     }
 
     /// An explosion's particles, sized by its power (or a burst of powder

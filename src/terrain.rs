@@ -91,7 +91,15 @@ pub struct Terrain {
     /// Vertex heights in map cells, `(w + 1) * (h + 1)`.
     heights: Vec<f32>,
     cells: Vec<Cell>,
+    /// Cells not yet seen (a map with `fog = true`; empty otherwise), copied
+    /// from the world as it unfogs them.
+    fog: Vec<bool>,
+    /// Sea-ice cells' colour before they were hit.
+    ice_base: std::collections::HashMap<usize, Rgb>,
 }
+
+/// What fogged ground shows: the original's radar draws it black.
+pub const FOG: Rgb = (10, 11, 14);
 
 impl Terrain {
     pub fn from_level(name: &str, level: &Level) -> Terrain {
@@ -128,7 +136,38 @@ impl Terrain {
             h: level.height,
             heights: level.vert_heights.iter().map(|&v| v as f32 * HEIGHT_STEP).collect(),
             cells,
+            fog: Vec::new(),
+            ice_base: Default::default(),
         }
+    }
+
+    /// Take the world's fog (true: not yet seen).
+    pub fn set_fog(&mut self, fog: &[bool]) {
+        self.fog.clear();
+        self.fog.extend_from_slice(fog);
+    }
+
+    /// Whether the cell under (x, y) has not been seen yet.
+    pub fn fogged(&self, x: f32, y: f32) -> bool {
+        !self.fog.is_empty() && x >= 0.0 && y >= 0.0 && (x as usize) < self.w && (y as usize) < self.h && self.fog[y as usize * self.w + x as usize]
+    }
+
+    /// Open water where ice was: the cell takes `color` and turns to water
+    /// that nothing on the ground can cross.
+    pub fn break_ice(&mut self, i: usize, color: Rgb) {
+        if let Some(c) = self.cells.get_mut(i) {
+            *c = Cell { color, blocking: true, water: true };
+        }
+    }
+
+    /// Ice cracking under fire, `left` its strength still standing: the
+    /// colour darkens toward the water below.
+    pub fn crack(&mut self, i: usize, left: f32) {
+        let Some(c) = self.cells.get(i).map(|c| c.color) else { return };
+        let base = *self.ice_base.entry(i).or_insert(c);
+        let k = (1.0 - left.clamp(0.0, 1.0)) * 0.55;
+        let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * k) as u8;
+        self.cells[i].color = (mix(base.0, 52), mix(base.1, 86), mix(base.2, 104));
     }
 
     pub fn cell(&self, cx: usize, cy: usize) -> &Cell {
@@ -167,6 +206,9 @@ impl Terrain {
     /// Terrain colour at a map position, hill shaded with light from the north west.
     pub fn shaded(&self, x: f32, y: f32) -> Rgb {
         let Some(cell) = self.cell_at(x, y) else { return (0, 0, 0) };
+        if self.fogged(x, y) {
+            return FOG;
+        }
         let (dx, dy) = self.slope(x, y);
         let light = (0.85 - (dx + dy) * 0.35).clamp(0.45, 1.25);
         let s = |c: u8| (c as f32 * light).clamp(0.0, 255.0) as u8;

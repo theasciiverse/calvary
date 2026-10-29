@@ -151,6 +151,9 @@ fn draw_terrain(c: &mut DotCanvas, t: &Terrain, time: f32, contour: f32) {
         for dx in 0..w * 2 {
             let (x, y) = c.dot_to_map(dx, dy);
             let Some(cell) = t.cell_at(x, y) else { continue };
+            if t.fogged(x, y) {
+                continue;
+            }
             let band = |x: f32, y: f32| (t.height(x, y) / contour).floor() as i32;
             let b = band(x, y);
             if b != band(x + c.dot_w, y) || b != band(x, y + c.dot_h) {
@@ -271,7 +274,7 @@ pub fn night(buf: &mut ratatui::buffer::Buffer, area: Rect, g: &Game) {
         .world
         .entities
         .iter()
-        .filter(|e| e.alive && e.team == Team::Player && !matches!(e.class, Class::Prop | Class::Relic | Class::PlayerTank))
+        .filter(|e| e.alive && e.team.friendly() && !matches!(e.class, Class::Prop | Class::Relic | Class::PlayerTank))
         .map(|e| (e.x, e.y, if e.class == Class::Vehicle { 4.0 } else { 5.0 + e.radius() }))
         .collect();
     lights.push((g.tank.x, g.tank.y, 7.0));
@@ -343,6 +346,7 @@ fn team_color(team: Team) -> Color {
         Team::Enemy => Color::Rgb(235, 70, 55),
         Team::Rival => Color::Rgb(110, 160, 245),
         Team::Watchers => Color::Rgb(200, 190, 160),
+        Team::Allies => Color::Rgb(120, 170, 240),
         _ => Color::Rgb(205, 205, 200),
     }
 }

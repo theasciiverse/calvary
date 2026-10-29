@@ -79,6 +79,16 @@ const RELIC_REACH: f32 = 1.5;
 const RELIC_LURE: f32 = 8.0;
 /// At night an enemy vehicle shows only this close to something of ours.
 pub const NIGHT_SIGHT: f32 = 9.0;
+/// Fog of war: the supertank clears this far round itself (the original's
+/// `g1_unfog_radius` call in `objs/stank.cpp`), units and towers their
+/// detection range (`find_target`), our buildings this far past their walls.
+const STANK_SIGHT: f32 = 7.0;
+const BUILDING_SIGHT: f32 = 4.0;
+/// Sea ice (an `*icepatch*` tile): the damage a cell takes before it breaks
+/// into open water. A supergun shell opens a hole at once, a few rockets or
+/// bombs crack through, tank guns hardly mark it. Nothing in the original
+/// breaks; its tiles are fixed.
+pub const ICE_STRENGTH: f32 = 600.0;
 
 /// What the garage (keys 1-8, V) and the airbase (9, 0, B) offer, in the
 /// order the HUD lists them.
@@ -117,14 +127,17 @@ pub enum Team {
     Rival,
     /// The Watchers' Order (player 6): black-banded, at war with everyone.
     Watchers,
+    /// An allied army (player 7, the Finns of Act IV): at war with every
+    /// army but ours, driving our roads (`A:` links) with its own factories.
+    Allies,
     Neutral,
     Scenery,
 }
 
 /// The sides the computer plays.
-pub const COMPUTER_SIDES: [Team; 3] = [Team::Enemy, Team::Rival, Team::Watchers];
+pub const COMPUTER_SIDES: [Team; 4] = [Team::Enemy, Team::Rival, Team::Watchers, Team::Allies];
 /// Every army.
-pub const ARMIES: [Team; 4] = [Team::Player, Team::Enemy, Team::Rival, Team::Watchers];
+pub const ARMIES: [Team; 5] = [Team::Player, Team::Enemy, Team::Rival, Team::Watchers, Team::Allies];
 
 impl Team {
     pub fn from_player(p: u8) -> Team {
@@ -133,6 +146,7 @@ impl Team {
             2 => Team::Enemy,
             5 => Team::Rival,
             6 => Team::Watchers,
+            7 => Team::Allies,
             0 => Team::Neutral,
             _ => Team::Scenery,
         }
@@ -140,12 +154,17 @@ impl Team {
 
     /// A side with an army: units, factories, money.
     pub fn fights(self) -> bool {
-        matches!(self, Team::Player | Team::Enemy | Team::Rival | Team::Watchers)
+        matches!(self, Team::Player | Team::Enemy | Team::Rival | Team::Watchers | Team::Allies)
     }
 
-    /// Every army is at war with every other.
+    /// Our side or our allies'.
+    pub fn friendly(self) -> bool {
+        matches!(self, Team::Player | Team::Allies)
+    }
+
+    /// Every army is at war with every other, but for us and our allies.
     pub fn hostile(self, other: Team) -> bool {
-        self != other && self.fights() && other.fights()
+        self != other && self.fights() && other.fights() && !(self.friendly() && other.friendly())
     }
 
     fn index(self) -> usize {
@@ -153,6 +172,7 @@ impl Team {
             Team::Player => 0,
             Team::Rival => 2,
             Team::Watchers => 3,
+            Team::Allies => 4,
             _ => 1,
         }
     }
@@ -454,7 +474,7 @@ pub struct World {
     pub blasts: Vec<Blast>,
     /// Sounds for the audio layer, drained by the main loop.
     pub sounds: Vec<Sfx>,
-    pub money: [i32; 4],
+    pub money: [i32; 5],
     pub lives: u32,
     pub player_tank: Option<usize>,
     pub messages: VecDeque<(f32, String)>,
@@ -479,6 +499,17 @@ pub struct World {
     pub avalanches: Vec<Avalanche>,
     /// Fought at night: enemy vehicles are seen only near our own.
     pub night: bool,
+    /// Fog of war (`fog = true`): cells our side has not seen yet, row major.
+    pub fog: Option<Vec<bool>>,
+    /// Set when the fog lifts somewhere, for the renderers to copy it.
+    pub fog_changed: bool,
+    fog_clock: f32,
+    /// Strength left in each sea-ice cell: 0 where there is none, -1 where
+    /// it broke through.
+    ice: Vec<f32>,
+    /// Ice cells hit since the renderers last looked: (cell, strength left
+    /// as a fraction; 0 broken through).
+    pub ice_hits: Vec<(usize, f32)>,
     width: usize,
     /// Junction choices: path node -> which of its links new units take.
     pub route_choice: HashMap<usize, usize>,
@@ -489,13 +520,13 @@ pub struct World {
     /// dealt by the player's supertank).
     burns: Vec<(usize, f32, u32, bool)>,
     burn_clock: f32,
-    queues: [VecDeque<&'static str>; 4],
-    deploy_timer: [f32; 4],
+    queues: [VecDeque<&'static str>; 5],
+    deploy_timer: [f32; 5],
     bank_timer: f32,
-    ai_timer: [f32; 4],
+    ai_timer: [f32; 5],
     /// Formation being built (index into FORMATIONS) and the next unit in it.
-    ai_form: [Option<usize>; 4],
-    ai_place: [usize; 4],
+    ai_form: [Option<usize>; 5],
+    ai_place: [usize; 5],
     time: f32,
     rng: u64,
 }
@@ -531,6 +562,12 @@ impl World {
             nodes[n].dir = (by - ay).atan2(bx - ax);
         }
         let blocked = (0..level.width * level.height).map(|i| crate::terrain::tile_flags(level.tile(i % level.width, i / level.width)) & crate::level::TILE_BLOCKING != 0).collect();
+        let ice = (0..level.width * level.height)
+            .map(|i| {
+                let t = level.tile(i % level.width, i / level.width);
+                if crate::terrain::tile_name_for(t).is_some_and(|n| n.contains("icepatch")) { ICE_STRENGTH } else { 0.0 }
+            })
+            .collect();
         let lava = (0..level.width * level.height)
             .map(|i| {
                 let t = level.tile(i % level.width, i / level.width);
@@ -607,7 +644,7 @@ impl World {
             bolts: Vec::new(),
             blasts: Vec::new(),
             sounds: Vec::new(),
-            money: level.money.unwrap_or([START_MONEY; 4]),
+            money: level.money.unwrap_or([START_MONEY; 5]),
             lives: START_LIVES,
             player_tank,
             messages: VecDeque::new(),
@@ -622,17 +659,22 @@ impl World {
             volcanoes,
             avalanches: Vec::new(),
             night: level.night,
+            fog: level.fog.then(|| vec![true; level.width * level.height]),
+            fog_changed: level.fog,
+            fog_clock: 0.0,
+            ice,
+            ice_hits: Vec::new(),
             width: level.width,
             route_choice: HashMap::new(),
             points: 0,
             burns: Vec::new(),
             burn_clock: 0.0,
-            queues: [VecDeque::new(), VecDeque::new(), VecDeque::new(), VecDeque::new()],
-            deploy_timer: [0.0; 4],
+            queues: Default::default(),
+            deploy_timer: [0.0; 5],
             bank_timer: BANK_INTERVAL,
-            ai_timer: [5.0; 4],
-            ai_form: [None; 4],
-            ai_place: [0; 4],
+            ai_timer: [5.0; 5],
+            ai_form: [None; 5],
+            ai_place: [0; 5],
             time: 0.0,
             rng: 0x2545_F491_4F6C_DD1D,
         };
@@ -848,6 +890,7 @@ impl World {
             }
         }
         self.step_lava(dt);
+        self.step_fog(dt);
         self.step_avalanches(dt);
         self.step_relics();
         self.step_bolts(dt);
@@ -1437,6 +1480,10 @@ impl World {
         if self.gap(node) && e.kind != "bridger" && !flies(&e.kind) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT {
             return;
         }
+        // and so does open water where the ice on the road broke
+        if !flies(&e.kind) && self.water_ahead(e.x, e.y, nx, ny) {
+            return;
+        }
         if self.drive_towards(i, nx, ny, dt) {
             self.entities[i].next_node = self.next_after(node, team);
         }
@@ -1468,7 +1515,7 @@ impl World {
         self.entities[i].next_node = Some(node);
         let (nx, ny) = (self.nodes[node].x, self.nodes[node].y);
         let e = &self.entities[i];
-        if self.gap(node) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT {
+        if self.gap(node) && (nx - e.x).hypot(ny - e.y) <= GAP_WAIT || self.water_ahead(e.x, e.y, nx, ny) {
             return;
         }
         if !self.drive_towards(i, nx, ny, dt) {
@@ -1630,6 +1677,109 @@ impl World {
 
     /// Lava burns what drives into it, and volcanoes throw bombs onto their
     /// cones (Calvary's own; see `LAVA_DPS`).
+    /// Lift the fog round everything of ours and our allies', as often as
+    /// five times a second.
+    fn step_fog(&mut self, dt: f32) {
+        self.fog_clock -= dt;
+        if self.fog.is_none() || self.fog_clock > 0.0 {
+            return;
+        }
+        self.fog_clock = 0.2;
+        let eyes: Vec<(f32, f32, f32)> = self
+            .entities
+            .iter()
+            .filter(|e| e.alive && e.team.friendly() && !matches!(e.class, Class::Prop | Class::Relic | Class::Pad | Class::Bridge))
+            .map(|e| {
+                let r = match e.class {
+                    Class::PlayerTank | Class::EnemyTank => STANK_SIGHT,
+                    Class::Vehicle | Class::Tower | Class::Plane => e.stats().map_or(5.0, |s| s.detection_range).max(3.0),
+                    _ => e.radius() + BUILDING_SIGHT,
+                };
+                (e.x, e.y, r)
+            })
+            .collect();
+        let (w, h) = (self.width, self.blocked.len() / self.width.max(1));
+        let Some(fog) = self.fog.as_mut() else { return };
+        for (x, y, r) in eyes {
+            let (x0, x1) = ((x - r).floor().max(0.0) as usize, ((x + r).ceil() as usize).min(w));
+            let (y0, y1) = ((y - r).floor().max(0.0) as usize, ((y + r).ceil() as usize).min(h));
+            for cy in y0..y1 {
+                for cx in x0..x1 {
+                    let i = cy * w + cx;
+                    if fog[i] && (cx as f32 + 0.5 - x).hypot(cy as f32 + 0.5 - y) <= r {
+                        fog[i] = false;
+                        self.fog_changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether the cell under (x, y) is still in the fog.
+    pub fn fogged(&self, x: f32, y: f32) -> bool {
+        let Some(fog) = &self.fog else { return false };
+        x >= 0.0 && y >= 0.0 && (x as usize) < self.width && fog.get(y as usize * self.width + x as usize).copied().unwrap_or(false)
+    }
+
+    /// A hit on sea ice: every ice cell within the blast takes the damage,
+    /// and one that gives way drowns whatever stands on it.
+    fn crack_ice(&mut self, x: f32, y: f32, radius: f32, damage: f32) {
+        if damage <= 0.0 || !self.ice.iter().any(|&s| s > 0.0) {
+            return;
+        }
+        let r = radius.max(0.4);
+        let (w, h) = (self.width as i32, (self.ice.len() / self.width.max(1)) as i32);
+        for cy in (y - r - 0.5).floor() as i32..=(y + r + 0.5).ceil() as i32 {
+            for cx in (x - r - 0.5).floor() as i32..=(x + r + 0.5).ceil() as i32 {
+                if cx < 0 || cy < 0 || cx >= w || cy >= h {
+                    continue;
+                }
+                let i = (cy * w + cx) as usize;
+                // the blast reaches a cell if it touches any of it
+                let (nx, ny) = ((x).clamp(cx as f32, cx as f32 + 1.0), (y).clamp(cy as f32, cy as f32 + 1.0));
+                if self.ice[i] <= 0.0 || (nx - x).hypot(ny - y) > r {
+                    continue;
+                }
+                self.ice[i] = (self.ice[i] - damage).max(0.0);
+                self.ice_hits.push((i, self.ice[i] / ICE_STRENGTH));
+                if self.ice[i] > 0.0 {
+                    continue;
+                }
+                self.ice[i] = -1.0;
+                self.blocked[i] = true;
+                for j in 0..self.entities.len() {
+                    let e = &self.entities[j];
+                    let ground = matches!(e.class, Class::Vehicle | Class::PlayerTank | Class::EnemyTank) && !flies(&e.kind);
+                    if e.alive && ground && e.x.floor() as i32 == cx && e.y.floor() as i32 == cy && !self.on_bridge(e.x, e.y) {
+                        let hp = self.entities[j].hp;
+                        self.hurt_by(j, hp + 1.0, false);
+                    }
+                }
+                self.sound("explosion/generic.mp3", Some((cx as f32 + 0.5, cy as f32 + 0.5)), 0.6);
+            }
+        }
+    }
+
+    /// Whether the way from (x, y) toward (tx, ty) runs into broken ice
+    /// within the next cell.
+    fn water_ahead(&self, x: f32, y: f32, tx: f32, ty: f32) -> bool {
+        let d = (tx - x).hypot(ty - y);
+        if d < 0.01 || !self.ice.iter().any(|&s| s < 0.0) {
+            return false;
+        }
+        let k = (0.9 / d).min(1.0);
+        self.broken_ice(x + (tx - x) * k, y + (ty - y) * k)
+    }
+
+    /// Open water where sea ice broke.
+    fn broken_ice(&self, x: f32, y: f32) -> bool {
+        if x < 0.0 || y < 0.0 || x as usize >= self.width {
+            return false;
+        }
+        let i = y as usize * self.width + x as usize;
+        i < self.ice.len() && self.ice[i] < 0.0
+    }
+
     fn step_lava(&mut self, dt: f32) {
         for j in 0..self.entities.len() {
             let e = &self.entities[j];
@@ -1711,10 +1861,15 @@ impl World {
     /// Whether the player can see `e`: always, except an enemy vehicle at
     /// night with nothing of ours near it.
     pub fn seen(&self, e: &Entity) -> bool {
+        // in the fog nothing shows but our own (the original's radar draws
+        // nothing on a fogged cell)
+        if !e.team.friendly() && self.fogged(e.x, e.y) {
+            return false;
+        }
         if !self.night || !e.team.hostile(Team::Player) || !matches!(e.class, Class::Vehicle | Class::EnemyTank | Class::Plane) {
             return true;
         }
-        self.entities.iter().any(|o| o.alive && o.team == Team::Player && o.class != Class::Relic && (o.x - e.x).hypot(o.y - e.y) <= NIGHT_SIGHT)
+        self.entities.iter().any(|o| o.alive && o.team.friendly() && o.class != Class::Relic && (o.x - e.x).hypot(o.y - e.y) <= NIGHT_SIGHT)
     }
 
     /// A shot landing near a snow cornice brings it down, whoever fired.
@@ -1815,6 +1970,7 @@ impl World {
     pub fn damage_by(&mut self, weapon: &str, x: f32, y: f32, direct: Option<usize>, team: Team, by_stank: bool) {
         let Some(w) = balance::weapon(weapon) else { return };
         self.shake_cornices(x, y, w.radius);
+        self.crack_ice(x, y, w.radius, w.damage);
         let victims: Vec<usize> = if w.area {
             (0..self.entities.len())
                 .filter(|&j| {
@@ -2019,7 +2175,7 @@ mod tests {
     #[test]
     fn ordered_units_drive_to_the_enemy() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 4];
+        w.ai_timer = [f32::MAX; 5];
         assert!(w.order(Team::Player, "peon_tank"));
         assert_eq!(w.money[0], START_MONEY - 300);
         let start = {
@@ -2081,7 +2237,7 @@ mod rules {
     #[test]
     fn move_then_hold_and_resume() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 4];
+        w.ai_timer = [f32::MAX; 5];
         w.order(Team::Player, "peon_tank");
         w.step(1.0 / 30.0);
         let u = w.entities.iter().rposition(|e| e.kind == "peon_tank" && e.team == Team::Player).unwrap();
@@ -2106,7 +2262,7 @@ mod rules {
     #[test]
     fn attack_order_chases_and_hits_its_target() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 4];
+        w.ai_timer = [f32::MAX; 5];
         let foe = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
         // a peon tank placed 8 cells from the tower, out of its 3-cell gun range
         w.order(Team::Player, "peon_tank");
@@ -2125,7 +2281,7 @@ mod rules {
     #[test]
     fn orders_for_a_lost_factory_are_refunded() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 4];
+        w.ai_timer = [f32::MAX; 5];
         assert!(w.order(Team::Player, "peon_tank"));
         assert!(w.order(Team::Player, "peon_tank"));
         w.step(1.0 / 30.0); // first one deploys
@@ -2274,6 +2430,60 @@ mod rules {
         assert!(!landed.is_empty() && landed.iter().all(|&(x, y)| (x - 6.0).hypot(y - 20.0) <= VOLCANO_RANGE + 0.01));
     }
 
+    /// A 12x30 map of sea ice with an HQ at each end, `extra` in its header.
+    fn ice_map(extra: &str, objects: &str) -> World {
+        let tiles = format!("{}\n", "i".repeat(12)).repeat(30);
+        let heights = format!("{}\n", "05".repeat(13)).repeat(31);
+        let q = "'''";
+        let objects = format!("mainbasepad 1 6 28 0 4000\nmainbasepad 2 6 2 0 4000\n{objects}");
+        let text = format!(
+            "name = 'ice'\nwidth = 12\nheight = 30\n{extra}legend = {q}\ni 0 snow-mud_icepatch\n{q}\ntiles = {q}\n{tiles}{q}\nheights = {q}\n{heights}{q}\nobjects = {q}\n{objects}{q}\n"
+        );
+        World::from_level(&crate::cmap::parse(&text).unwrap().0)
+    }
+
+    #[test]
+    fn sea_ice_cracks_and_breaks_under_fire() {
+        let mut w = ice_map("", "");
+        let mut e = Entity::shown("peon_tank", Class::Vehicle, Team::Enemy, 300.0);
+        (e.x, e.y, e.order) = (6.5, 15.5, Order::Hold);
+        w.entities.push(e);
+        let peon = w.entities.len() - 1;
+        // tank guns hardly mark it
+        w.damage_by("b120mm", 6.5, 15.5, None, Team::Player, false);
+        assert!(w.ice_hits.iter().all(|&(_, left)| left > 0.9) && !w.broken_ice(6.5, 15.5));
+        // a supergun shell goes through, and the peon tank with it
+        w.damage_by("super_mortar", 6.5, 15.5, None, Team::Player, false);
+        assert!(w.broken_ice(6.5, 15.5) && w.broken_ice(8.5, 15.5) && !w.broken_ice(6.5, 20.5));
+        assert!(!w.entities[peon].alive, "drowned");
+        assert!(!w.ground_free(6.5, 15.5), "open water stops what drives");
+        assert!(w.ice_hits.iter().any(|&(i, left)| i == 15 * 12 + 6 && left == 0.0), "the renderers hear of it");
+        assert!(w.water_ahead(6.5, 18.2, 6.5, 10.0) && !w.water_ahead(6.5, 18.2, 6.5, 26.0));
+    }
+
+    #[test]
+    fn fog_lifts_round_our_side_and_hides_theirs() {
+        let mut w = ice_map("fog = true\n", "peon_tank 2 6 14 0 300\npeon_tank 7 6 24 0 300\n");
+        w.ai_timer = [f32::MAX; 5];
+        let theirs = w.entities.iter().position(|e| e.team == Team::Enemy && e.kind == "peon_tank").unwrap();
+        let allied = w.entities.iter().position(|e| e.team == Team::Allies).unwrap();
+        for e in &mut w.entities {
+            e.order = Order::Hold;
+        }
+        w.step(1.0 / 30.0);
+        assert!(!w.fogged(6.5, 27.5), "round our HQ");
+        assert!(!w.fogged(6.5, 22.0), "round the allies' tank");
+        assert!(w.fogged(6.5, 2.5) && w.fogged(6.5, 14.5));
+        assert!(!w.seen(&w.entities[theirs]) && w.seen(&w.entities[allied]));
+        // the allies are ours to see and not to shoot
+        assert!(!w.entities[allied].can_attack(&Entity::shown("peon_tank", Class::Vehicle, Team::Player, 1.0)));
+        assert!(w.entities[allied].can_attack(&w.entities[theirs]));
+        w.entities[allied].y = 17.0;
+        w.fog_clock = 0.0;
+        w.step(1.0 / 30.0);
+        assert!(!w.fogged(6.5, 14.5) && w.seen(&w.entities[theirs]), "seen once something of ours comes near");
+    }
+
     #[test]
     fn holding_a_site_runs_its_clock() {
         let mut w = river_map_with("win = ['hold 1 6 22 3 10']\n");
@@ -2408,7 +2618,7 @@ mod rules {
     #[test]
     fn helicopters_fly_the_air_route() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 4];
+        w.ai_timer = [f32::MAX; 5];
         assert!(w.order(Team::Player, "helicopter"));
         w.step(1.0 / 30.0);
         let h = w.entities.iter().rposition(|e| e.kind == "helicopter" && e.team == Team::Player).unwrap();
@@ -2424,7 +2634,7 @@ mod rules {
     #[test]
     fn money_planes_fly_crates_home() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 4];
+        w.ai_timer = [f32::MAX; 5];
         let planes = w.entities.iter().filter(|e| e.class == Class::Plane && e.team == Team::Player).count();
         assert!(planes > 0, "the level places money planes at the banks");
         for _ in 0..30 * 49 {
@@ -2440,7 +2650,7 @@ mod rules {
     #[test]
     fn acid_burns_over_forty_ticks() {
         let mut w = World::from_level(&Level::parse(LEVELS[0].data).unwrap());
-        w.ai_timer = [f32::MAX; 4];
+        w.ai_timer = [f32::MAX; 5];
         let tower = w.entities.iter().position(|e| e.class == Class::Tower && e.team == Team::Enemy).unwrap();
         let (x, y, hp) = (w.entities[tower].x, w.entities[tower].y, w.entities[tower].hp);
         w.damage_by("acid", x, y, Some(tower), Team::Player, true);

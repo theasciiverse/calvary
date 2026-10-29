@@ -9,7 +9,7 @@
 //! F tile flags (water/blocking), P owner, Enter ends a path chain, B marks
 //! the path node under the cursor as a bridge spot, L whose roads the path
 //! tool draws (ours and the enemy's back along them, the rival's, the
-//! enemy's own), I the map's rules (win, lose, build, money, music, night; Tab
+//! enemy's own), I the map's rules (win, lose, build, money, music, night, fog; Tab
 //! steps through them, Enter sets one), U undo, Tab map view, +/- zoom,
 //! F5 test-play (F6 with the supertank at the cursor; Esc comes back),
 //! F2 save, Esc quit (twice if unsaved).
@@ -120,9 +120,10 @@ enum Field {
     Money,
     Music,
     Night,
+    Fog,
 }
-const FIELDS: [(Field, &str); 6] =
-    [(Field::Win, "win"), (Field::Lose, "lose"), (Field::Build, "build"), (Field::Money, "money"), (Field::Music, "music"), (Field::Night, "night")];
+const FIELDS: [(Field, &str); 7] =
+    [(Field::Win, "win"), (Field::Lose, "lose"), (Field::Build, "build"), (Field::Money, "money"), (Field::Music, "music"), (Field::Night, "night"), (Field::Fog, "fog")];
 
 /// What the editor asks of its caller when it returns.
 pub enum Exit {
@@ -175,8 +176,10 @@ impl Editor {
         let mut game = Game::from_level(&name, &level);
         game.hide_tank = true;
         game.help = false;
-        // a night map is edited by day (F5 plays it at night)
+        // a night map is edited by day, a fogged one in full (F5 plays it as it is)
         game.world.night = false;
+        game.world.fog = None;
+        game.world.fog_changed = false;
         let cursor = (level.width as f32 / 2.0, level.height as f32 / 2.0);
         Editor {
             path: path.to_string(),
@@ -223,6 +226,7 @@ impl Editor {
             build: None,
             money: None,
             night: false,
+            fog: false,
         }
     }
 
@@ -458,6 +462,8 @@ impl Editor {
         self.game.hide_tank = true;
         self.game.help = false;
         self.game.world.night = false;
+        self.game.world.fog = None;
+        self.game.world.fog_changed = false;
         self.game.view = view;
         self.game.zoom = zoom;
         self.game.camera = camera;
@@ -522,6 +528,7 @@ fn field_help(f: Field) -> &'static str {
         Field::Money => "players 1 2 5 [6]  e.g. 10000 5000 5000   (empty: 10000 each)",
         Field::Music => "a track, e.g. Al_Basrah.mp3   (empty: none)",
         Field::Night => "yes: fought at night   (empty: by day)",
+        Field::Fog => "yes: fog of war   (empty: the whole map seen)",
     }
 }
 
@@ -542,11 +549,12 @@ impl Editor {
             Field::Lose => conds(&self.level.rules.lose),
             Field::Build => self.level.build.as_ref().map_or(String::new(), |b| b.join(", ")),
             Field::Money => self.level.money.map_or(String::new(), |m| {
-                let s = format!("{} {} {}", m[0], m[1], m[2]);
-                if m[3] == crate::world::START_MONEY { s } else { format!("{s} {}", m[3]) }
+                let n = (3..5).rev().find(|&k| m[k] != crate::world::START_MONEY).map_or(3, |k| k + 1);
+                m[..n].iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" ")
             }),
             Field::Music => self.music.clone().unwrap_or_default(),
             Field::Night => if self.level.night { "yes".into() } else { String::new() },
+            Field::Fog => if self.level.fog { "yes".into() } else { String::new() },
         }
     }
 
@@ -578,9 +586,12 @@ impl Editor {
                 let n: Vec<i32> = text.split_whitespace().map(|w| w.parse().map_err(|_| format!("{w:?} is not a number"))).collect::<Result<_, _>>()?;
                 self.level.money = match n.as_slice() {
                     [] => None,
-                    [a, b, c] => Some([*a, *b, *c, crate::world::START_MONEY]),
-                    [a, b, c, d] => Some([*a, *b, *c, *d]),
-                    _ => return Err("three amounts, for players 1, 2 and 5, or four, and 6".into()),
+                    m @ [_, _, _, ..] if m.len() <= 5 => {
+                        let mut all = [crate::world::START_MONEY; 5];
+                        all[..m.len()].copy_from_slice(m);
+                        Some(all)
+                    }
+                    _ => return Err("three amounts, for players 1, 2 and 5, or four, and 6, or five, and 7".into()),
                 };
             }
             Field::Music => {
@@ -596,6 +607,13 @@ impl Editor {
                     "yes" | "y" | "true" => true,
                     "" | "no" | "n" | "false" => false,
                     t => return Err(format!("{t:?}: yes, or empty for day")),
+                };
+            }
+            Field::Fog => {
+                self.level.fog = match text.trim() {
+                    "yes" | "y" | "true" => true,
+                    "" | "no" | "n" | "false" => false,
+                    t => return Err(format!("{t:?}: yes, or empty for no fog")),
                 };
             }
         }
@@ -911,7 +929,7 @@ mod tests {
         assert_eq!(ed.field_text(Field::Win), "hold 1 5 5 3 60; no mainbasepad 2");
         assert_eq!(back.rules.win.len(), 2);
         assert_eq!(back.build, Some(vec!["peon_tank".to_string(), "bridger".to_string()]));
-        assert_eq!(back.money, Some([9000, 4000, 3000, crate::world::START_MONEY]));
+        assert_eq!(back.money, Some([9000, 4000, 3000, crate::world::START_MONEY, crate::world::START_MONEY]));
         assert_eq!(music.as_deref(), Some("Greece.mp3"));
         assert_eq!(back.objects[0].links_r, vec![1]);
     }
