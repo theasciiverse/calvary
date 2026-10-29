@@ -347,6 +347,34 @@ fn paint_structure(layer: &mut PixelLayer, e: &Entity, pal: Palette, time: f32) 
             };
             Some((lit(c), false))
         }),
+        Class::Tower if e.kind == "supergun" => {
+            // the supergun (`supergun_base`, `supergun_barrel`): an armoured
+            // block, a heavy turret and a long, thick barrel
+            let aim = e.heading + e.turret;
+            let (ax, ay) = (aim.cos(), aim.sin());
+            let barrel_half = (layer.pixel_size() * 0.6).max(0.12);
+            layer.paint(cx, cy, 2.0, |x, y| {
+                let (dx, dy) = (x - cx, y - cy);
+                let (l, w) = (dx * ax + dy * ay, -dx * ay + dy * ax);
+                if (0.0..=1.9).contains(&l) && w.abs() <= barrel_half {
+                    return Some((lit(if l > 1.7 { HATCH } else { pal.barrel }), true));
+                }
+                if dx.abs() > 0.95 || dy.abs() > 0.95 {
+                    return None;
+                }
+                let r = dx.hypot(dy);
+                let c = if r < 0.24 {
+                    HATCH
+                } else if r < 0.62 {
+                    pal.turret
+                } else if dx.abs() > 0.8 || dy.abs() > 0.8 {
+                    pal.rim
+                } else {
+                    pal.body
+                };
+                Some((lit(c), false))
+            });
+        }
         _ => {
             // towers and other gun emplacements
             let aim = e.heading + e.turret;

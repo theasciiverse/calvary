@@ -189,6 +189,13 @@ fn draw_tactical(f: &mut Frame, area: Rect, g: &Game) {
     }
     for b in &g.world.bolts {
         let color = bolt_color(b.weapon);
+        if b.weapon == "super_mortar" && (g.time * 6.0).sin() > -0.3 {
+            // where a supergun's shell will come down: its blast radius
+            for k in 0..40 {
+                let a = k as f32 / 40.0 * std::f32::consts::TAU;
+                c.plot(b.to.0 + a.cos() * 3.0, b.to.1 + a.sin() * 3.0, (255, 90, 60), 7);
+            }
+        }
         if b.speed == 0.0 {
             c.line(b.from, b.to, color, 7);
         } else {
@@ -407,6 +414,7 @@ fn draw_strategy(f: &mut Frame, area: Rect, g: &Game) {
             Class::Garage => 'G',
             Class::Airbase => 'A',
             Class::Bank => '$',
+            Class::Tower if e.kind == "supergun" => 'S',
             Class::Tower => 'T',
             Class::EnemyTank | Class::PlayerTank => '◆',
             Class::Plane => '+',

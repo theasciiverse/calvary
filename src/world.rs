@@ -1303,7 +1303,16 @@ impl World {
         let at = (self.entities[i].x, self.entities[i].y);
         self.sound(crate::audio::fire_sound(weapon), Some(at), 0.5);
         let (e, t) = (&self.entities[i], &self.entities[target]);
-        let speed = if w.speed <= 0.0 { 0.0 } else { (w.speed * ORIGINAL_HZ).max(4.0) };
+        let mut speed = if w.speed <= 0.0 { 0.0 } else { (w.speed * ORIGINAL_HZ).max(4.0) };
+        if weapon == "super_mortar" {
+            // a shell lobbed at 30 to 45 degrees, which can be dodged
+            // (`objs/supergun.cpp`, `deploy_to`; gravity 0.05 a tick squared)
+            let dist = ((t.x - e.x).hypot(t.y - e.y) - 2.0).max(3.0);
+            let pitch = std::f32::consts::PI / 6.0 + self.rand() * std::f32::consts::PI / 12.0;
+            let ticks = (2.0 * dist * pitch.tan() / 0.05).sqrt();
+            speed = dist / ticks * ORIGINAL_HZ;
+        }
+        let (e, t) = (&self.entities[i], &self.entities[target]);
         let aim = e.heading + e.turret;
         let muzzle = (e.x + aim.cos() * e.radius() * 0.8, e.y + aim.sin() * e.radius() * 0.8);
         self.bolts.push(Bolt {

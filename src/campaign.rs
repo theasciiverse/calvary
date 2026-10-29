@@ -275,6 +275,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the European HQ across the river. Keep ours standing.",
     },
+    Mission {
+        act: 2,
+        number: 16,
+        title: "Delphi",
+        map: include_str!("../maps/delphi.cmap"),
+        briefing: &[
+            "Commander, Reid. Delphi. The sanctuary is on the slope of Parnassus, and",
+            "the Europeans have put superguns on the heights above it: one at the",
+            "stadium under the cliffs, one at the Marmaria, one on the western spur.",
+            "Each one lobs a shell that takes out anything within three cells, one",
+            "every twenty seconds. You can see the shell coming, sir. Keep moving.",
+            "Knock them out, or better, get an engineer onto one and turn it round.",
+        ],
+        objective: "Take or destroy all three European superguns. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
@@ -598,6 +613,8 @@ mod tests {
         let mut w = World::from_level(&level);
         let supertank = std::env::var("SUPERTANK").is_ok();
         let every: usize = std::env::var("CLEAR_EVERY").ok().and_then(|m| m.parse().ok()).unwrap_or(60);
+        // structures the stand-in leaves for the army to take (`SPARE=supergun`)
+        let spare: Vec<String> = std::env::var("SPARE").map(|s| s.split(',').map(str::to_string).collect()).unwrap_or_default();
         let units: Vec<&'static str> = crate::world::BUILDABLE.iter().copied().filter(|k| *k != "bridger" && w.offers(Team::Player, k)).collect();
         for s in 0..900 {
             if s % 60 == 5 {
@@ -615,7 +632,7 @@ mod tests {
                 w.command(&trucks, crate::world::Command::Resume);
             }
             if supertank && s >= 120 && s % every == 0 {
-                for e in w.entities.iter_mut().filter(|e| e.team.hostile(Team::Player) && matches!(e.class, Class::Tower | Class::Vehicle)) {
+                for e in w.entities.iter_mut().filter(|e| e.team.hostile(Team::Player) && matches!(e.class, Class::Tower | Class::Vehicle) && !spare.contains(&e.kind)) {
                     e.alive = false;
                 }
                 if let (Some(t), Some(site)) = (w.player_tank, w.sites().first().copied()) {
