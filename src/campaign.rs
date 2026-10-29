@@ -335,6 +335,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Bring the casket from the Villa of the Mysteries to our HQ. Do not let the Europeans take it to theirs.",
     },
+    Mission {
+        act: 2,
+        number: 20,
+        title: "Rome",
+        map: include_str!("../maps/rome.cmap"),
+        briefing: &[
+            "Commander, Reid. Rome. We are outside the walls on the Via Appia, and the",
+            "Europeans hold the hills: their HQ on the Palatine, a factory on the",
+            "Esquiline, guns on every hilltop and a supergun on the Quirinal. We will",
+            "not starve them out, sir. The engineers found us something better:",
+            "tank busters, rockets that hit like a building falling on you, and",
+            "cobras that burn. Up the hills, and hold the Palatine.",
+        ],
+        objective: "Hold the top of the Palatine for two minutes. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
