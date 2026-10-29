@@ -531,6 +531,36 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Find and destroy the Order's two factories in the fells. Keep the HQ standing.",
     },
+    Mission {
+        act: 3,
+        number: 33,
+        title: "The fjord",
+        map: include_str!("../maps/fjord.cmap"),
+        briefing: &[
+            "Commander, Reid. Norway. One road along the north side of the fjord,",
+            "a ledge with the mountain straight up on one side and straight down on",
+            "the other. Three streams come down across it and the Order blew all",
+            "three bridges. Two of their battleships lie under the ledge. At the",
+            "head of the fjord they have a supertank of their own, sir, the first",
+            "we have seen. Ours is better. Show them.",
+        ],
+        objective: "Bridge the streams, beat the Order's supertank and destroy their HQ at the fjord head.",
+    },
+    Mission {
+        act: 3,
+        number: 34,
+        title: "Svalbard",
+        map: include_str!("../maps/svalbard.cmap"),
+        briefing: &[
+            "Commander, Reid. Svalbard. Calloway was here in the last month before",
+            "they killed her, sir, and she left her letters in the vault cut into",
+            "the mountain over the fjord. Everybody knows it now: the Order is on",
+            "the north side, the Europeans east of us on ours. Our road goes over",
+            "the fjord ice; so does theirs, and ice breaks. I want to read what she",
+            "wrote before anyone else does.",
+        ],
+        objective: "Bring Calloway's letters from the vault to our HQ. Nobody else may carry them home.",
+    },
 ];
 
 /// The mission's map, parsed.
