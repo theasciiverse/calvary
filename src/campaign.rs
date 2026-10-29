@@ -229,6 +229,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the European HQ in the south-east. Keep ours standing.",
     },
+    Mission {
+        act: 1,
+        number: 13,
+        title: "Giza",
+        map: include_str!("../maps/giza.cmap"),
+        briefing: &[
+            "Sir. Her notebook puts the next site under the Giza plateau, and the",
+            "Europeans are already digging at the foot of the great pyramid. But",
+            "that is not all of it. Our scouts saw tanks come up out of the Valley",
+            "Temple below the Sphinx: black hulls, a white band, no flag. They shot",
+            "at the Europeans, and then at us. Whoever they are, they came from",
+            "under the plateau. Find where they come out, and shut it.",
+        ],
+        objective: "Destroy the black-banded army's garage in the Valley Temple. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
