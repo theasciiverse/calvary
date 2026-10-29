@@ -199,6 +199,21 @@ pub const MISSIONS: &[Mission] = &[
         ],
         objective: "Destroy the European HQ beyond the Mitla Pass. Keep ours standing.",
     },
+    Mission {
+        act: 1,
+        number: 11,
+        title: "The Suez Canal",
+        map: include_str!("../maps/suez.cmap"),
+        briefing: &[
+            "Sir. Every bridge on the canal is down; at three places the old piers",
+            "still reach out from both banks, a gap of water between them. A bridger",
+            "closes a gap, and the trucks are waiting to cross. The Europeans hold",
+            "the west bank and will shoot the decks out from under us, so keep",
+            "bridgers coming. The Americans are coming down the east bank behind.",
+            "Four trucks across to the post on the far side, Commander.",
+        ],
+        objective: "Bridge the canal and bring four of the six trucks to the west post. Keep the HQ standing.",
+    },
 ];
 
 /// The mission's map, parsed.
