@@ -51,8 +51,9 @@ Or from the source: `cargo run --release`. Needs a terminal of at least
   original's own level), a skirmish in the Swiss valley, and the walled
   town in Egypt to drive around in (in the campaign they are Piraeus,
   Zurich and Cairo).
-- **Three views:** top-down tactical (the default), the strategy map with
-  the road network (Tab) and a follow view behind the supertank (M).
+- **Four views:** top-down tactical (the default), the strategy map with
+  the road network (Tab), and on M a follow view behind the supertank and
+  first person from its turret.
 
 ## Controls
 
