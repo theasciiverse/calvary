@@ -1,6 +1,6 @@
 [package]
 name = "calvary"
-version = "0.9.1"
+version = "0.9.2"
 edition = "2021"
 license = "MIT"
 description = "Asciiverse action-RTS built from Crack dot Com's public-domain Golgotha (1998), Rust + Ratatui"
@@ -15,7 +15,7 @@ log = "0.4"
 env_logger = "0.11"
 flate2 = "1"
 rodio = { version = "0.22", default-features = false, features = ["playback", "mp3", "wav"] }
-gilrs = { version = "0.11", optional = true }
+gilrs = { version = "0.11", optional = true, default-features = false, features = ["xinput"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 directories = "6"
